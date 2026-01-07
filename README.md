@@ -98,17 +98,18 @@ client.send_command(&cmd).await?;
 
 ```rust
 use kitty_rc::commands::SetBackgroundImageCommand;
-use kitty_rc::protocol::KittyMessage;
 
 let large_image_data = "..."; // Large base64 string
 let cmd = SetBackgroundImageCommand::new(large_image_data).build()?;
 
-let message = cmd.unwrap();
-let chunks = message.into_chunks();
+// send_all automatically handles chunking for large payloads
+client.send_all(&cmd.unwrap()).await?;
+```
 
-for chunk in chunks {
-    client.send_raw(&chunk).await?;
-}
+Or to get a response:
+
+```rust
+let response = client.execute_all(&cmd.unwrap()).await?;
 ```
 
 ## Command Modules
@@ -179,17 +180,20 @@ let cmd = SelectWindowCommand::new()
 ```
 
 ### Streaming
-Large payloads (>4096 bytes) are automatically split into chunks:
+Large payloads (>4096 bytes) can be sent using the helper methods that automatically handle chunking:
 
 ```rust
 let message = cmd.build()?;
-if message.needs_streaming() {
-    let chunks = message.into_chunks();
-    for chunk in chunks {
-        client.send_raw(&chunk).await?;
-    }
-}
+client.send_all(&message).await?;  // Automatically chunks if needed
 ```
+
+Or to get a response:
+
+```rust
+let response = client.execute_all(&message).await?;
+```
+
+The `send_all` and `execute_all` methods automatically detect if a message needs streaming and handle chunking internally, so you don't need to manually check or split payloads.
 
 ## Error Handling
 

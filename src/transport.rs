@@ -84,6 +84,23 @@ impl KittyClient {
         self.receive().await
     }
 
+    pub async fn send_all(&mut self, message: &KittyMessage) -> Result<(), KittyError> {
+        if message.needs_streaming() {
+            let chunks = message.clone().into_chunks();
+            for chunk in chunks {
+                self.send(&chunk).await?;
+            }
+        } else {
+            self.send(message).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn execute_all(&mut self, message: &KittyMessage) -> Result<KittyResponse, KittyError> {
+        self.send_all(message).await?;
+        self.receive().await
+    }
+
     pub async fn reconnect(&mut self) -> Result<(), KittyError> {
         if let Some(mut stream) = self.stream.take() {
             let _ = stream.shutdown().await;
