@@ -6,8 +6,9 @@ pub mod transport;
 
 pub use command::CommandBuilder;
 pub use commands::{
-    CloseTabCommand, FocusTabCommand, GotoLayoutCommand, LastUsedLayoutCommand,
-    SetEnabledLayoutsCommand, SetTabTitleCommand,
+    CloseTabCommand, CloseWindowCommand, FocusTabCommand, GotoLayoutCommand,
+    LastUsedLayoutCommand, LsCommand, ResizeWindowCommand, SendKeyCommand,
+    SetEnabledLayoutsCommand, SetTabTitleCommand, SendTextCommand,
 };
 pub use error::{CommandError, ConnectionError, EncryptionError, KittyError, ProtocolError};
 pub use protocol::{KittyMessage, KittyResponse};

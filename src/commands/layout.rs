@@ -76,7 +76,7 @@ impl SetEnabledLayoutsCommand {
 
         let layouts_value: Vec<serde_json::Value> = self.layouts
             .into_iter()
-            .map(|l| serde_json::Value::String(l))
+            .map(serde_json::Value::String)
             .collect();
 
         payload.insert("layouts".to_string(), serde_json::Value::Array(layouts_value));
