@@ -1,4 +1,4 @@
-use kitty_rc_proto_rs::{KittyClient, LsCommand, KittyError};
+use kitty_rc::{KittyClient, LsCommand, KittyError};
 
 #[tokio::main]
 async fn main() -> Result<(), KittyError> {
