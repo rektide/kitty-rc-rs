@@ -1,32 +1,10 @@
-use crate::error::ProtocolError;
+use crate::error::{ConnectionError, KittyError};
 use crate::protocol::{KittyMessage, KittyResponse};
 use std::path::Path;
 use std::time::Duration;
-use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 use tokio::time::timeout;
-
-#[derive(Error, Debug)]
-pub enum TransportError {
-    #[error("Failed to connect to socket: {0}")]
-    ConnectionError(#[from] std::io::Error),
-
-    #[error("Connection timeout after {0:?}")]
-    TimeoutError(Duration),
-
-    #[error("Failed to send message: {0}")]
-    SendError(String),
-
-    #[error("Failed to receive response: {0}")]
-    ReceiveError(String),
-
-    #[error("Connection closed unexpectedly")]
-    ConnectionClosed,
-
-    #[error("Protocol error: {0}")]
-    ProtocolError(#[from] ProtocolError),
-}
 
 pub struct KittyClient {
     socket_path: String,
@@ -35,20 +13,22 @@ pub struct KittyClient {
 }
 
 impl KittyClient {
-    pub async fn connect<P: AsRef<Path>>(path: P) -> Result<Self, TransportError> {
+    pub async fn connect<P: AsRef<Path>>(path: P) -> Result<Self, KittyError> {
         Self::connect_with_timeout(path, Duration::from_secs(10)).await
     }
 
     pub async fn connect_with_timeout<P: AsRef<Path>>(
         path: P,
         timeout_duration: Duration,
-    ) -> Result<Self, TransportError> {
+    ) -> Result<Self, KittyError> {
+        let path_str = path.as_ref().to_string_lossy().to_string();
         let stream = timeout(timeout_duration, UnixStream::connect(&path))
             .await
-            .map_err(|_| TransportError::TimeoutError(timeout_duration))??;
+            .map_err(|_| ConnectionError::TimeoutError(timeout_duration))?
+            .map_err(|e| ConnectionError::ConnectionFailed(path_str.clone(), e))?;
 
         Ok(Self {
-            socket_path: path.as_ref().to_string_lossy().to_string(),
+            socket_path: path_str,
             stream: Some(stream),
             timeout: timeout_duration,
         })
@@ -59,64 +39,66 @@ impl KittyClient {
         self
     }
 
-    async fn ensure_connected(&mut self) -> Result<(), TransportError> {
+    async fn ensure_connected(&mut self) -> Result<(), KittyError> {
         if self.stream.is_none() {
             let stream = timeout(self.timeout, UnixStream::connect(&self.socket_path))
                 .await
-                .map_err(|_| TransportError::TimeoutError(self.timeout))??;
+                .map_err(|_| ConnectionError::TimeoutError(self.timeout))?
+                .map_err(|e| ConnectionError::ConnectionFailed(self.socket_path.clone(), e))?;
             self.stream = Some(stream);
         }
         Ok(())
     }
 
-    pub async fn send(&mut self, message: &KittyMessage) -> Result<(), TransportError> {
+    pub async fn send(&mut self, message: &KittyMessage) -> Result<(), KittyError> {
         self.ensure_connected().await?;
 
         let data = message.encode()?;
-        let stream = self.stream.as_mut().ok_or(TransportError::ConnectionClosed)?;
+        let stream = self.stream.as_mut().ok_or(KittyError::Connection(ConnectionError::ConnectionClosed))?;
 
         timeout(self.timeout, stream.write_all(&data))
             .await
-            .map_err(|_| TransportError::TimeoutError(self.timeout))??;
+            .map_err(|_| ConnectionError::TimeoutError(self.timeout))??;
 
         Ok(())
     }
 
-    pub async fn receive(&mut self) -> Result<KittyResponse, TransportError> {
-        let stream = self.stream.as_mut().ok_or(TransportError::ConnectionClosed)?;
+    pub async fn receive(&mut self) -> Result<KittyResponse, KittyError> {
+        let stream = self.stream.as_mut().ok_or(KittyError::Connection(ConnectionError::ConnectionClosed))?;
 
         let mut buffer = vec![0u8; 8192];
         let n = timeout(self.timeout, stream.read(&mut buffer))
             .await
-            .map_err(|_| TransportError::TimeoutError(self.timeout))??;
+            .map_err(|_| ConnectionError::TimeoutError(self.timeout))??;
 
         if n == 0 {
-            return Err(TransportError::ConnectionClosed);
+            return Err(KittyError::Connection(ConnectionError::ConnectionClosed));
         }
 
         buffer.truncate(n);
         Ok(KittyResponse::decode(&buffer)?)
     }
 
-    pub async fn execute(&mut self, message: &KittyMessage) -> Result<KittyResponse, TransportError> {
+    pub async fn execute(&mut self, message: &KittyMessage) -> Result<KittyResponse, KittyError> {
         self.send(message).await?;
         self.receive().await
     }
 
-    pub async fn reconnect(&mut self) -> Result<(), TransportError> {
+    pub async fn reconnect(&mut self) -> Result<(), KittyError> {
         if let Some(mut stream) = self.stream.take() {
             let _ = stream.shutdown().await;
         }
 
         let new_stream = timeout(self.timeout, UnixStream::connect(&self.socket_path))
             .await
-            .map_err(|_| TransportError::TimeoutError(self.timeout))??;
+            .map_err(|_| ConnectionError::TimeoutError(self.timeout))?
+            .map_err(|e| ConnectionError::ConnectionFailed(self.socket_path.clone(), e))?;
 
         self.stream = Some(new_stream);
         Ok(())
     }
 
-    pub async fn close(&mut self) -> Result<(), TransportError> {
+    pub async fn close(&mut self) -> Result<(), KittyError> {
         if let Some(mut stream) = self.stream.take() {
             stream.shutdown().await.ok();
         }
@@ -159,7 +141,7 @@ impl ConnectionPool {
         self
     }
 
-    pub async fn acquire(&mut self) -> Result<KittyClient, TransportError> {
+    pub async fn acquire(&mut self) -> Result<KittyClient, KittyError> {
         if let Some(mut client) = self.connections.pop() {
             client.ensure_connected().await?;
             Ok(client)
@@ -178,6 +160,7 @@ impl ConnectionPool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ConnectionError;
 
     #[tokio::test]
     async fn test_client_creation() {
@@ -202,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = TransportError::ConnectionClosed;
+        let err = ConnectionError::ConnectionClosed;
         assert_eq!(err.to_string(), "Connection closed unexpectedly");
     }
 }
