@@ -117,6 +117,57 @@ impl CloseTabCommand {
     }
 }
 
+pub struct DetachTabCommand {
+    match_spec: Option<String>,
+    target_tab: Option<String>,
+    self_tab: bool,
+}
+
+impl DetachTabCommand {
+    pub fn new() -> Self {
+        Self {
+            match_spec: None,
+            target_tab: None,
+            self_tab: false,
+        }
+    }
+
+    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
+        self.match_spec = Some(spec.into());
+        self
+    }
+
+    pub fn target_tab(mut self, spec: impl Into<String>) -> Self {
+        self.target_tab = Some(spec.into());
+        self
+    }
+
+    pub fn self_tab(mut self, value: bool) -> Self {
+        self.self_tab = value;
+        self
+    }
+
+    pub fn build(self) -> Result<KittyMessage, CommandError> {
+        let mut payload = serde_json::Map::new();
+
+        if let Some(match_spec) = self.match_spec {
+            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
+        }
+
+        if let Some(target_tab) = self.target_tab {
+            payload.insert("target_tab".to_string(), serde_json::Value::String(target_tab));
+        }
+
+        if self.self_tab {
+            payload.insert("self".to_string(), serde_json::Value::Bool(true));
+        }
+
+        Ok(CommandBuilder::new("detach-tab")
+            .payload(serde_json::Value::Object(payload))
+            .build())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,5 +248,49 @@ mod tests {
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "close-tab");
+    }
+
+    #[test]
+    fn test_detach_tab_basic() {
+        let cmd = DetachTabCommand::new().build();
+        assert!(cmd.is_ok());
+        let msg = cmd.unwrap();
+        assert_eq!(msg.cmd, "detach-tab");
+    }
+
+    #[test]
+    fn test_detach_tab_with_match() {
+        let cmd = DetachTabCommand::new().match_spec("id:0").build();
+        assert!(cmd.is_ok());
+        let msg = cmd.unwrap();
+        assert_eq!(msg.cmd, "detach-tab");
+    }
+
+    #[test]
+    fn test_detach_tab_with_target_tab() {
+        let cmd = DetachTabCommand::new().target_tab("id:1").build();
+        assert!(cmd.is_ok());
+        let msg = cmd.unwrap();
+        assert_eq!(msg.cmd, "detach-tab");
+    }
+
+    #[test]
+    fn test_detach_tab_self() {
+        let cmd = DetachTabCommand::new().self_tab(true).build();
+        assert!(cmd.is_ok());
+        let msg = cmd.unwrap();
+        assert_eq!(msg.cmd, "detach-tab");
+    }
+
+    #[test]
+    fn test_detach_tab_all_options() {
+        let cmd = DetachTabCommand::new()
+            .match_spec("id:0")
+            .target_tab("id:1")
+            .self_tab(true)
+            .build();
+        assert!(cmd.is_ok());
+        let msg = cmd.unwrap();
+        assert_eq!(msg.cmd, "detach-tab");
     }
 }
