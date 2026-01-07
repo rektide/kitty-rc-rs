@@ -12,7 +12,7 @@ impl CommandBuilder {
     pub fn new(cmd: impl Into<String>) -> Self {
         Self {
             cmd: cmd.into(),
-            version: vec![0, 14, 2],
+            version: vec![0, 43, 1],
             no_response: None,
             kitty_window_id: None,
             payload: None,
@@ -67,7 +67,7 @@ mod tests {
     fn test_builder_basic() {
         let cmd = CommandBuilder::new("ls").build();
         assert_eq!(cmd.cmd, "ls");
-        assert_eq!(cmd.version, vec![0, 14, 2]);
+        assert_eq!(cmd.version, vec![0, 43, 1]);
     }
 
     #[test]

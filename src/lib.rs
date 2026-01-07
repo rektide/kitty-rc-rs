@@ -9,6 +9,7 @@ pub use commands::{
     CloseTabCommand, CloseWindowCommand, FocusTabCommand, GotoLayoutCommand,
     LastUsedLayoutCommand, LsCommand, ResizeWindowCommand, SendKeyCommand,
     SetEnabledLayoutsCommand, SetTabTitleCommand, SendTextCommand,
+    action::*,
 };
 pub use error::{CommandError, ConnectionError, EncryptionError, KittyError, ProtocolError};
 pub use protocol::{KittyMessage, KittyResponse};
