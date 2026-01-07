@@ -1,5 +1,5 @@
 {
-	"name": "kitty-rc-proto-rs",
+	"name": "kitty-rc",
 	"version": "1.0.0",
 	"description": "",
 	"main": "index.js",
@@ -18,5 +18,5 @@
 		"url": "https://github.com/rektide/kitty-rc-proto-rs/issues"
 	},
 	"homepage": "https://github.com/rektide/kitty-rc-proto-rs#readme",
-	"module": "kitty-rc-proto-rs.js"
+	"module": "kitty-rc.js"
 }
