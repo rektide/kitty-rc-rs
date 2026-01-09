@@ -11,7 +11,7 @@ pub use commands::{
     SetEnabledLayoutsCommand, SetTabTitleCommand, SendTextCommand,
     action::*,
     process::ProcessInfo,
-    window::{OsInstance, TabInfo, WindowInfo},
+    window::{OsInstance, TabInfo, WindowInfo, parse_response_data},
 };
 pub use error::{CommandError, ConnectionError, EncryptionError, KittyError, ProtocolError};
 pub use protocol::{KittyMessage, KittyResponse};
