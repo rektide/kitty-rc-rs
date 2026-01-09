@@ -4,6 +4,7 @@ use crate::protocol::KittyMessage;
 use crate::commands::process::ProcessInfo;
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 pub struct WindowInfo {
@@ -15,18 +16,97 @@ pub struct WindowInfo {
     pub cmdline: Vec<String>,
     #[serde(default)]
     pub foreground_processes: Vec<ProcessInfo>,
+    pub at_prompt: Option<bool>,
+    pub columns: Option<u64>,
+    pub created_at: Option<u64>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    pub in_alternate_screen: Option<bool>,
+    pub is_active: Option<bool>,
+    pub is_focused: Option<bool>,
+    pub is_self: Option<bool>,
+    pub last_cmd_exit_status: Option<i32>,
+    pub last_reported_cmdline: Option<String>,
+    pub lines: Option<u64>,
+    #[serde(default)]
+    pub user_vars: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LayoutOpts {
+    #[serde(default)]
+    pub bias: i32,
+    #[serde(default)]
+    pub full_size: i32,
+    #[serde(default)]
+    pub mirrored: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WindowGroup {
+    pub id: u64,
+    #[serde(default)]
+    pub window_ids: Vec<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AllWindows {
+    #[serde(default)]
+    pub active_group_history: Vec<u64>,
+    pub active_group_idx: Option<u64>,
+    #[serde(default)]
+    pub window_groups: Vec<WindowGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LayoutState {
+    pub all_windows: Option<AllWindows>,
+    #[serde(default)]
+    pub biased_map: HashMap<String, serde_json::Value>,
+    pub class: Option<String>,
+    #[serde(default)]
+    pub main_bias: Vec<f32>,
+    pub opts: Option<LayoutOpts>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TabGroup {
+    pub id: u64,
+    #[serde(default)]
+    pub windows: Vec<u64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TabInfo {
     #[serde(default)]
     pub windows: Vec<WindowInfo>,
+    #[serde(default)]
+    pub active_window_history: Vec<u64>,
+    #[serde(default)]
+    pub enabled_layouts: Vec<String>,
+    #[serde(default)]
+    pub groups: Vec<TabGroup>,
+    pub id: Option<u64>,
+    pub is_active: Option<bool>,
+    pub is_focused: Option<bool>,
+    pub layout: Option<String>,
+    pub layout_opts: Option<LayoutOpts>,
+    pub layout_state: Option<LayoutState>,
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct OsInstance {
     #[serde(default)]
     pub tabs: Vec<TabInfo>,
+    pub background_opacity: Option<f32>,
+    pub id: Option<u64>,
+    pub is_active: Option<bool>,
+    pub is_focused: Option<bool>,
+    pub last_focused: Option<bool>,
+    pub platform_window_id: Option<u64>,
+    pub wm_class: Option<String>,
+    pub wm_name: Option<String>,
 }
 
 pub fn parse_response_data(data: &Value) -> Result<Vec<OsInstance>, serde_json::Error> {
