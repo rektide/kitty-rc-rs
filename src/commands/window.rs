@@ -1,6 +1,42 @@
 use crate::command::CommandBuilder;
 use crate::error::CommandError;
 use crate::protocol::KittyMessage;
+use crate::commands::process::ProcessInfo;
+use serde::Deserialize;
+use serde_json::Value;
+
+#[derive(Debug, Deserialize)]
+pub struct WindowInfo {
+    pub id: Option<u64>,
+    pub title: Option<String>,
+    pub pid: Option<u64>,
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub cmdline: Vec<String>,
+    #[serde(default)]
+    pub foreground_processes: Vec<ProcessInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TabInfo {
+    #[serde(default)]
+    pub windows: Vec<WindowInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OsInstance {
+    #[serde(default)]
+    pub tabs: Vec<TabInfo>,
+}
+
+pub fn parse_response_data(data: &Value) -> Result<Vec<OsInstance>, serde_json::Error> {
+    let parsed_data = if let Some(s) = data.as_str() {
+        serde_json::from_str(s)?
+    } else {
+        data.clone()
+    };
+    serde_json::from_value(parsed_data)
+}
 
 pub struct LsCommand {
     all_env_vars: bool,

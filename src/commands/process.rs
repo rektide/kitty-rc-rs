@@ -1,7 +1,16 @@
 use crate::command::CommandBuilder;
 use crate::error::CommandError;
 use crate::protocol::KittyMessage;
+use serde::Deserialize;
 use serde_json::Map;
+
+#[derive(Debug, Deserialize)]
+pub struct ProcessInfo {
+    pub pid: Option<u64>,
+    #[serde(default)]
+    pub cmdline: Vec<String>,
+    pub cwd: Option<String>,
+}
 
 pub struct RunCommand {
     data: Option<String>,

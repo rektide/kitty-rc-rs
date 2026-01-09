@@ -10,6 +10,8 @@ pub use commands::{
     LastUsedLayoutCommand, LsCommand, ResizeWindowCommand, SendKeyCommand,
     SetEnabledLayoutsCommand, SetTabTitleCommand, SendTextCommand,
     action::*,
+    process::ProcessInfo,
+    window::{OsInstance, TabInfo, WindowInfo},
 };
 pub use error::{CommandError, ConnectionError, EncryptionError, KittyError, ProtocolError};
 pub use protocol::{KittyMessage, KittyResponse};
