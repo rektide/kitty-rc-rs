@@ -65,17 +65,31 @@ impl KittyClient {
 
     pub async fn receive(&mut self) -> Result<KittyResponse, KittyError> {
         let stream = self.stream.as_mut().ok_or(KittyError::Connection(ConnectionError::ConnectionClosed))?;
+        
+        const SUFFIX: &[u8] = b"\x1b\\";
+        let mut buffer = Vec::new();
 
-        let mut buffer = vec![0u8; 8192];
-        let n = timeout(self.timeout, stream.read(&mut buffer))
-            .await
-            .map_err(|_| ConnectionError::TimeoutError(self.timeout))??;
+        loop {
+            let mut chunk = vec![0u8; 8192];
+            let n = timeout(self.timeout, stream.read(&mut chunk))
+                .await
+                .map_err(|_| ConnectionError::TimeoutError(self.timeout))??;
 
-        if n == 0 {
+            if n == 0 {
+                break;
+            }
+
+            buffer.extend_from_slice(&chunk[..n]);
+
+            if buffer.ends_with(SUFFIX) {
+                break;
+            }
+        }
+
+        if buffer.is_empty() {
             return Err(KittyError::Connection(ConnectionError::ConnectionClosed));
         }
 
-        buffer.truncate(n);
         Ok(KittyResponse::decode(&buffer)?)
     }
 
