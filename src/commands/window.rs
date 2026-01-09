@@ -38,6 +38,8 @@ pub fn parse_response_data(data: &Value) -> Result<Vec<OsInstance>, serde_json::
     serde_json::from_value(parsed_data)
 }
 
+use crate::protocol::KittyResponse;
+
 pub struct LsCommand {
     all_env_vars: bool,
     match_spec: Option<String>,
@@ -97,6 +99,14 @@ impl LsCommand {
         Ok(CommandBuilder::new("ls")
             .payload(serde_json::Value::Object(payload))
             .build())
+    }
+
+    pub fn parse_response(response: &KittyResponse) -> Result<Vec<OsInstance>, serde_json::Error> {
+        if let Some(data) = &response.data {
+            parse_response_data(data)
+        } else {
+            Ok(vec![])
+        }
     }
 }
 
@@ -1299,5 +1309,52 @@ mod tests {
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "remove-marker");
+    }
+
+    #[test]
+    fn test_parse_ls_response() {
+        let json_data = serde_json::json!([
+            {
+                "tabs": [
+                    {
+                        "windows": [
+                            {
+                                "id": 1,
+                                "title": "Test Window",
+                                "pid": 12345,
+                                "cwd": "/home/user",
+                                "cmdline": ["/bin/bash"],
+                                "foreground_processes": []
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]);
+
+        let response = KittyResponse {
+            ok: true,
+            data: Some(json_data),
+            error: None,
+        };
+
+        let instances = LsCommand::parse_response(&response).unwrap();
+        assert_eq!(instances.len(), 1);
+        assert_eq!(instances[0].tabs.len(), 1);
+        assert_eq!(instances[0].tabs[0].windows.len(), 1);
+        assert_eq!(instances[0].tabs[0].windows[0].id, Some(1));
+        assert_eq!(instances[0].tabs[0].windows[0].title, Some("Test Window".to_string()));
+    }
+
+    #[test]
+    fn test_parse_ls_response_empty() {
+        let response = KittyResponse {
+            ok: true,
+            data: None,
+            error: None,
+        };
+
+        let instances = LsCommand::parse_response(&response).unwrap();
+        assert!(instances.is_empty());
     }
 }
