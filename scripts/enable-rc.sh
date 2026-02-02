@@ -33,6 +33,12 @@ else
     echo "include rc.conf already present in $KITTY_CONF"
 fi
 
+# Ensure kitty runtime directory exists (unconditional)
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+KITTY_DIR="$RUNTIME_DIR/kitty"
+mkdir -p "$KITTY_DIR"
+echo "Ensured kitty directory exists: $KITTY_DIR"
+
 # Generate password file if it doesn't exist
 if [ ! -f "$RC_PASSWORD_FILE" ]; then
     echo "Generating random 48-character password..."
@@ -48,13 +54,6 @@ if [ "$WRITE_RC_CONF" = true ]; then
     # Get password for config file
     PASSWORD=$(cat "$RC_PASSWORD_FILE")
 
-    # Determine runtime directory (fallback to /tmp if XDG_RUNTIME_DIR not set)
-    RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
-
-    # Ensure kitty directory exists
-    KITTY_DIR="$RUNTIME_DIR/kitty"
-    mkdir -p "$KITTY_DIR"
-
     # Write remote control configuration to rc.conf
     {
         echo "# Remote control configuration - added by kitty-rc enable-rc.sh"
@@ -65,7 +64,7 @@ if [ "$WRITE_RC_CONF" = true ]; then
 
     echo ""
     echo "Remote control enabled in $RC_CONF"
-    echo "Created directory: $KITTY_DIR"
+    echo "Socket will be at: unix:$KITTY_DIR"
 fi
 
 # Setup kitty-pubkey-db in .zshrc
