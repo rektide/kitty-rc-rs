@@ -17,13 +17,15 @@ struct Cli {
 enum Commands {
     /// Initialize the database
     Init,
-    /// Add a public key entry
+    /// Add a public key entry (all parameters optional, reads from env vars)
     Add {
-        /// PID of the kitty instance
-        pid: u32,
-        /// Base85 encoded public key
-        pubkey: String,
-        /// Window ID (optional)
+        /// PID of kitty instance (reads from KITTY_PID if not provided)
+        #[arg(long)]
+        pid: Option<u32>,
+        /// Base85 encoded public key (reads from KITTY_PUBLIC_KEY if not provided)
+        #[arg(long)]
+        pubkey: Option<String>,
+        /// Window ID (optional, reads from KITTY_WINDOW_ID if not provided)
         #[arg(long)]
         window_id: Option<u32>,
     },
@@ -74,9 +76,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     print!("\nAdd this to your ~/.zshrc:\n");
     print!("  # Record kitty public key when shell starts\n");
     print!("  if [[ -n \"$KITTY_PUBLIC_KEY\" && -n \"$KITTY_PID\" ]]; then\n");
-    print!(
-        r#"      kitty-pubkey-db add "$KITTY_PID" "${{KITTY_WINDOW_ID-}}" "$KITTY_PUBLIC_KEY" &"#
-    );
+    print!(r#"      kitty-pubkey-db add &"#);
     print!("\n");
     print!("      disown\n");
     print!("  fi\n");
@@ -84,11 +84,39 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn add(pid: u32, window_id: Option<u32>, pubkey: String) -> Result<(), Box<dyn std::error::Error>> {
+fn add(
+    pid: Option<u32>,
+    window_id: Option<u32>,
+    pubkey: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Read from environment if not provided
+    let pid = pid
+        .or_else(|| std::env::var("KITTY_PID").ok().and_then(|s| s.parse().ok()))
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "PID must be provided via --pid or KITTY_PID env var",
+            )
+        })?;
+
+    let pubkey = pubkey
+        .or_else(|| std::env::var("KITTY_PUBLIC_KEY").ok())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Public key must be provided via --pubkey or KITTY_PUBLIC_KEY env var",
+            )
+        })?;
+
     let db_path = get_db_path()?;
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     let window_id_str = window_id
+        .or_else(|| {
+            std::env::var("KITTY_WINDOW_ID")
+                .ok()
+                .and_then(|s| s.parse().ok())
+        })
         .map(|id| id.to_string())
         .unwrap_or_else(|| "".to_string());
 
