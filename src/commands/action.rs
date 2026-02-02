@@ -30,9 +30,15 @@ impl ActionCommand {
         payload.insert("action".to_string(), serde_json::Value::String(self.action));
 
         if !self.args.is_empty() {
-            payload.insert("args".to_string(), serde_json::Value::Array(
-                self.args.into_iter().map(|a| serde_json::Value::String(a)).collect()
-            ));
+            payload.insert(
+                "args".to_string(),
+                serde_json::Value::Array(
+                    self.args
+                        .into_iter()
+                        .map(|a| serde_json::Value::String(a))
+                        .collect(),
+                ),
+            );
         }
 
         Ok(KittyMessage::new("send_key", vec![0, 14, 2])
@@ -598,9 +604,7 @@ mod tests {
 
     #[test]
     fn test_action_command_with_args() {
-        let cmd = ActionCommand::new("goto_tab")
-            .arg("1")
-            .build();
+        let cmd = ActionCommand::new("goto_tab").arg("1").build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert!(msg.payload.is_some());

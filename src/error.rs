@@ -59,17 +59,20 @@ pub enum CommandError {
     AsyncCancelled(String),
 }
 
-/// Errors related to encryption and decryption (future support)
+/// Errors related to encryption and decryption
 #[derive(Error, Debug)]
 pub enum EncryptionError {
     #[error("Encryption not yet implemented")]
     NotImplemented,
 
-    #[error("Failed to parse public key: {0}")]
+    #[error("KITTY_PUBLIC_KEY environment variable not set")]
+    MissingPublicKey,
+
+    #[error("Failed to decode Base85 public key: {0}")]
     InvalidPublicKey(String),
 
-    #[error("Key exchange failed: {0}")]
-    KeyExchangeFailed(String),
+    #[error("Public key too short: expected {expected} bytes, got {actual}")]
+    PublicKeyTooShort { expected: usize, actual: usize },
 
     #[error("Encryption failed: {0}")]
     EncryptionFailed(String),
@@ -77,14 +80,8 @@ pub enum EncryptionError {
     #[error("Decryption failed: {0}")]
     DecryptionFailed(String),
 
-    #[error("Invalid encryption version: {0}")]
-    InvalidVersion(String),
-
-    #[error("Timestamp expired or invalid")]
-    InvalidTimestamp,
-
-    #[error("Authentication tag verification failed")]
-    AuthenticationFailed,
+    #[error("Invalid public key format")]
+    InvalidPublicKeyFormat,
 }
 
 /// Errors related to connection, transport, and I/O

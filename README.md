@@ -12,7 +12,8 @@ kitty-rc is a Rust library that provides a type-safe, async interface for contro
 - **Type-Safe Builder API**: Fluent builder pattern for client setup and all commands
 - **Async-First**: Built on tokio for asynchronous I/O
 - **Single Connection**: Connect once at startup, reuse for all commands
-- **Error Handling**: Detailed error types for protocol, command, and connection errors
+- **Password Authentication**: Secure encrypted communication using ECDH X25519 key exchange and AES-256-GCM
+- **Error Handling**: Detailed error types for protocol, command, connection, and encryption errors
 - **Streaming Support**: Automatic chunking for large payloads (e.g., background images)
 - **Async Commands**: Support for async operations with unique ID generation
 - **Comprehensive Testing**: 143 unit tests ensuring reliability
@@ -23,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kitty-rc = "0.1.0"
+kitty-rc = "0.3.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -36,12 +37,36 @@ use kitty_rc::Kitty;
 
 #[tokio::main]
 async fn main() -> Result<(), kitty_rc::KittyError> {
+    // Basic connection (no password)
     let mut kitty = Kitty::builder()
         .socket_path("/path/to/kitty.socket")
         .connect()
         .await?;
 
     // Use kitty to send commands...
+    Ok(())
+}
+```
+
+### Connection with Password
+
+When kitty is configured with `remote_control_password`, set the `KITTY_PUBLIC_KEY` environment variable and provide the password:
+
+```rust
+use kitty_rc::Kitty;
+
+#[tokio::main]
+async fn main() -> Result<(), kitty_rc::KittyError> {
+    // Set KITTY_PUBLIC_KEY environment variable from kitty
+    std::env::set_var("KITTY_PUBLIC_KEY", &std::fs::read_to_string("/path/to/public/key")?);
+
+    let mut kitty = Kitty::builder()
+        .socket_path("/path/to/kitty.socket")
+        .password("your-password-here")
+        .connect()
+        .await?;
+
+    // All commands will be encrypted automatically
     Ok(())
 }
 ```
@@ -379,7 +404,7 @@ Run the test suite:
 cargo test
 ```
 
-All 143 tests pass successfully.
+All 146 tests pass successfully.
 
 ## Examples
 
@@ -399,6 +424,7 @@ Contributions are welcome! Please read the project's AGENTS.md for development g
 
 - [kitty terminal emulator](https://sw.kovidgoyal.net/kitty/)
 - [kitty remote control protocol documentation](https://sw.kovidgoyal.net/kitty/remote-control/)
+- [kitty remote control protocol specification](https://sw.kovidgoyal.net/kitty/rc_protocol/)
 
 ## Acknowledgments
 

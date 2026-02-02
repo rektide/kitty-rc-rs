@@ -24,7 +24,10 @@ impl GotoLayoutCommand {
         let mut payload = serde_json::Map::new();
 
         if self.layout.is_empty() {
-            return Err(CommandError::MissingParameter("layout".to_string(), "goto-layout".to_string()));
+            return Err(CommandError::MissingParameter(
+                "layout".to_string(),
+                "goto-layout".to_string(),
+            ));
         }
 
         payload.insert("layout".to_string(), serde_json::Value::String(self.layout));
@@ -74,12 +77,16 @@ impl SetEnabledLayoutsCommand {
             ));
         }
 
-        let layouts_value: Vec<serde_json::Value> = self.layouts
+        let layouts_value: Vec<serde_json::Value> = self
+            .layouts
             .into_iter()
             .map(serde_json::Value::String)
             .collect();
 
-        payload.insert("layouts".to_string(), serde_json::Value::Array(layouts_value));
+        payload.insert(
+            "layouts".to_string(),
+            serde_json::Value::Array(layouts_value),
+        );
 
         if let Some(match_spec) = self.match_spec {
             payload.insert("match".to_string(), serde_json::Value::String(match_spec));
@@ -193,7 +200,9 @@ mod tests {
     #[test]
     fn test_set_enabled_layouts_with_match() {
         let layouts = vec!["stack".to_string()];
-        let cmd = SetEnabledLayoutsCommand::new(layouts).match_spec("id:1").build();
+        let cmd = SetEnabledLayoutsCommand::new(layouts)
+            .match_spec("id:1")
+            .build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-enabled-layouts");
@@ -202,7 +211,9 @@ mod tests {
     #[test]
     fn test_set_enabled_layouts_configured() {
         let layouts = vec!["tall".to_string()];
-        let cmd = SetEnabledLayoutsCommand::new(layouts).configured(true).build();
+        let cmd = SetEnabledLayoutsCommand::new(layouts)
+            .configured(true)
+            .build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-enabled-layouts");

@@ -82,49 +82,78 @@ async fn handle_list_windows() -> Result<(), KittyError> {
 
                         for tab in tabs {
                             if let Some(tab_obj) = tab.as_object() {
-                                if let Some(windows) = tab_obj.get("windows").and_then(|v| v.as_array()) {
+                                if let Some(windows) =
+                                    tab_obj.get("windows").and_then(|v| v.as_array())
+                                {
                                     for window in windows {
                                         if let Some(win_obj) = window.as_object() {
                                             println!("--- Window ---");
 
-                                            if let Some(id) = win_obj.get("id").and_then(|v| v.as_u64()) {
+                                            if let Some(id) =
+                                                win_obj.get("id").and_then(|v| v.as_u64())
+                                            {
                                                 println!("  Window ID: {}", id);
                                             }
 
-                                            if let Some(title) = win_obj.get("title").and_then(|v| v.as_str()) {
+                                            if let Some(title) =
+                                                win_obj.get("title").and_then(|v| v.as_str())
+                                            {
                                                 println!("  Title: {}", title);
                                             }
 
-                                            if let Some(pid) = win_obj.get("pid").and_then(|v| v.as_u64()) {
+                                            if let Some(pid) =
+                                                win_obj.get("pid").and_then(|v| v.as_u64())
+                                            {
                                                 println!("  Shell PID: {}", pid);
                                             }
 
-                                            if let Some(cwd) = win_obj.get("cwd").and_then(|v| v.as_str()) {
+                                            if let Some(cwd) =
+                                                win_obj.get("cwd").and_then(|v| v.as_str())
+                                            {
                                                 println!("  CWD: {}", cwd);
                                             }
 
-                                            if let Some(cmdline) = win_obj.get("cmdline").and_then(|v| v.as_array()) {
-                                                if let Some(cmd) = cmdline.get(0).and_then(|v| v.as_str()) {
+                                            if let Some(cmdline) =
+                                                win_obj.get("cmdline").and_then(|v| v.as_array())
+                                            {
+                                                if let Some(cmd) =
+                                                    cmdline.get(0).and_then(|v| v.as_str())
+                                                {
                                                     println!("  Shell: {}", cmd);
                                                 }
                                             }
 
-                                            if let Some(procs) = win_obj.get("foreground_processes").and_then(|v| v.as_array()) {
+                                            if let Some(procs) = win_obj
+                                                .get("foreground_processes")
+                                                .and_then(|v| v.as_array())
+                                            {
                                                 for proc in procs {
                                                     if let Some(proc_obj) = proc.as_object() {
                                                         println!("  Foreground Process:");
 
-                                                        if let Some(pid) = proc_obj.get("pid").and_then(|v| v.as_u64()) {
+                                                        if let Some(pid) = proc_obj
+                                                            .get("pid")
+                                                            .and_then(|v| v.as_u64())
+                                                        {
                                                             println!("    PID: {}", pid);
                                                         }
 
-                                                        if let Some(proc_cmdline) = proc_obj.get("cmdline").and_then(|v| v.as_array()) {
-                                                            if let Some(first_arg) = proc_cmdline.get(0).and_then(|v| v.as_str()) {
+                                                        if let Some(proc_cmdline) = proc_obj
+                                                            .get("cmdline")
+                                                            .and_then(|v| v.as_array())
+                                                        {
+                                                            if let Some(first_arg) = proc_cmdline
+                                                                .get(0)
+                                                                .and_then(|v| v.as_str())
+                                                            {
                                                                 println!("    Name: {}", first_arg);
                                                             }
                                                         }
 
-                                                        if let Some(proc_cwd) = proc_obj.get("cwd").and_then(|v| v.as_str()) {
+                                                        if let Some(proc_cwd) = proc_obj
+                                                            .get("cwd")
+                                                            .and_then(|v| v.as_str())
+                                                        {
                                                             println!("    CWD: {}", proc_cwd);
                                                         }
                                                     }

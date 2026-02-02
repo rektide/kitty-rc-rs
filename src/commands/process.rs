@@ -72,11 +72,17 @@ impl RunCommand {
         }
 
         if self.allow_remote_control {
-            payload.insert("allow_remote_control".to_string(), serde_json::Value::Bool(true));
+            payload.insert(
+                "allow_remote_control".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
 
         if let Some(remote_control_password) = self.remote_control_password {
-            payload.insert("remote_control_password".to_string(), serde_json::Value::String(remote_control_password));
+            payload.insert(
+                "remote_control_password".to_string(),
+                serde_json::Value::String(remote_control_password),
+            );
         }
 
         Ok(CommandBuilder::new("run")
@@ -359,7 +365,10 @@ impl LaunchCommand {
         }
 
         if let Some(window_title) = self.window_title {
-            payload.insert("window_title".to_string(), serde_json::Value::String(window_title));
+            payload.insert(
+                "window_title".to_string(),
+                serde_json::Value::String(window_title),
+            );
         }
 
         if let Some(cwd) = self.cwd {
@@ -375,11 +384,17 @@ impl LaunchCommand {
         }
 
         if let Some(tab_title) = self.tab_title {
-            payload.insert("tab_title".to_string(), serde_json::Value::String(tab_title));
+            payload.insert(
+                "tab_title".to_string(),
+                serde_json::Value::String(tab_title),
+            );
         }
 
         if let Some(window_type) = self.window_type {
-            payload.insert("window_type".to_string(), serde_json::Value::String(window_type));
+            payload.insert(
+                "window_type".to_string(),
+                serde_json::Value::String(window_type),
+            );
         }
 
         if self.keep_focus {
@@ -407,23 +422,38 @@ impl LaunchCommand {
         }
 
         if self.allow_remote_control {
-            payload.insert("allow_remote_control".to_string(), serde_json::Value::Bool(true));
+            payload.insert(
+                "allow_remote_control".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
 
         if let Some(remote_control_password) = self.remote_control_password {
-            payload.insert("remote_control_password".to_string(), serde_json::Value::String(remote_control_password));
+            payload.insert(
+                "remote_control_password".to_string(),
+                serde_json::Value::String(remote_control_password),
+            );
         }
 
         if let Some(stdin_source) = self.stdin_source {
-            payload.insert("stdin_source".to_string(), serde_json::Value::String(stdin_source));
+            payload.insert(
+                "stdin_source".to_string(),
+                serde_json::Value::String(stdin_source),
+            );
         }
 
         if self.stdin_add_formatting {
-            payload.insert("stdin_add_formatting".to_string(), serde_json::Value::Bool(true));
+            payload.insert(
+                "stdin_add_formatting".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
 
         if self.stdin_add_line_wrap_markers {
-            payload.insert("stdin_add_line_wrap_markers".to_string(), serde_json::Value::Bool(true));
+            payload.insert(
+                "stdin_add_line_wrap_markers".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
 
         if let Some(spacing) = self.spacing {
@@ -439,7 +469,10 @@ impl LaunchCommand {
         }
 
         if let Some(logo_position) = self.logo_position {
-            payload.insert("logo_position".to_string(), serde_json::Value::String(logo_position));
+            payload.insert(
+                "logo_position".to_string(),
+                serde_json::Value::String(logo_position),
+            );
         }
 
         if let Some(logo_alpha) = self.logo_alpha {
@@ -451,19 +484,31 @@ impl LaunchCommand {
         }
 
         if let Some(os_window_title) = self.os_window_title {
-            payload.insert("os_window_title".to_string(), serde_json::Value::String(os_window_title));
+            payload.insert(
+                "os_window_title".to_string(),
+                serde_json::Value::String(os_window_title),
+            );
         }
 
         if let Some(os_window_name) = self.os_window_name {
-            payload.insert("os_window_name".to_string(), serde_json::Value::String(os_window_name));
+            payload.insert(
+                "os_window_name".to_string(),
+                serde_json::Value::String(os_window_name),
+            );
         }
 
         if let Some(os_window_class) = self.os_window_class {
-            payload.insert("os_window_class".to_string(), serde_json::Value::String(os_window_class));
+            payload.insert(
+                "os_window_class".to_string(),
+                serde_json::Value::String(os_window_class),
+            );
         }
 
         if let Some(os_window_state) = self.os_window_state {
-            payload.insert("os_window_state".to_string(), serde_json::Value::String(os_window_state));
+            payload.insert(
+                "os_window_state".to_string(),
+                serde_json::Value::String(os_window_state),
+            );
         }
 
         if let Some(color) = self.color {
@@ -497,7 +542,10 @@ impl EnvCommand {
         let mut payload = Map::new();
 
         if self.env.is_empty() {
-            return Err(CommandError::MissingParameter("env".to_string(), "env".to_string()));
+            return Err(CommandError::MissingParameter(
+                "env".to_string(),
+                "env".to_string(),
+            ));
         }
 
         payload.insert("env".to_string(), serde_json::Value::Object(self.env));
@@ -530,7 +578,10 @@ impl SetUserVarsCommand {
         let mut payload = Map::new();
 
         if self.var.is_empty() {
-            return Err(CommandError::MissingParameter("var".to_string(), "set-user-vars".to_string()));
+            return Err(CommandError::MissingParameter(
+                "var".to_string(),
+                "set-user-vars".to_string(),
+            ));
         }
 
         payload.insert("var".to_string(), serde_json::json!(self.var));
@@ -574,7 +625,10 @@ impl LoadConfigCommand {
         let mut payload = Map::new();
 
         if self.paths.is_empty() {
-            return Err(CommandError::MissingParameter("paths".to_string(), "load-config".to_string()));
+            return Err(CommandError::MissingParameter(
+                "paths".to_string(),
+                "load-config".to_string(),
+            ));
         }
 
         payload.insert("paths".to_string(), serde_json::json!(self.paths));
@@ -584,7 +638,10 @@ impl LoadConfigCommand {
         }
 
         if self.ignore_overrides {
-            payload.insert("ignore_overrides".to_string(), serde_json::Value::Bool(true));
+            payload.insert(
+                "ignore_overrides".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
 
         Ok(CommandBuilder::new("load-config")
@@ -733,11 +790,17 @@ impl DisableLigaturesCommand {
         }
 
         if let Some(match_window) = self.match_window {
-            payload.insert("match_window".to_string(), serde_json::Value::String(match_window));
+            payload.insert(
+                "match_window".to_string(),
+                serde_json::Value::String(match_window),
+            );
         }
 
         if let Some(match_tab) = self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(match_tab));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(match_tab),
+            );
         }
 
         if self.all {
@@ -772,7 +835,10 @@ impl SignalChildCommand {
         let mut payload = Map::new();
 
         if self.signals.is_empty() {
-            return Err(CommandError::MissingParameter("signals".to_string(), "signal-child".to_string()));
+            return Err(CommandError::MissingParameter(
+                "signals".to_string(),
+                "signal-child".to_string(),
+            ));
         }
 
         payload.insert("signals".to_string(), serde_json::json!(self.signals));
@@ -851,7 +917,10 @@ mod tests {
     #[test]
     fn test_env_basic() {
         let mut env_map = Map::new();
-        env_map.insert("PATH".to_string(), serde_json::Value::String("/usr/bin".to_string()));
+        env_map.insert(
+            "PATH".to_string(),
+            serde_json::Value::String("/usr/bin".to_string()),
+        );
         let cmd = EnvCommand::new(env_map).build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();

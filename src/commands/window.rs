@@ -1,7 +1,7 @@
 use crate::command::CommandBuilder;
+use crate::commands::process::ProcessInfo;
 use crate::error::CommandError;
 use crate::protocol::KittyMessage;
-use crate::commands::process::ProcessInfo;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -169,7 +169,10 @@ impl LsCommand {
         }
 
         if let Some(match_tab) = self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(match_tab));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(match_tab),
+            );
         }
 
         if self.self_window {
@@ -253,7 +256,10 @@ impl SendTextCommand {
         }
 
         if let Some(match_tab) = self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(match_tab));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(match_tab),
+            );
         }
 
         if self.all {
@@ -265,7 +271,10 @@ impl SendTextCommand {
         }
 
         if self.bracketed_paste != "disable" {
-            payload.insert("bracketed_paste".to_string(), serde_json::Value::String(self.bracketed_paste));
+            payload.insert(
+                "bracketed_paste".to_string(),
+                serde_json::Value::String(self.bracketed_paste),
+            );
         }
 
         Ok(CommandBuilder::new("send-text")
@@ -330,7 +339,10 @@ impl SendKeyCommand {
         }
 
         if let Some(match_tab) = self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(match_tab));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(match_tab),
+            );
         }
 
         if self.all {
@@ -446,7 +458,10 @@ impl ResizeWindowCommand {
             payload.insert("self".to_string(), serde_json::Value::Bool(true));
         }
 
-        payload.insert("increment".to_string(), serde_json::Value::Number(self.increment.into()));
+        payload.insert(
+            "increment".to_string(),
+            serde_json::Value::Number(self.increment.into()),
+        );
 
         if self.axis != "horizontal" {
             payload.insert("axis".to_string(), serde_json::Value::String(self.axis));
@@ -538,7 +553,10 @@ impl SelectWindowCommand {
         }
 
         if self.reactivate_prev_tab {
-            payload.insert("reactivate_prev_tab".to_string(), serde_json::Value::Bool(true));
+            payload.insert(
+                "reactivate_prev_tab".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
 
         Ok(CommandBuilder::new("select-window")
@@ -625,7 +643,10 @@ impl NewWindowCommand {
         }
 
         if let Some(window_type) = self.window_type {
-            payload.insert("window_type".to_string(), serde_json::Value::String(window_type));
+            payload.insert(
+                "window_type".to_string(),
+                serde_json::Value::String(window_type),
+            );
         }
 
         if self.new_tab {
@@ -633,7 +654,10 @@ impl NewWindowCommand {
         }
 
         if let Some(tab_title) = self.tab_title {
-            payload.insert("tab_title".to_string(), serde_json::Value::String(tab_title));
+            payload.insert(
+                "tab_title".to_string(),
+                serde_json::Value::String(tab_title),
+            );
         }
 
         Ok(CommandBuilder::new("new-window")
@@ -687,7 +711,10 @@ impl DetachWindowCommand {
         }
 
         if let Some(target_tab) = self.target_tab {
-            payload.insert("target_tab".to_string(), serde_json::Value::String(target_tab));
+            payload.insert(
+                "target_tab".to_string(),
+                serde_json::Value::String(target_tab),
+            );
         }
 
         if self.self_window {
@@ -733,7 +760,10 @@ impl SetWindowTitleCommand {
         let mut payload = serde_json::Map::new();
 
         if self.title.is_empty() {
-            return Err(CommandError::MissingParameter("title".to_string(), "set-window-title".to_string()));
+            return Err(CommandError::MissingParameter(
+                "title".to_string(),
+                "set-window-title".to_string(),
+            ));
         }
 
         payload.insert("title".to_string(), serde_json::Value::String(self.title));
@@ -995,7 +1025,10 @@ impl CreateMarkerCommand {
         }
 
         if let Some(marker_spec) = self.marker_spec {
-            payload.insert("marker_spec".to_string(), serde_json::Value::String(marker_spec));
+            payload.insert(
+                "marker_spec".to_string(),
+                serde_json::Value::String(marker_spec),
+            );
         }
 
         Ok(CommandBuilder::new("create-marker")
@@ -1423,7 +1456,10 @@ mod tests {
         assert_eq!(instances[0].tabs.len(), 1);
         assert_eq!(instances[0].tabs[0].windows.len(), 1);
         assert_eq!(instances[0].tabs[0].windows[0].id, Some(1));
-        assert_eq!(instances[0].tabs[0].windows[0].title, Some("Test Window".to_string()));
+        assert_eq!(
+            instances[0].tabs[0].windows[0].title,
+            Some("Test Window".to_string())
+        );
     }
 
     #[test]

@@ -118,7 +118,12 @@ impl KittyMessage {
                                 chunk_msg.stream = Some(true);
 
                                 let mut chunk_payload = serde_json::Map::new();
-                                chunk_payload.insert("data".to_string(), serde_json::Value::String(String::from_utf8_lossy(chunk_data).to_string()));
+                                chunk_payload.insert(
+                                    "data".to_string(),
+                                    serde_json::Value::String(
+                                        String::from_utf8_lossy(chunk_data).to_string(),
+                                    ),
+                                );
                                 chunk_payload.insert("chunk_num".to_string(), serde_json::json!(i));
                                 chunk_msg.payload = Some(serde_json::Value::Object(chunk_payload));
 
@@ -129,7 +134,10 @@ impl KittyMessage {
                             end_chunk.stream_id = Some(stream_id);
                             end_chunk.stream = Some(true);
                             let mut end_payload = serde_json::Map::new();
-                            end_payload.insert("data".to_string(), serde_json::Value::String(String::new()));
+                            end_payload.insert(
+                                "data".to_string(),
+                                serde_json::Value::String(String::new()),
+                            );
                             end_chunk.payload = Some(serde_json::Value::Object(end_payload));
                             chunks.push(end_chunk);
 
@@ -198,8 +206,8 @@ impl KittyResponse {
         let json_end = s.len() - SUFFIX.len();
         let json_str = &s[json_start..json_end];
 
-        let msg: serde_json::Value = serde_json::from_str(json_str)
-            .map_err(ProtocolError::JsonError)?;
+        let msg: serde_json::Value =
+            serde_json::from_str(json_str).map_err(ProtocolError::JsonError)?;
 
         if !msg.is_object() {
             return Err(ProtocolError::EnvelopeParseError(
@@ -236,8 +244,7 @@ mod tests {
 
     #[test]
     fn test_message_no_response() {
-        let msg = KittyMessage::new("close-window", vec![0, 14, 2])
-            .no_response(true);
+        let msg = KittyMessage::new("close-window", vec![0, 14, 2]).no_response(true);
         let encoded = msg.encode().unwrap();
         let decoded = KittyMessage::decode(&encoded).unwrap();
         assert_eq!(decoded.no_response, Some(true));
@@ -260,8 +267,7 @@ mod tests {
 
     #[test]
     fn test_async_id() {
-        let msg = KittyMessage::new("select-window", vec![0, 14, 2])
-            .async_id("abc123");
+        let msg = KittyMessage::new("select-window", vec![0, 14, 2]).async_id("abc123");
         let encoded = msg.encode().unwrap();
         let decoded = KittyMessage::decode(&encoded).unwrap();
         assert_eq!(decoded.async_id, Some("abc123".to_string()));

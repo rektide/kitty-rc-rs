@@ -46,17 +46,25 @@ impl SetBackgroundOpacityCommand {
         let mut payload = Map::new();
 
         if self.opacity < 0.0 || self.opacity > 1.0 {
-            return Err(CommandError::ValidationError("opacity must be between 0.0 and 1.0".to_string()));
+            return Err(CommandError::ValidationError(
+                "opacity must be between 0.0 and 1.0".to_string(),
+            ));
         }
 
         payload.insert("opacity".to_string(), serde_json::json!(self.opacity));
 
         if let Some(match_window) = self.match_window {
-            payload.insert("match_window".to_string(), serde_json::Value::String(match_window));
+            payload.insert(
+                "match_window".to_string(),
+                serde_json::Value::String(match_window),
+            );
         }
 
         if let Some(match_tab) = self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(match_tab));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(match_tab),
+            );
         }
 
         if self.all {
@@ -116,7 +124,10 @@ impl SetBackgroundImageCommand {
         let mut payload = Map::new();
 
         if self.data.is_empty() {
-            return Err(CommandError::MissingParameter("data".to_string(), "set-background-image".to_string()));
+            return Err(CommandError::MissingParameter(
+                "data".to_string(),
+                "set-background-image".to_string(),
+            ));
         }
 
         payload.insert("data".to_string(), serde_json::Value::String(self.data));
@@ -193,17 +204,26 @@ impl SetColorsCommand {
         let mut payload = Map::new();
 
         if self.colors.is_empty() {
-            return Err(CommandError::MissingParameter("colors".to_string(), "set-colors".to_string()));
+            return Err(CommandError::MissingParameter(
+                "colors".to_string(),
+                "set-colors".to_string(),
+            ));
         }
 
         payload.insert("colors".to_string(), serde_json::Value::Object(self.colors));
 
         if let Some(match_window) = self.match_window {
-            payload.insert("match_window".to_string(), serde_json::Value::String(match_window));
+            payload.insert(
+                "match_window".to_string(),
+                serde_json::Value::String(match_window),
+            );
         }
 
         if let Some(match_tab) = self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(match_tab));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(match_tab),
+            );
         }
 
         if self.all {
@@ -259,7 +279,10 @@ impl SetFontSizeCommand {
         }
 
         if let Some(increment_op) = self.increment_op {
-            payload.insert("increment_op".to_string(), serde_json::Value::String(increment_op));
+            payload.insert(
+                "increment_op".to_string(),
+                serde_json::Value::String(increment_op),
+            );
         }
 
         Ok(CommandBuilder::new("set-font-size")
@@ -311,17 +334,29 @@ impl SetSpacingCommand {
         let mut payload = Map::new();
 
         if self.settings.is_empty() {
-            return Err(CommandError::MissingParameter("settings".to_string(), "set-spacing".to_string()));
+            return Err(CommandError::MissingParameter(
+                "settings".to_string(),
+                "set-spacing".to_string(),
+            ));
         }
 
-        payload.insert("settings".to_string(), serde_json::Value::Object(self.settings));
+        payload.insert(
+            "settings".to_string(),
+            serde_json::Value::Object(self.settings),
+        );
 
         if let Some(match_window) = self.match_window {
-            payload.insert("match_window".to_string(), serde_json::Value::String(match_window));
+            payload.insert(
+                "match_window".to_string(),
+                serde_json::Value::String(match_window),
+            );
         }
 
         if let Some(match_tab) = self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(match_tab));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(match_tab),
+            );
         }
 
         if self.all {
@@ -367,7 +402,10 @@ impl SetTabColorCommand {
         let mut payload = Map::new();
 
         if self.colors.is_empty() {
-            return Err(CommandError::MissingParameter("colors".to_string(), "set-tab-color".to_string()));
+            return Err(CommandError::MissingParameter(
+                "colors".to_string(),
+                "set-tab-color".to_string(),
+            ));
         }
 
         payload.insert("colors".to_string(), serde_json::Value::Object(self.colors));
@@ -494,7 +532,10 @@ mod tests {
     #[test]
     fn test_set_colors_basic() {
         let mut colors = Map::new();
-        colors.insert("foreground".to_string(), serde_json::Value::String("#ffffff".to_string()));
+        colors.insert(
+            "foreground".to_string(),
+            serde_json::Value::String("#ffffff".to_string()),
+        );
         let cmd = SetColorsCommand::new(colors).build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
@@ -516,11 +557,11 @@ mod tests {
     #[test]
     fn test_set_colors_with_options() {
         let mut colors = Map::new();
-        colors.insert("background".to_string(), serde_json::Value::String("#000000".to_string()));
-        let cmd = SetColorsCommand::new(colors)
-            .all(true)
-            .reset(true)
-            .build();
+        colors.insert(
+            "background".to_string(),
+            serde_json::Value::String("#000000".to_string()),
+        );
+        let cmd = SetColorsCommand::new(colors).all(true).reset(true).build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-colors");
@@ -583,7 +624,10 @@ mod tests {
     #[test]
     fn test_set_tab_color_basic() {
         let mut colors = Map::new();
-        colors.insert("active_tab_foreground".to_string(), serde_json::Value::String("#ffffff".to_string()));
+        colors.insert(
+            "active_tab_foreground".to_string(),
+            serde_json::Value::String("#ffffff".to_string()),
+        );
         let cmd = SetTabColorCommand::new(colors).build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
@@ -605,10 +649,11 @@ mod tests {
     #[test]
     fn test_set_tab_color_with_options() {
         let mut colors = Map::new();
-        colors.insert("active_tab_background".to_string(), serde_json::Value::String("#000000".to_string()));
-        let cmd = SetTabColorCommand::new(colors)
-            .self_tab(true)
-            .build();
+        colors.insert(
+            "active_tab_background".to_string(),
+            serde_json::Value::String("#000000".to_string()),
+        );
+        let cmd = SetTabColorCommand::new(colors).self_tab(true).build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-tab-color");

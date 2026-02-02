@@ -1,29 +1,56 @@
 pub mod client;
 pub mod command;
 pub mod commands;
+pub mod encryption;
 pub mod error;
 pub mod protocol;
 
 pub use client::{Kitty, KittyBuilder};
 pub use commands::{
     // Tab commands
-    CloseTabCommand, DetachTabCommand, FocusTabCommand, SetTabTitleCommand,
+    CloseTabCommand,
     // Window commands
-    CloseWindowCommand, CreateMarkerCommand, DetachWindowCommand, FocusWindowCommand,
-    GetTextCommand, NewWindowCommand, RemoveMarkerCommand, ResizeWindowCommand,
-    ScrollWindowCommand, SelectWindowCommand, SendKeyCommand, SendTextCommand,
-    SetWindowLogoCommand, SetWindowTitleCommand,
-    // Layout commands
-    GotoLayoutCommand, LastUsedLayoutCommand, SetEnabledLayoutsCommand,
-    // Style commands
-    GetColorsCommand, SetBackgroundImageCommand, SetBackgroundOpacityCommand,
-    SetColorsCommand, SetFontSizeCommand, SetSpacingCommand, SetTabColorCommand,
+    CloseWindowCommand,
+    CreateMarkerCommand,
+    DetachTabCommand,
+    DetachWindowCommand,
     // Process commands
-    DisableLigaturesCommand, EnvCommand, KittenCommand, LaunchCommand,
-    LoadConfigCommand, ResizeOSWindowCommand, RunCommand, SetUserVarsCommand,
-    SignalChildCommand,
+    DisableLigaturesCommand,
+    EnvCommand,
+    FocusTabCommand,
+    FocusWindowCommand,
+    // Style commands
+    GetColorsCommand,
+    GetTextCommand,
+    // Layout commands
+    GotoLayoutCommand,
+    KittenCommand,
+    LastUsedLayoutCommand,
+    LaunchCommand,
+    LoadConfigCommand,
     // Special commands
     LsCommand,
+    NewWindowCommand,
+    RemoveMarkerCommand,
+    ResizeOSWindowCommand,
+    ResizeWindowCommand,
+    RunCommand,
+    ScrollWindowCommand,
+    SelectWindowCommand,
+    SendKeyCommand,
+    SendTextCommand,
+    SetBackgroundImageCommand,
+    SetBackgroundOpacityCommand,
+    SetColorsCommand,
+    SetEnabledLayoutsCommand,
+    SetFontSizeCommand,
+    SetSpacingCommand,
+    SetTabColorCommand,
+    SetTabTitleCommand,
+    SetUserVarsCommand,
+    SetWindowLogoCommand,
+    SetWindowTitleCommand,
+    SignalChildCommand,
     action::*,
     process::ProcessInfo,
     window::{OsInstance, TabInfo, WindowInfo, parse_response_data},

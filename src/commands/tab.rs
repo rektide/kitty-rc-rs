@@ -51,7 +51,10 @@ impl SetTabTitleCommand {
         let mut payload = serde_json::Map::new();
 
         if self.title.is_empty() {
-            return Err(CommandError::MissingParameter("title".to_string(), "set-tab-title".to_string()));
+            return Err(CommandError::MissingParameter(
+                "title".to_string(),
+                "set-tab-title".to_string(),
+            ));
         }
 
         payload.insert("title".to_string(), serde_json::Value::String(self.title));
@@ -155,7 +158,10 @@ impl DetachTabCommand {
         }
 
         if let Some(target_tab) = self.target_tab {
-            payload.insert("target_tab".to_string(), serde_json::Value::String(target_tab));
+            payload.insert(
+                "target_tab".to_string(),
+                serde_json::Value::String(target_tab),
+            );
         }
 
         if self.self_tab {
@@ -212,7 +218,9 @@ mod tests {
 
     #[test]
     fn test_set_tab_title_with_match() {
-        let cmd = SetTabTitleCommand::new("New Title").match_spec("id:1").build();
+        let cmd = SetTabTitleCommand::new("New Title")
+            .match_spec("id:1")
+            .build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-tab-title");
