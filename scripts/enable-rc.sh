@@ -11,22 +11,6 @@ if [ ! -f "$KITTY_CONF" ]; then
     exit 1
 fi
 
-# Function to check if a config option is already set (not commented out)
-check_existing_config() {
-    local key="$1"
-    local file="$2"
-    if grep -q "^[[:space:]]*$key" "$file"; then
-        echo "Error: '$key' is already configured in $file"
-        echo "       Please remove or comment out the existing configuration first."
-        exit 1
-    fi
-}
-
-# Check for existing remote control configurations in kitty.conf
-check_existing_config "allow_remote_control" "$KITTY_CONF"
-check_existing_config "remote_control_password" "$KITTY_CONF"
-check_existing_config "listen_on" "$KITTY_CONF"
-
 # Check if rc.conf already exists
 if [ -f "$RC_CONF" ]; then
     echo "Using existing rc.conf at $RC_CONF"
@@ -34,11 +18,6 @@ else
     echo "Creating $RC_CONF"
     touch "$RC_CONF"
 fi
-
-# Check for existing remote control configurations in rc.conf
-check_existing_config "allow_remote_control" "$RC_CONF"
-check_existing_config "remote_control_password" "$RC_CONF"
-check_existing_config "listen_on" "$RC_CONF"
 
 # Check if kitty.conf includes rc.conf
 if ! grep -q "^[[:space:]]*include[[:space:]]\\+rc.conf" "$KITTY_CONF"; then

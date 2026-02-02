@@ -312,7 +312,6 @@ This script will:
 - Create `~/.config/kitty/rc.conf` with remote control configuration
 - Add `include rc.conf` to `~/.config/kitty/kitty.conf` if not present
 - Set up a socket in the XDG runtime directory at `kitty/kitty-{kitty_pid}.sock`
-- Fail if any remote control settings are already configured in kitty.conf
 
 ### Manual Configuration
 
