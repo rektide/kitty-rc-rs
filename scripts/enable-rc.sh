@@ -45,7 +45,7 @@ fi
 
 # Write remote control configuration to rc.conf only if needed
 if [ "$WRITE_RC_CONF" = true ]; then
-    # Get password for the config file
+    # Get password for config file
     PASSWORD=$(cat "$RC_PASSWORD_FILE")
 
     # Write remote control configuration to rc.conf
@@ -58,6 +58,50 @@ if [ "$WRITE_RC_CONF" = true ]; then
 
     echo ""
     echo "Remote control enabled in $RC_CONF"
+fi
+
+# Setup kitty-pubkey-db in .zshrc
+ZSHRC="${HOME}/.zshrc"
+SHELL_INTEGRATION_ADDED=false
+
+# Find kitty-pubkey-db binary
+if command -v kitty-pubkey-db &> /dev/null; then
+    PUBKEY_DB_CMD="kitty-pubkey-db"
+    echo "Found kitty-pubkey-db on PATH"
+else
+    # Try to find the built release binary
+    if [ -f "./target/release/kitty-pubkey-db" ]; then
+        PUBKEY_DB_CMD="./target/release/kitty-pubkey-db"
+        echo "Using built kitty-pubkey-db at ./target/release/kitty-pubkey-db"
+    elif [ -f "$(dirname "$0")/../target/release/kitty-pubkey-db" ]; then
+        PUBKEY_DB_CMD="$(dirname "$0")/../target/release/kitty-pubkey-db"
+        echo "Using built kitty-pubkey-db at $PUBKEY_DB_CMD"
+    else
+        echo "Warning: kitty-pubkey-db not found on PATH or in target/release"
+        echo "You may need to run 'cargo build --release' or install kitty-pubkey-db to PATH"
+        PUBKEY_DB_CMD="kitty-pubkey-db"
+    fi
+fi
+
+# Check if shell integration already exists
+if [ -f "$ZSHRC" ]; then
+    if grep -q "kitty-pubkey-db add" "$ZSHRC" 2>/dev/null; then
+        echo "Shell integration for kitty-pubkey-db already exists in $ZSHRC"
+        SHELL_INTEGRATION_ADDED=true
+    fi
+fi
+
+# Add shell integration if not present
+if [ "$SHELL_INTEGRATION_ADDED" = false ]; then
+    echo ""
+    echo "Adding kitty-pubkey-db shell integration to $ZSHRC"
+    echo "" >> "$ZSHRC"
+    echo "# Record kitty public key when shell starts (added by kitty-rc enable-rc.sh)" >> "$ZSHRC"
+    echo "if [[ -n \"\$KITTY_PUBLIC_KEY\" && -n \"\$KITTY_PID\" ]]; then" >> "$ZSHRC"
+    echo "    $PUBKEY_DB_CMD add \"\$KITTY_PID\" \"\${KITTY_WINDOW_ID-}\" \"\$KITTY_PUBLIC_KEY\" &" >> "$ZSHRC"
+    echo "    disown" >> "$ZSHRC"
+    echo "fi" >> "$ZSHRC"
+    echo "Added shell integration to $ZSHRC"
 fi
 
 echo ""
