@@ -50,16 +50,16 @@ async fn main() -> Result<(), kitty_rc::KittyError> {
 
 ### Connection with Password
 
-When kitty is configured with `remote_control_password`, set the `KITTY_PUBLIC_KEY` environment variable and provide the password:
+When kitty is configured with `remote_control_password`, password authentication provides encrypted communication. **Note: Password authentication only works when your application is launched by kitty or running within a kitty window**, because kitty exposes its public key via the `KITTY_PUBLIC_KEY` environment variable only to processes it launches.
+
+When using password authentication from within kitty:
 
 ```rust
 use kitty_rc::Kitty;
 
 #[tokio::main]
 async fn main() -> Result<(), kitty_rc::KittyError> {
-    // Set KITTY_PUBLIC_KEY environment variable from kitty
-    std::env::set_var("KITTY_PUBLIC_KEY", &std::fs::read_to_string("/path/to/public/key")?);
-
+    // KITTY_PUBLIC_KEY is automatically set by kitty for processes it launches
     let mut kitty = Kitty::builder()
         .socket_path("/path/to/kitty.socket")
         .password("your-password-here")
@@ -70,6 +70,12 @@ async fn main() -> Result<(), kitty_rc::KittyError> {
     Ok(())
 }
 ```
+
+The encryption uses kitty's protocol:
+- X25519 ECDH key exchange with kitty's public key (from KITTY_PUBLIC_KEY)
+- Client generates ephemeral keys per command
+- AES-256-GCM authenticated encryption
+- SHA-256 derived shared secret
 
 ### Listing Windows
 

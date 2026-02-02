@@ -45,7 +45,7 @@ fi
 
 # Write remote control configuration to rc.conf only if needed
 if [ "$WRITE_RC_CONF" = true ]; then
-    # Get the password for the config file
+    # Get password for the config file
     PASSWORD=$(cat "$RC_PASSWORD_FILE")
 
     # Write remote control configuration to rc.conf
@@ -61,4 +61,8 @@ if [ "$WRITE_RC_CONF" = true ]; then
 fi
 
 echo ""
-echo "Please restart kitty to apply the changes."
+echo "Please restart kitty to apply changes."
+echo ""
+echo "Note: kitty will generate its own encryption keys when started with"
+echo "remote_control_password. Use kitty-rc from within a kitty window or"
+echo "from a process launched by kitty to use password authentication."
