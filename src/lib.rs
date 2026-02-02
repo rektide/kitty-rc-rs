@@ -9,6 +9,7 @@ pub use commands::{
     CloseTabCommand, CloseWindowCommand, FocusTabCommand, GotoLayoutCommand,
     LastUsedLayoutCommand, LsCommand, ResizeWindowCommand, SendKeyCommand,
     SetEnabledLayoutsCommand, SetTabTitleCommand, SendTextCommand,
+    SetFontSizeCommand,
     action::*,
     process::ProcessInfo,
     window::{OsInstance, TabInfo, WindowInfo, parse_response_data},
