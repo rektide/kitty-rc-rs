@@ -21,10 +21,11 @@ enum Commands {
     Add {
         /// PID of the kitty instance
         pid: u32,
-        /// Window ID (optional)
-        window_id: Option<u32>,
         /// Base85 encoded public key
         pubkey: String,
+        /// Window ID (optional)
+        #[arg(long)]
+        window_id: Option<u32>,
     },
     /// Clean up stale entries
     Cleanup,
@@ -73,9 +74,15 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     print!("\nAdd this to your ~/.zshrc:\n");
     print!("  # Record kitty public key when shell starts\n");
     print!("  if [[ -n \"$KITTY_PUBLIC_KEY\" && -n \"$KITTY_PID\" ]]; then\n");
-    print!(r"      kitty-pubkey-db add \"$KITTY_PID\" \"${KITTY_WINDOW_ID-}\" \"$KITTY_PUBLIC_KEY\" &\n");
+    print!(
+        r#"      kitty-pubkey-db add "$KITTY_PID" "${{KITTY_WINDOW_ID-}}" "$KITTY_PUBLIC_KEY" &"#
+    );
+    print!("\n");
     print!("      disown\n");
     print!("  fi\n");
+
+    Ok(())
+}
 
 fn add(pid: u32, window_id: Option<u32>, pubkey: String) -> Result<(), Box<dyn std::error::Error>> {
     let db_path = get_db_path()?;
@@ -173,8 +180,7 @@ fn get(pid: u32) -> Result<(), Box<dyn std::error::Error>> {
 
 fn get_db_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let xdg_state = env::var("XDG_STATE_HOME")
-        .unwrap_or(format!("{}/.local/state", home));
+    let xdg_state = env::var("XDG_STATE_HOME").unwrap_or(format!("{}/.local/state", home));
 
     let db_dir = PathBuf::from(xdg_state).join("kitty");
     Ok(db_dir)
@@ -203,7 +209,7 @@ fn check_and_cleanup_if_needed(_db_path: &Path) -> Result<(), Box<dyn std::error
         return Ok(());
     }
 
-    let _current_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let current_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     let last_cleanup = fs::read_to_string(&epoch_path)?.trim().parse::<u64>()?;
 
@@ -215,7 +221,7 @@ fn check_and_cleanup_if_needed(_db_path: &Path) -> Result<(), Box<dyn std::error
 }
 
 fn is_process_running(pid: u32) -> bool {
-#[cfg(unix)]
+    #[cfg(unix)]
     {
         Path::new(&format!("/proc/{}", pid)).exists()
     }

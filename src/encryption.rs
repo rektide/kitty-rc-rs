@@ -1,11 +1,12 @@
 use crate::error::{EncryptionError, KittyError};
 use aes_gcm::{
-    Aes256Gcm,
     aead::{Aead, AeadCore, KeyInit},
+    Aes256Gcm,
 };
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
-use std::env;
+use std::fs;
+use std::path::Path;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 pub struct Encryptor {
@@ -19,12 +20,7 @@ impl Encryptor {
     }
 
     fn load_kitty_public_key() -> Result<PublicKey, EncryptionError> {
-        let key_str =
-            env::var("KITTY_PUBLIC_KEY").map_err(|_| EncryptionError::MissingPublicKey)?;
-
-        let key_bytes = base85::decode(&key_str)
-            .map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()))?;
-
+        let key_bytes = Self::read_kitty_public_key()?;
         if key_bytes.len() < 32 {
             return Err(EncryptionError::PublicKeyTooShort {
                 expected: 32,
@@ -35,6 +31,28 @@ impl Encryptor {
         let mut key_array = [0u8; 32];
         key_array.copy_from_slice(&key_bytes[..32]);
         Ok(PublicKey::from(key_array))
+    }
+
+    fn read_kitty_public_key() -> Result<Vec<u8>, EncryptionError> {
+        if let Ok(key_str) = std::env::var("KITTY_PUBLIC_KEY") {
+            return base85::decode(&key_str)
+                .map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()));
+        }
+
+        let default_path = format!(
+            "{}/.config/kitty/key.pub",
+            std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
+        );
+
+        let key_path = Path::new(&default_path);
+        if !key_path.exists() {
+            return Err(EncryptionError::MissingPublicKey);
+        }
+
+        let key_bytes =
+            fs::read(&key_path).map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()))?;
+
+        Ok(key_bytes)
     }
 
     pub fn encrypt_command(
@@ -84,7 +102,7 @@ mod tests {
     #[test]
     fn test_load_kitty_public_key_missing() {
         unsafe {
-            env::remove_var("KITTY_PUBLIC_KEY");
+            std::env::remove_var("KITTY_PUBLIC_KEY");
         }
         let result = Encryptor::new();
         assert!(matches!(result, Err(EncryptionError::MissingPublicKey)));
@@ -93,7 +111,7 @@ mod tests {
     #[test]
     fn test_load_kitty_public_key_invalid() {
         unsafe {
-            env::set_var("KITTY_PUBLIC_KEY", "invalid base85");
+            std::env::set_var("KITTY_PUBLIC_KEY", "invalid base85");
         }
         let result = Encryptor::new();
         assert!(matches!(result, Err(EncryptionError::InvalidPublicKey(_))));
@@ -103,7 +121,7 @@ mod tests {
     fn test_load_kitty_public_key_too_short() {
         let short_key = base85::encode(&[1u8, 2, 3]);
         unsafe {
-            env::set_var("KITTY_PUBLIC_KEY", short_key);
+            std::env::set_var("KITTY_PUBLIC_KEY", short_key);
         }
         let result = Encryptor::new();
         assert!(matches!(
@@ -117,7 +135,7 @@ mod tests {
         let secret = StaticSecret::random_from_rng(&mut OsRng);
         let public_key = PublicKey::from(&secret);
         unsafe {
-            env::set_var("KITTY_PUBLIC_KEY", base85::encode(public_key.as_bytes()));
+            std::env::set_var("KITTY_PUBLIC_KEY", base85::encode(public_key.as_bytes()));
         }
 
         let encryptor = Encryptor::new().unwrap();
