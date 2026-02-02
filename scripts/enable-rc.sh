@@ -34,7 +34,7 @@ fi
 
 # Use runtime directory
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
-RUNTIME_SOCK="unix:$RUNTIME_DIR"
+RUNTIME_SOCK="unix:$RUNTIME_DIR/kitty-{kitty_pid}.sock"
 echo "directory: using runtime directory $RUNTIME_DIR"
 
 # Generate password file if it doesn't exist
@@ -60,7 +60,7 @@ if [ "$WRITE_RC_CONF" = true ]; then
         echo "listen_on $RUNTIME_SOCK"
     } > "$RC_CONF"
 
-    echo "config: enabled remote control in $RC_CONF (socket: $RUNTIME_SOCK/kitty-<pid>.sock)"
+    echo "config: enabled remote control in $RC_CONF (socket: $RUNTIME_SOCK)"
 fi
 
 # Setup kitty-pubkey-db in .zshrc
