@@ -19,8 +19,27 @@ impl Encryptor {
         Ok(Self { kitty_public_key })
     }
 
+    pub fn new_with_public_key(public_key: Option<&str>) -> Result<Self, EncryptionError> {
+        let kitty_public_key = if let Some(key_str) = public_key {
+            Self::parse_public_key(key_str)?
+        } else {
+            Self::load_kitty_public_key()?
+        };
+        Ok(Self { kitty_public_key })
+    }
+
     fn load_kitty_public_key() -> Result<PublicKey, EncryptionError> {
         let key_bytes = Self::read_kitty_public_key()?;
+        Self::bytes_to_public_key(key_bytes)
+    }
+
+    fn parse_public_key(key_str: &str) -> Result<PublicKey, EncryptionError> {
+        let key_bytes = base85::decode(key_str)
+            .map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()))?;
+        Self::bytes_to_public_key(key_bytes)
+    }
+
+    fn bytes_to_public_key(key_bytes: Vec<u8>) -> Result<PublicKey, EncryptionError> {
         if key_bytes.len() < 32 {
             return Err(EncryptionError::PublicKeyTooShort {
                 expected: 32,
@@ -128,6 +147,37 @@ mod tests {
             result,
             Err(EncryptionError::PublicKeyTooShort { .. })
         ));
+    }
+
+    #[test]
+    fn test_new_with_public_key() {
+        let secret = StaticSecret::random_from_rng(&mut OsRng);
+        let public_key = PublicKey::from(&secret);
+        let public_key_str = base85::encode(public_key.as_bytes());
+
+        let encryptor = Encryptor::new_with_public_key(Some(&public_key_str));
+        assert!(encryptor.is_ok());
+    }
+
+    #[test]
+    fn test_new_with_public_key_invalid() {
+        let encryptor = Encryptor::new_with_public_key(Some("invalid base85"));
+        assert!(matches!(
+            encryptor,
+            Err(EncryptionError::InvalidPublicKey(_))
+        ));
+    }
+
+    #[test]
+    fn test_new_with_public_key_none() {
+        let secret = StaticSecret::random_from_rng(&mut OsRng);
+        let public_key = PublicKey::from(&secret);
+        unsafe {
+            std::env::set_var("KITTY_PUBLIC_KEY", base85::encode(public_key.as_bytes()));
+        }
+
+        let encryptor = Encryptor::new_with_public_key(None);
+        assert!(encryptor.is_ok());
     }
 
     #[test]

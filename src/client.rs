@@ -18,6 +18,7 @@ pub struct Kitty {
 pub struct KittyBuilder {
     socket_path: Option<String>,
     password: Option<String>,
+    public_key: Option<String>,
     timeout: Duration,
 }
 
@@ -26,6 +27,7 @@ impl KittyBuilder {
         Self {
             socket_path: None,
             password: None,
+            public_key: None,
             timeout: Duration::from_secs(10),
         }
     }
@@ -45,6 +47,11 @@ impl KittyBuilder {
         self
     }
 
+    pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
+        self.public_key = Some(public_key.into());
+        self
+    }
+
     pub async fn connect(self) -> Result<Kitty, KittyError> {
         let socket_path = self.socket_path.ok_or_else(|| {
             KittyError::Connection(ConnectionError::SocketNotFound(
@@ -58,7 +65,7 @@ impl KittyBuilder {
             .map_err(|e| ConnectionError::ConnectionFailed(socket_path.clone(), e))?;
 
         let encryptor = if self.password.is_some() {
-            Some(Encryptor::new()?)
+            Some(Encryptor::new_with_public_key(self.public_key.as_deref())?)
         } else {
             None
         };
@@ -231,6 +238,13 @@ mod tests {
         let builder = KittyBuilder::new().password("test-password");
 
         assert_eq!(builder.password, Some("test-password".to_string()));
+    }
+
+    #[test]
+    fn test_builder_with_public_key() {
+        let builder = KittyBuilder::new().public_key("1:abc123");
+
+        assert_eq!(builder.public_key, Some("1:abc123".to_string()));
     }
 
     #[tokio::test]

@@ -50,9 +50,11 @@ async fn main() -> Result<(), kitty_rc::KittyError> {
 
 ### Connection with Password
 
-When kitty is configured with `remote_control_password`, password authentication provides encrypted communication. **Note: Password authentication only works when your application is launched by kitty or running within a kitty window**, because kitty exposes its public key via the `KITTY_PUBLIC_KEY` environment variable only to processes it launches.
+When kitty is configured with `remote_control_password`, password authentication provides encrypted communication.
 
-When using password authentication from within kitty:
+#### From within kitty
+
+**Note: Password authentication automatically works when your application is launched by kitty or running within a kitty window**, because kitty exposes its public key via `KITTY_PUBLIC_KEY` environment variable only to processes it launches.
 
 ```rust
 use kitty_rc::Kitty;
@@ -71,8 +73,32 @@ async fn main() -> Result<(), kitty_rc::KittyError> {
 }
 ```
 
+#### From standalone clients
+
+For standalone clients (not launched by kitty), you can provide the public key explicitly using the `public_key()` method. The public key can be obtained from kitty's public key database (see kitty-pubkey-db binary).
+
+```rust
+use kitty_rc::Kitty;
+
+#[tokio::main]
+async fn main() -> Result<(), kitty_rc::KittyError> {
+    // Get public key from kitty's public key database or other source
+    let pubkey = "1:abc123..."; // Base85 encoded public key
+
+    let mut kitty = Kitty::builder()
+        .socket_path("/path/to/kitty.socket")
+        .password("your-password-here")
+        .public_key(pubkey)
+        .connect()
+        .await?;
+
+    // All commands will be encrypted automatically
+    Ok(())
+}
+```
+
 The encryption uses kitty's protocol:
-- X25519 ECDH key exchange with kitty's public key (from KITTY_PUBLIC_KEY)
+- X25519 ECDH key exchange with kitty's public key (from KITTY_PUBLIC_KEY or provided via public_key())
 - Client generates ephemeral keys per command
 - AES-256-GCM authenticated encryption
 - SHA-256 derived shared secret
