@@ -1,15 +1,18 @@
-use kitty_rc::{KittyClient, LsCommand, KittyError};
+use kitty_rc::{Kitty, LsCommand, KittyError};
 
 #[tokio::main]
 async fn main() -> Result<(), KittyError> {
     println!("Connecting to kitty at ./kitty.socket...");
 
-    let mut client = KittyClient::connect("./kitty.socket").await?;
+    let mut kitty = Kitty::builder()
+        .socket_path("./kitty.socket")
+        .connect()
+        .await?;
 
     println!("Connected! Listing windows...\n");
 
     let cmd = LsCommand::new().build()?;
-    let response = client.execute(&cmd).await?;
+    let response = kitty.execute(&cmd).await?;
 
     println!("Response ok: {}", response.ok);
     
@@ -98,6 +101,6 @@ async fn main() -> Result<(), KittyError> {
         println!("\nError: {}", error);
     }
 
-    client.close().await?;
+    kitty.close().await?;
     Ok(())
 }

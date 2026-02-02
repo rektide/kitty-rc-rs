@@ -9,9 +9,9 @@ kitty-rc is a Rust library that provides a type-safe, async interface for contro
 ## Features
 
 - **Comprehensive Command Support**: All major kitty remote control commands organized into modules
-- **Type-Safe Builder API**: Fluent builder pattern for all commands
+- **Type-Safe Builder API**: Fluent builder pattern for client setup and all commands
 - **Async-First**: Built on tokio for asynchronous I/O
-- **Connection Pooling**: Reusable connections for better performance
+- **Single Connection**: Connect once at startup, reuse for all commands
 - **Error Handling**: Detailed error types for protocol, command, and connection errors
 - **Streaming Support**: Automatic chunking for large payloads (e.g., background images)
 - **Async Commands**: Support for async operations with unique ID generation
@@ -32,13 +32,16 @@ tokio = { version = "1.0", features = ["full"] }
 ### Basic Setup
 
 ```rust
-use kitty_rc::KittyClient;
+use kitty_rc::Kitty;
 
 #[tokio::main]
 async fn main() -> Result<(), kitty_rc::KittyError> {
-    let client = KittyClient::new("/path/to/kitty.socket").await?;
-    
-    // Use client to send commands...
+    let mut kitty = Kitty::builder()
+        .socket_path("/path/to/kitty.socket")
+        .connect()
+        .await?;
+
+    // Use kitty to send commands...
     Ok(())
 }
 ```
@@ -52,7 +55,7 @@ let cmd = LsCommand::new()
     .self_window(true)
     .build()?;
 
-let response = client.execute(&cmd).await?;
+let response = kitty.execute(&cmd).await?;
 let instances = LsCommand::parse_response(&response)?;
 
 for instance in &instances {
@@ -75,7 +78,7 @@ let cmd = SendTextCommand::new("text:hello world")
     .match_spec("id:1")
     .build()?;
 
-client.send_command(&cmd).await?;
+kitty.send_command(&cmd).await?;
 ```
 
 ### Creating New Windows
@@ -89,7 +92,7 @@ let cmd = NewWindowCommand::new()
     .title("My Window")
     .build()?;
 
-client.send_command(&cmd).await?;
+kitty.send_command(&cmd).await?;
 ```
 
 ### Setting Font Size
@@ -102,21 +105,21 @@ let cmd = SetFontSizeCommand::new(16)
     .all(true)
     .build()?;
 
-client.execute(&cmd).await?;
+kitty.execute(&cmd).await?;
 
 // Increment font size
 let cmd = SetFontSizeCommand::new(0)
     .increment_op("+")
     .build()?;
 
-client.execute(&cmd).await?;
+kitty.execute(&cmd).await?;
 
 // Decrement font size
 let cmd = SetFontSizeCommand::new(0)
     .increment_op("-")
     .build()?;
 
-client.execute(&cmd).await?;
+kitty.execute(&cmd).await?;
 ```
 
 ### Setting Background Opacity
@@ -128,7 +131,7 @@ let cmd = SetBackgroundOpacityCommand::new(0.8)
     .all(true)
     .build()?;
 
-client.send_command(&cmd).await?;
+kitty.send_command(&cmd).await?;
 ```
 
 ### Streaming Large Data
@@ -140,13 +143,13 @@ let large_image_data = "..."; // Large base64 string
 let cmd = SetBackgroundImageCommand::new(large_image_data).build()?;
 
 // send_all automatically handles chunking for large payloads
-client.send_all(&cmd.unwrap()).await?;
+kitty.send_all(&cmd.unwrap()).await?;
 ```
 
 Or to get a response:
 
 ```rust
-let response = client.execute_all(&cmd.unwrap()).await?;
+let response = kitty.execute_all(&cmd.unwrap()).await?;
 ```
 
 ## Command Modules
@@ -209,7 +212,7 @@ The library provides structured types for parsing kitty responses:
 ```rust
 use kitty_rc::{WindowInfo, LsCommand};
 
-let response = client.execute(&cmd).await?;
+let response = kitty.execute(&cmd).await?;
 let instances = LsCommand::parse_response(&response)?;
 
 for instance in &instances {

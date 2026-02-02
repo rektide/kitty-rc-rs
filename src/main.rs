@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use kitty_rc::{KittyClient, KittyError};
+use kitty_rc::{Kitty, KittyError};
 
 #[derive(Parser)]
 #[command(name = "kitty-rc")]
@@ -53,12 +53,15 @@ async fn main() -> Result<(), KittyError> {
 async fn handle_list_windows() -> Result<(), KittyError> {
     println!("Connecting to kitty at ./kitty.socket...");
 
-    let mut client = KittyClient::connect("./kitty.socket").await?;
+    let mut kitty = Kitty::builder()
+        .socket_path("./kitty.socket")
+        .connect()
+        .await?;
 
     println!("Connected! Listing windows...\n");
 
     let cmd = kitty_rc::LsCommand::new().build()?;
-    let response = client.execute(&cmd).await?;
+    let response = kitty.execute(&cmd).await?;
 
     println!("Response ok: {}", response.ok);
 
@@ -145,7 +148,7 @@ async fn handle_list_windows() -> Result<(), KittyError> {
         println!("\nError: {}", error);
     }
 
-    client.close().await?;
+    kitty.close().await?;
     Ok(())
 }
 
