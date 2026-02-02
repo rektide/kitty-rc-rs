@@ -105,8 +105,6 @@ impl KittyBuilder {
         let encryptor = if self.password.is_some() {
             let public_key = if let Some(pk) = self.public_key {
                 Some(pk)
-            } else if std::env::var("KITTY_PUBLIC_KEY").is_ok() {
-                None
             } else if let Some(pid) = Self::extract_pid_from_socket(&socket_path) {
                 Self::query_public_key_database(pid).map_err(KittyError::Encryption)?
             } else {

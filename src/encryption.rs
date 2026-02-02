@@ -20,11 +20,15 @@ impl Encryptor {
     }
 
     pub fn new_with_public_key(public_key: Option<&str>) -> Result<Self, EncryptionError> {
-        let kitty_public_key = if let Some(key_str) = public_key {
-            Self::parse_public_key(key_str)?
+        let kitty_public_key = if let Some(pk) = public_key {
+            Self::bytes_to_public_key(&Self::parse_public_key(pk)?)
         } else {
-            Self::load_kitty_public_key()?
+            match Self::read_kitty_public_key() {
+                Ok(key_bytes) => Self::bytes_to_public_key(key_bytes),
+                Err(e) => Err(e),
+            }
         };
+
         Ok(Self { kitty_public_key })
     }
 
@@ -39,7 +43,7 @@ impl Encryptor {
         Self::bytes_to_public_key(key_bytes)
     }
 
-    fn bytes_to_public_key(key_bytes: Vec<u8>) -> Result<PublicKey, EncryptionError> {
+    fn bytes_to_public_key(key_bytes: &[u8]) -> Result<PublicKey, EncryptionError> {
         if key_bytes.len() < 32 {
             return Err(EncryptionError::PublicKeyTooShort {
                 expected: 32,

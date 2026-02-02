@@ -18,11 +18,11 @@ path = "src/bin/kitty-pubkey-db.rs"
 
 [[example]]
 name = "test-connectivity"
-path = ".test-agent/test-connectivity.rs"
+path = "examples/test-connectivity.rs"
 
 [[example]]
 name = "test-encrypted"
-path = ".test-agent/test-encrypted.rs"
+path = "examples/test-encrypted.rs"
 
 [dependencies]
 aes-gcm = "0.10"
