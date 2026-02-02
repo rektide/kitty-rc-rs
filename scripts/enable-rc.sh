@@ -100,8 +100,7 @@ if [ "$SHELL_INTEGRATION_ADDED" = false ]; then
     echo "" >> "$ZSHRC"
     echo "# Record kitty public key when shell starts (added by kitty-rc enable-rc.sh)" >> "$ZSHRC"
     echo "if [[ -n \"\$KITTY_PUBLIC_KEY\" && -n \"\$KITTY_PID\" ]]; then" >> "$ZSHRC"
-    echo "    $PUBKEY_DB_CMD add &" >> "$ZSHRC"
-    echo "    disown" >> "$ZSHRC"
+    echo "    $PUBKEY_DB_CMD add > /dev/null 2>&1 &" >> "$ZSHRC"
     echo "fi" >> "$ZSHRC"
     echo "integration: added kitty-pubkey-db shell integration to .zshrc"
 fi
