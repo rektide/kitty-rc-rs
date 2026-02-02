@@ -16,6 +16,10 @@ path = "src/bin/list_windows.rs"
 name = "kitty-pubkey-db"
 path = "src/bin/kitty-pubkey-db.rs"
 
+[[example]]
+name = "test-connectivity"
+path = ".test-agent/test-connectivity.rs"
+
 [dependencies]
 aes-gcm = "0.10"
 base85 = "2.0"
