@@ -85,11 +85,39 @@ impl KittyBuilder {
         self
     }
 
+    /// Set kitty's public key explicitly.
+    ///
+    /// Format: `1:<base85_encoded_key>` where `1` is protocol version.
+    ///
+    /// When set, this key is used instead of querying KITTY_PUBLIC_KEY
+    /// env var or kitty-pubkey-db database.
+    ///
+    /// Example:
+    /// ```no_run
+    /// use kitty_rc::Kitty;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let kitty = Kitty::builder()
+    ///     .socket_path("/run/user/1000/kitty/kitty-12345.sock")
+    ///     .password("your-password")
+    ///     .public_key("1:z3;{}!NzNzgiXreB&ywA!8y1H8hq^$cMG!OE$QNa")
+    ///     .connect()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
         self.public_key = Some(public_key.into());
         self
     }
 
+    /// Connect to kitty instance with configured authentication.
+    ///
+    /// Public key resolution order (when password is set):
+    /// 1. Explicit key set via `.public_key()` method
+    /// 2. Query kitty-pubkey-db database (extracts PID from socket path)
+    /// 3. KITTY_PUBLIC_KEY environment variable (set by kitty when launching subprocesses)
+    ///
+    /// When no password is set, no encryption is used.
     pub async fn connect(self) -> Result<Kitty, KittyError> {
         let socket_path = self.socket_path.ok_or_else(|| {
             KittyError::Connection(ConnectionError::SocketNotFound(

@@ -9,6 +9,11 @@ use std::fs;
 use std::path::Path;
 use x25519_dalek::{PublicKey, StaticSecret};
 
+/// Encryptor for kitty remote control password authentication.
+///
+/// Kitty uses X25519 ECDH for key exchange with AES-256-GCM encryption.
+/// The public key format is `1:<base85_encoded_key>` where `1` is the
+/// protocol version (currently only one protocol exists).
 pub struct Encryptor {
     kitty_public_key: PublicKey,
 }
@@ -21,12 +26,10 @@ impl Encryptor {
 
     pub fn new_with_public_key(public_key: Option<&str>) -> Result<Self, EncryptionError> {
         let kitty_public_key = if let Some(pk) = public_key {
-            Self::bytes_to_public_key(&Self::parse_public_key(pk)?)
+            Self::parse_public_key(pk)?
         } else {
-            match Self::read_kitty_public_key() {
-                Ok(key_bytes) => Self::bytes_to_public_key(key_bytes),
-                Err(e) => Err(e),
-            }
+            let key_bytes = Self::read_kitty_public_key()?;
+            Self::bytes_to_public_key(&key_bytes)?
         };
 
         Ok(Self { kitty_public_key })
@@ -34,13 +37,16 @@ impl Encryptor {
 
     fn load_kitty_public_key() -> Result<PublicKey, EncryptionError> {
         let key_bytes = Self::read_kitty_public_key()?;
-        Self::bytes_to_public_key(key_bytes)
+        Self::bytes_to_public_key(&key_bytes)
     }
 
     fn parse_public_key(key_str: &str) -> Result<PublicKey, EncryptionError> {
-        let key_bytes = base85::decode(key_str)
+        let key_data = key_str.strip_prefix("1:").ok_or_else(|| {
+            EncryptionError::InvalidPublicKey("Missing version prefix".to_string())
+        })?;
+        let key_bytes = base85::decode(key_data)
             .map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()))?;
-        Self::bytes_to_public_key(key_bytes)
+        Self::bytes_to_public_key(&key_bytes)
     }
 
     fn bytes_to_public_key(key_bytes: &[u8]) -> Result<PublicKey, EncryptionError> {
@@ -56,9 +62,20 @@ impl Encryptor {
         Ok(PublicKey::from(key_array))
     }
 
+    /// Read kitty's public key from environment.
+    ///
+    /// KITTY_PUBLIC_KEY format is `1:<base85_encoded_key>` where:
+    /// - `1`: Protocol version (currently only one exists)
+    /// - `<base85_encoded_key>`: X25519 public key in Base85 encoding
+    ///
+    /// This env var is set by kitty when launching subprocesses,
+    /// so this method works for processes launched by kitty.
     fn read_kitty_public_key() -> Result<Vec<u8>, EncryptionError> {
         if let Ok(key_str) = std::env::var("KITTY_PUBLIC_KEY") {
-            return base85::decode(&key_str)
+            let key_data = key_str.strip_prefix("1:").ok_or_else(|| {
+                EncryptionError::InvalidPublicKey("Missing version prefix".to_string())
+            })?;
+            return base85::decode(key_data)
                 .map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()));
         }
 
@@ -124,6 +141,7 @@ mod tests {
 
     #[test]
     fn test_load_kitty_public_key_missing() {
+        // Note: unsafe is required to modify env vars in Rust tests
         unsafe {
             std::env::remove_var("KITTY_PUBLIC_KEY");
         }
@@ -133,6 +151,7 @@ mod tests {
 
     #[test]
     fn test_load_kitty_public_key_invalid() {
+        // Note: unsafe is required to modify env vars in Rust tests
         unsafe {
             std::env::set_var("KITTY_PUBLIC_KEY", "invalid base85");
         }
@@ -142,7 +161,8 @@ mod tests {
 
     #[test]
     fn test_load_kitty_public_key_too_short() {
-        let short_key = base85::encode(&[1u8, 2, 3]);
+        let short_key = format!("1:{}", base85::encode(&[1u8, 2, 3]));
+        // Note: unsafe is required to modify env vars in Rust tests
         unsafe {
             std::env::set_var("KITTY_PUBLIC_KEY", short_key);
         }
@@ -157,7 +177,7 @@ mod tests {
     fn test_new_with_public_key() {
         let secret = StaticSecret::random_from_rng(&mut OsRng);
         let public_key = PublicKey::from(&secret);
-        let public_key_str = base85::encode(public_key.as_bytes());
+        let public_key_str = format!("1:{}", base85::encode(public_key.as_bytes()));
 
         let encryptor = Encryptor::new_with_public_key(Some(&public_key_str));
         assert!(encryptor.is_ok());
@@ -176,8 +196,12 @@ mod tests {
     fn test_new_with_public_key_none() {
         let secret = StaticSecret::random_from_rng(&mut OsRng);
         let public_key = PublicKey::from(&secret);
+        // Note: unsafe is required to modify env vars in Rust tests
         unsafe {
-            std::env::set_var("KITTY_PUBLIC_KEY", base85::encode(public_key.as_bytes()));
+            std::env::set_var(
+                "KITTY_PUBLIC_KEY",
+                format!("1:{}", base85::encode(public_key.as_bytes())),
+            );
         }
 
         let encryptor = Encryptor::new_with_public_key(None);
@@ -188,8 +212,12 @@ mod tests {
     fn test_encrypt_command() {
         let secret = StaticSecret::random_from_rng(&mut OsRng);
         let public_key = PublicKey::from(&secret);
+        // Note: unsafe is required to modify env vars in Rust tests
         unsafe {
-            std::env::set_var("KITTY_PUBLIC_KEY", base85::encode(public_key.as_bytes()));
+            std::env::set_var(
+                "KITTY_PUBLIC_KEY",
+                format!("1:{}", base85::encode(public_key.as_bytes())),
+            );
         }
 
         let encryptor = Encryptor::new().unwrap();
