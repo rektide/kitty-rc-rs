@@ -15,7 +15,7 @@ kitty-rc is a Rust library that provides a type-safe, async interface for contro
 - **Error Handling**: Detailed error types for protocol, command, and connection errors
 - **Streaming Support**: Automatic chunking for large payloads (e.g., background images)
 - **Async Commands**: Support for async operations with unique ID generation
-- **Comprehensive Testing**: 123 unit tests ensuring reliability
+- **Comprehensive Testing**: 143 unit tests ensuring reliability
 
 ## Installation
 
@@ -46,14 +46,24 @@ async fn main() -> Result<(), kitty_rc::KittyError> {
 ### Listing Windows
 
 ```rust
-use kitty_rc::commands::LsCommand;
+use kitty_rc::{LsCommand, WindowInfo};
 
 let cmd = LsCommand::new()
     .self_window(true)
     .build()?;
 
-let response = client.send_command(&cmd).await?;
-println!("{:?}", response);
+let response = client.execute(&cmd).await?;
+let instances = LsCommand::parse_response(&response)?;
+
+for instance in &instances {
+    for tab in &instance.tabs {
+        for window in &tab.windows {
+            println!("Window: {} (id: {:?})", window.title, window.id);
+            println!("  PID: {:?}", window.pid);
+            println!("  CWD: {:?}", window.cwd);
+        }
+    }
+}
 ```
 
 ### Sending Text to Windows
@@ -80,6 +90,33 @@ let cmd = NewWindowCommand::new()
     .build()?;
 
 client.send_command(&cmd).await?;
+```
+
+### Setting Font Size
+
+```rust
+use kitty_rc::commands::SetFontSizeCommand;
+
+// Set absolute font size
+let cmd = SetFontSizeCommand::new(16)
+    .all(true)
+    .build()?;
+
+client.execute(&cmd).await?;
+
+// Increment font size
+let cmd = SetFontSizeCommand::new(0)
+    .increment_op("+")
+    .build()?;
+
+client.execute(&cmd).await?;
+
+// Decrement font size
+let cmd = SetFontSizeCommand::new(0)
+    .increment_op("-")
+    .build()?;
+
+client.execute(&cmd).await?;
 ```
 
 ### Setting Background Opacity
@@ -115,10 +152,10 @@ let response = client.execute_all(&cmd.unwrap()).await?;
 ## Command Modules
 
 ### Tab Management (`commands::tab`)
-- `FocusTabCommand` - Focus a specific tab
-- `SetTabTitleCommand` - Set tab title
 - `CloseTabCommand` - Close tabs
 - `DetachTabCommand` - Detach tabs to different OS windows
+- `FocusTabCommand` - Focus a specific tab
+- `SetTabTitleCommand` - Set tab title
 
 ### Layout Management (`commands::layout`)
 - `GotoLayoutCommand` - Switch to a specific layout
@@ -126,41 +163,85 @@ let response = client.execute_all(&cmd.unwrap()).await?;
 - `LastUsedLayoutCommand` - Switch to last used layout
 
 ### Window Management (`commands::window`)
-- `LsCommand` - List windows and tabs
-- `SendTextCommand` - Send text to windows
-- `SendKeyCommand` - Send keyboard shortcuts
 - `CloseWindowCommand` - Close windows
-- `ResizeWindowCommand` - Resize windows
-- `FocusWindowCommand` - Focus a window
-- `SelectWindowCommand` - Async window selection
-- `NewWindowCommand` - Create new windows
-- `DetachWindowCommand` - Detach windows
-- `SetWindowTitleCommand` - Set window title
-- `SetWindowLogoCommand` - Set window logo
-- `GetTextCommand` - Extract text from windows
-- `ScrollWindowCommand` - Scroll window content
 - `CreateMarkerCommand` - Create scroll markers
+- `DetachWindowCommand` - Detach windows
+- `FocusWindowCommand` - Focus a window
+- `GetTextCommand` - Extract text from windows
+- `LsCommand` - List windows and tabs (supports structured response parsing)
+- `NewWindowCommand` - Create new windows
 - `RemoveMarkerCommand` - Remove scroll markers
+- `ResizeWindowCommand` - Resize windows
+- `ScrollWindowCommand` - Scroll window content
+- `SelectWindowCommand` - Async window selection
+- `SendKeyCommand` - Send keyboard shortcuts
+- `SendTextCommand` - Send text to windows
+- `SetWindowLogoCommand` - Set window logo
+- `SetWindowTitleCommand` - Set window title
 
 ### Process Management (`commands::process`)
-- `RunCommand` - Run commands with streaming support
+- `DisableLigaturesCommand` - Disable font ligatures
+- `EnvCommand` - Set environment variables
 - `KittenCommand` - Run kitty kittens
 - `LaunchCommand` - Launch new windows with comprehensive options
-- `EnvCommand` - Set environment variables
-- `SetUserVarsCommand` - Set user variables
 - `LoadConfigCommand` - Load configuration files
 - `ResizeOSWindowCommand` - Resize OS windows
-- `DisableLigaturesCommand` - Disable font ligatures
+- `RunCommand` - Run commands with streaming support
+- `SetUserVarsCommand` - Set user variables
 - `SignalChildCommand` - Send signals to child processes
 
 ### Style and Appearance (`commands::style`)
-- `SetBackgroundOpacityCommand` - Set background opacity
+- `GetColorsCommand` - Get current colors
 - `SetBackgroundImageCommand` - Set background image (supports streaming)
+- `SetBackgroundOpacityCommand` - Set background opacity
 - `SetColorsCommand` - Set color scheme
-- `SetFontSizeCommand` - Set font size
+- `SetFontSizeCommand` - Set font size (absolute or increment/decrement)
 - `SetSpacingCommand` - Set window padding/spacing
 - `SetTabColorCommand` - Set tab colors
-- `GetColorsCommand` - Get current colors
+
+> **Note**: Kitty's remote protocol does not include a `get-font-size` command. To retrieve the current font size, read it from `~/.config/kitty/kitty.conf`.
+
+## Response Types
+
+The library provides structured types for parsing kitty responses:
+
+### Window Information
+```rust
+use kitty_rc::{WindowInfo, LsCommand};
+
+let response = client.execute(&cmd).await?;
+let instances = LsCommand::parse_response(&response)?;
+
+for instance in &instances {
+    for tab in &instance.tabs {
+        for window in &tab.windows {
+            println!("Window: {} (id: {:?})", window.title, window.id);
+            println!("  PID: {:?}", window.pid);
+            println!("  CWD: {:?}", window.cwd);
+            println!("  Active: {:?}", window.is_active);
+            println!("  Focused: {:?}", window.is_focused);
+        }
+    }
+}
+```
+
+The `WindowInfo` struct includes all fields returned by kitty:
+- Window metadata: `id`, `title`, `pid`, `cwd`, `cmdline`
+- State: `is_active`, `is_focused`, `is_self`, `at_prompt`, `in_alternate_screen`
+- Terminal: `columns`, `lines`, `created_at`
+- Processes: `foreground_processes`, `env`, `user_vars`
+- Command: `last_cmd_exit_status`, `last_reported_cmdline`
+
+The `TabInfo` struct includes tab-level information:
+- Tab metadata: `id`, `title`
+- State: `is_active`, `is_focused`, `active_window_history`
+- Layout: `layout`, `enabled_layouts`, `layout_opts`, `layout_state`
+- Groups: `groups` (window grouping information)
+
+The `OsInstance` struct includes OS-level information:
+- OS metadata: `id`, `wm_class`, `wm_name`
+- State: `is_active`, `is_focused`, `last_focused`
+- Display: `background_opacity`, `platform_window_id`
 
 ## Async and Streaming
 
@@ -236,7 +317,7 @@ Run the test suite:
 cargo test
 ```
 
-All 123 tests pass successfully.
+All 143 tests pass successfully.
 
 ## Examples
 
