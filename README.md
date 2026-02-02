@@ -309,6 +309,32 @@ Run the included setup script:
 
 This script will:
 - Generate a random 48-character password in `~/.config/kitty/rc.password`
+- Create `~/.config/kitty/rc.conf` with remote control configuration
+- Add `include rc.conf` to `~/.config/kitty/kitty.conf` if not present
+- Set up a socket in the XDG runtime directory at `kitty/kitty-{kitty_pid}.sock`
+- Fail if any remote control settings are already configured in kitty.conf
+
+### Manual Configuration
+
+To manually configure kitty for remote control, create `~/.config/kitty/rc.conf`:
+
+```conf
+# Enable password-based remote control
+allow_remote_control password
+remote_control_password "$(cat ~/.config/kitty/rc.password)"
+
+# Listen on socket in XDG runtime directory
+listen_on unix:${XDG_RUNTIME_DIR}/kitty/kitty-{kitty_pid}.sock
+```
+
+Then add to `~/.config/kitty/kitty.conf`:
+
+```conf
+include rc.conf
+```
+
+This script will:
+- Generate a random 48-character password in `~/.config/kitty/rc.password`
 - Add remote control configuration to `~/.config/kitty/kitty.conf`
 - Set up a socket in the XDG runtime directory at `kitty/kitty-{pid}.sock`
 - Fail if any remote control settings are already configured

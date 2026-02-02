@@ -2,6 +2,7 @@
 set -euo pipefail
 
 KITTY_CONF="${HOME}/.config/kitty/kitty.conf"
+RC_CONF="${HOME}/.config/kitty/rc.conf"
 RC_PASSWORD_FILE="${HOME}/.config/kitty/rc.password"
 
 # Check if kitty config exists
@@ -13,17 +14,42 @@ fi
 # Function to check if a config option is already set (not commented out)
 check_existing_config() {
     local key="$1"
-    if grep -q "^[[:space:]]*$key" "$KITTY_CONF"; then
-        echo "Error: '$key' is already configured in $KITTY_CONF"
+    local file="$2"
+    if grep -q "^[[:space:]]*$key" "$file"; then
+        echo "Error: '$key' is already configured in $file"
         echo "       Please remove or comment out the existing configuration first."
         exit 1
     fi
 }
 
-# Check for existing remote control configurations
-check_existing_config "allow_remote_control"
-check_existing_config "remote_control_password"
-check_existing_config "listen_on"
+# Check for existing remote control configurations in kitty.conf
+check_existing_config "allow_remote_control" "$KITTY_CONF"
+check_existing_config "remote_control_password" "$KITTY_CONF"
+check_existing_config "listen_on" "$KITTY_CONF"
+
+# Check if rc.conf already exists
+if [ -f "$RC_CONF" ]; then
+    echo "Using existing rc.conf at $RC_CONF"
+else
+    echo "Creating $RC_CONF"
+    touch "$RC_CONF"
+fi
+
+# Check for existing remote control configurations in rc.conf
+check_existing_config "allow_remote_control" "$RC_CONF"
+check_existing_config "remote_control_password" "$RC_CONF"
+check_existing_config "listen_on" "$RC_CONF"
+
+# Check if kitty.conf includes rc.conf
+if ! grep -q "^[[:space:]]*include[[:space:]]\\+rc.conf" "$KITTY_CONF"; then
+    echo ""
+    echo "Adding include to $KITTY_CONF"
+    echo "" >> "$KITTY_CONF"
+    echo "# Include remote control configuration" >> "$KITTY_CONF"
+    echo "include rc.conf" >> "$KITTY_CONF"
+else
+    echo "include rc.conf already present in $KITTY_CONF"
+fi
 
 # Generate password file if it doesn't exist
 if [ ! -f "$RC_PASSWORD_FILE" ]; then
@@ -38,15 +64,14 @@ fi
 # Get the password for the config file
 PASSWORD=$(cat "$RC_PASSWORD_FILE")
 
-# Append remote control configuration to kitty.conf
+# Write remote control configuration to rc.conf
 {
-    echo ""
-    echo "# Remote control - added by kitty-rc enable-rc.sh"
+    echo "# Remote control configuration - added by kitty-rc enable-rc.sh"
     echo "allow_remote_control password"
     echo "remote_control_password \"$PASSWORD\""
     echo "listen_on unix:\${XDG_RUNTIME_DIR}/kitty/kitty-{kitty_pid}.sock"
-} >> "$KITTY_CONF"
+} > "$RC_CONF"
 
 echo ""
-echo "Remote control enabled in $KITTY_CONF"
+echo "Remote control enabled in $RC_CONF"
 echo "Please restart kitty to apply the changes."
