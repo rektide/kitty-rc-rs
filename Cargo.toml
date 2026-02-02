@@ -8,6 +8,14 @@ repository = "https://github.com/rektide/kitty-rc-rs"
 homepage = "https://github.com/rektide/kitty-rc-rs"
 documentation = "https://docs.rs/kitty-rc"
 
+[[bin]]
+name = "list-windows"
+path = "src/bin/list_windows.rs"
+
+[[bin]]
+name = "kitty-pubkey-db"
+path = "src/bin/kitty-pubkey-db.rs"
+
 [dependencies]
 aes-gcm = "0.10"
 base85 = "2.0"
