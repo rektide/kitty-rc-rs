@@ -82,6 +82,9 @@ pub enum EncryptionError {
 
     #[error("Invalid public key format")]
     InvalidPublicKeyFormat,
+
+    #[error("Public key database query failed: {0}")]
+    PublicKeyDatabaseError(String),
 }
 
 /// Errors related to connection, transport, and I/O

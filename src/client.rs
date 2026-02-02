@@ -1,7 +1,8 @@
 use crate::encryption::Encryptor;
-use crate::error::{ConnectionError, KittyError};
+use crate::error::{ConnectionError, EncryptionError, KittyError};
 use crate::protocol::{KittyMessage, KittyResponse};
 use std::path::Path;
+use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
@@ -29,6 +30,43 @@ impl KittyBuilder {
             password: None,
             public_key: None,
             timeout: Duration::from_secs(10),
+        }
+    }
+
+    fn extract_pid_from_socket(socket_path: &str) -> Option<u32> {
+        let filename = Path::new(socket_path)
+            .file_name()?
+            .to_str()?;
+
+        let pid_str = filename.strip_prefix("kitty-")?;
+        let pid_str = pid_str.strip_suffix(".sock")?;
+        pid_str.parse().ok()
+    }
+
+    fn query_public_key_database(pid: u32) -> Result<Option<String>, EncryptionError> {
+        let output = Command::new("kitty-pubkey-db")
+            .arg("get")
+            .arg(pid.to_string())
+            .output()
+            .map_err(|e| {
+                EncryptionError::PublicKeyDatabaseError(format!("Failed to run kitty-pubkey-db: {}", e))
+            })?;
+
+        if !output.status.success() {
+            return Ok(None);
+        }
+
+        let pubkey = String::from_utf8(output.stdout)
+            .map_err(|e| {
+                EncryptionError::PublicKeyDatabaseError(format!("Invalid UTF-8 output: {}", e))
+            })?
+            .trim()
+            .to_string();
+
+        if pubkey.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(pubkey))
         }
     }
 
@@ -65,7 +103,17 @@ impl KittyBuilder {
             .map_err(|e| ConnectionError::ConnectionFailed(socket_path.clone(), e))?;
 
         let encryptor = if self.password.is_some() {
-            Some(Encryptor::new_with_public_key(self.public_key.as_deref())?)
+            let public_key = if let Some(pk) = self.public_key {
+                Some(pk)
+            } else if std::env::var("KITTY_PUBLIC_KEY").is_ok() {
+                None
+            } else if let Some(pid) = Self::extract_pid_from_socket(&socket_path) {
+                Self::query_public_key_database(pid).map_err(KittyError::Encryption)?
+            } else {
+                None
+            };
+
+            Some(Encryptor::new_with_public_key(public_key.as_deref())?)
         } else {
             None
         };
@@ -245,6 +293,38 @@ mod tests {
         let builder = KittyBuilder::new().public_key("1:abc123");
 
         assert_eq!(builder.public_key, Some("1:abc123".to_string()));
+    }
+
+    #[test]
+    fn test_extract_pid_from_socket_standard() {
+        let pid = KittyBuilder::extract_pid_from_socket("/tmp/kitty-12345.sock");
+        assert_eq!(pid, Some(12345));
+    }
+
+    #[test]
+    fn test_extract_pid_from_socket_xdg_runtime_dir() {
+        let pid = KittyBuilder::extract_pid_from_socket(
+            "/run/user/1000/kitty/kitty-67890.sock",
+        );
+        assert_eq!(pid, Some(67890));
+    }
+
+    #[test]
+    fn test_extract_pid_from_socket_invalid() {
+        let pid = KittyBuilder::extract_pid_from_socket("/tmp/invalid.sock");
+        assert_eq!(pid, None);
+    }
+
+    #[test]
+    fn test_extract_pid_from_socket_no_prefix() {
+        let pid = KittyBuilder::extract_pid_from_socket("/tmp/12345.sock");
+        assert_eq!(pid, None);
+    }
+
+    #[test]
+    fn test_extract_pid_from_socket_invalid_pid() {
+        let pid = KittyBuilder::extract_pid_from_socket("/tmp/kitty-abc.sock");
+        assert_eq!(pid, None);
     }
 
     #[tokio::test]

@@ -75,6 +75,37 @@ async fn main() -> Result<(), kitty_rc::KittyError> {
 
 #### From standalone clients
 
+For standalone clients (not launched by kitty), you have two options:
+
+**Option 1: Automatic database query (recommended)**
+
+If you're using the kitty-pubkey-db shell integration, KittyBuilder will automatically query the database for the public key when:
+
+- A password is provided
+- No explicit `public_key()` is set
+- `KITTY_PUBLIC_KEY` environment variable is not set
+
+The socket path must contain the kitty PID (e.g., `/tmp/kitty-12345.sock` or `/run/user/1000/kitty/kitty-12345.sock`).
+
+```rust
+use kitty_rc::Kitty;
+
+#[tokio::main]
+async fn main() -> Result<(), kitty_rc::KittyError> {
+    let mut kitty = Kitty::builder()
+        .socket_path("/run/user/1000/kitty/kitty-12345.sock")
+        .password("your-password-here")
+        // No need for public_key() - will auto-query database
+        .connect()
+        .await?;
+
+    // All commands will be encrypted automatically
+    Ok(())
+}
+```
+
+**Option 2: Explicit public key**
+
 For standalone clients (not launched by kitty), you can provide the public key explicitly using the `public_key()` method. The public key can be obtained from kitty's public key database (see kitty-pubkey-db binary).
 
 ```rust
