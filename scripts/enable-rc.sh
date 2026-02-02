@@ -56,10 +56,10 @@ if [ "$WRITE_RC_CONF" = true ]; then
         echo "# Remote control configuration - added by kitty-rc enable-rc.sh"
         echo "allow_remote_control password"
         echo "remote_control_password \"$PASSWORD\""
-        echo "listen_on unix:$RUNTIME_DIR"
+        echo "listen_on unix:$RUNTIME_DIR/kitty"
     } > "$RC_CONF"
 
-    echo "config: enabled remote control in $RC_CONF (socket: unix:$RUNTIME_DIR)"
+    echo "config: enabled remote control in $RC_CONF (socket: unix:$RUNTIME_DIR/kitty-<pid>.sock)"
 fi
 
 # Setup kitty-pubkey-db in .zshrc
