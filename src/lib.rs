@@ -6,10 +6,24 @@ pub mod transport;
 
 pub use command::CommandBuilder;
 pub use commands::{
-    CloseTabCommand, CloseWindowCommand, FocusTabCommand, GotoLayoutCommand,
-    LastUsedLayoutCommand, LsCommand, ResizeWindowCommand, SendKeyCommand,
-    SetEnabledLayoutsCommand, SetTabTitleCommand, SendTextCommand,
-    SetFontSizeCommand,
+    // Tab commands
+    CloseTabCommand, DetachTabCommand, FocusTabCommand, SetTabTitleCommand,
+    // Window commands
+    CloseWindowCommand, CreateMarkerCommand, DetachWindowCommand, FocusWindowCommand,
+    GetTextCommand, NewWindowCommand, RemoveMarkerCommand, ResizeWindowCommand,
+    ScrollWindowCommand, SelectWindowCommand, SendKeyCommand, SendTextCommand,
+    SetWindowLogoCommand, SetWindowTitleCommand,
+    // Layout commands
+    GotoLayoutCommand, LastUsedLayoutCommand, SetEnabledLayoutsCommand,
+    // Style commands
+    GetColorsCommand, SetBackgroundImageCommand, SetBackgroundOpacityCommand,
+    SetColorsCommand, SetFontSizeCommand, SetSpacingCommand, SetTabColorCommand,
+    // Process commands
+    DisableLigaturesCommand, EnvCommand, KittenCommand, LaunchCommand,
+    LoadConfigCommand, ResizeOSWindowCommand, RunCommand, SetUserVarsCommand,
+    SignalChildCommand,
+    // Special commands
+    LsCommand,
     action::*,
     process::ProcessInfo,
     window::{OsInstance, TabInfo, WindowInfo, parse_response_data},
