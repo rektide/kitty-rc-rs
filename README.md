@@ -295,19 +295,53 @@ match result {
 }
 ```
 
+## Enabling Remote Control
+
+To use kitty-rc, you must enable remote control in kitty. The library provides a helper script to configure kitty securely with password authentication.
+
+### Quick Setup
+
+Run the included setup script:
+
+```bash
+./scripts/enable-rc.sh
+```
+
+This script will:
+- Generate a random 48-character password in `~/.config/kitty/rc.password`
+- Add remote control configuration to `~/.config/kitty/kitty.conf`
+- Set up a socket in the XDG runtime directory at `kitty/kitty-{pid}.sock`
+- Fail if any remote control settings are already configured
+
+### Manual Configuration
+
+To manually configure kitty for remote control, add to `~/.config/kitty/kitty.conf`:
+
+```conf
+# Enable password-based remote control
+allow_remote_control password
+remote_control_password "$(cat ~/.config/kitty/rc.password)"
+
+# Listen on socket in XDG runtime directory
+listen_on unix:${XDG_RUNTIME_DIR}/kitty/kitty-{kitty_pid}.sock
+```
+
+Generate a secure password:
+
+```bash
+pwgen -s 48 1 > ~/.config/kitty/rc.password
+chmod 600 ~/.config/kitty/rc.password
+```
+
+Restart kitty after making changes.
+
 ## Socket Configuration
 
 kitty-rc communicates with kitty via Unix domain sockets. The default socket location varies by system:
 
+- With the helper script: `$XDG_RUNTIME_DIR/kitty/kitty-{kitty_pid}.sock`
 - Linux/macOS: `$TMPDIR/kitty-*` or `/tmp/kitty-*`
 - You can also specify custom socket paths
-
-To enable remote control in kitty, add to `kitty.conf`:
-
-```
-allow_remote_control yes
-listen_on unix:/tmp/kitty-$(pid).sock
-```
 
 ## Testing
 
@@ -322,6 +356,8 @@ All 143 tests pass successfully.
 ## Examples
 
 See `src/bin/list_windows.rs` for a complete example of listing kitty windows and their processes.
+
+Use `scripts/enable-rc.sh` to quickly enable remote control in your kitty configuration.
 
 ## Contributing
 
