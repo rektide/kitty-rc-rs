@@ -103,7 +103,7 @@ impl Encryptor {
         let encrypted_data = &ciphertext[..ciphertext.len() - 16];
 
         let result = serde_json::json!({
-            "version": "0.26.0",
+            "version": "0.43.1",
             "iv": base85::encode(&nonce),
             "tag": base85::encode(tag),
             "pubkey": base85::encode(public_key.as_bytes()),
