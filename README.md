@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kitty-rc = "0.3.0"
+kitty-rc = "0.4.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
