@@ -11,12 +11,15 @@ if [ ! -f "$KITTY_CONF" ]; then
     exit 1
 fi
 
-# Check if rc.conf already exists
+# Check if rc.conf already exists and has content
+WRITE_RC_CONF=true
 if [ -f "$RC_CONF" ]; then
-    echo "Using existing rc.conf at $RC_CONF"
-else
-    echo "Creating $RC_CONF"
-    touch "$RC_CONF"
+    if [ -s "$RC_CONF" ]; then
+        echo "Using existing rc.conf at $RC_CONF (not modifying)"
+        WRITE_RC_CONF=false
+    else
+        echo "rc.conf exists but is empty, will populate it"
+    fi
 fi
 
 # Check if kitty.conf includes rc.conf
@@ -40,17 +43,22 @@ else
     echo "Using existing password from $RC_PASSWORD_FILE"
 fi
 
-# Get the password for the config file
-PASSWORD=$(cat "$RC_PASSWORD_FILE")
+# Write remote control configuration to rc.conf only if needed
+if [ "$WRITE_RC_CONF" = true ]; then
+    # Get the password for the config file
+    PASSWORD=$(cat "$RC_PASSWORD_FILE")
 
-# Write remote control configuration to rc.conf
-{
-    echo "# Remote control configuration - added by kitty-rc enable-rc.sh"
-    echo "allow_remote_control password"
-    echo "remote_control_password \"$PASSWORD\""
-    echo "listen_on unix:\${XDG_RUNTIME_DIR}/kitty/kitty-{kitty_pid}.sock"
-} > "$RC_CONF"
+    # Write remote control configuration to rc.conf
+    {
+        echo "# Remote control configuration - added by kitty-rc enable-rc.sh"
+        echo "allow_remote_control password"
+        echo "remote_control_password \"$PASSWORD\""
+        echo "listen_on unix:\${XDG_RUNTIME_DIR}/kitty/kitty-{kitty_pid}.sock"
+    } > "$RC_CONF"
+
+    echo ""
+    echo "Remote control enabled in $RC_CONF"
+fi
 
 echo ""
-echo "Remote control enabled in $RC_CONF"
 echo "Please restart kitty to apply the changes."
