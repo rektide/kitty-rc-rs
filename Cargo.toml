@@ -1,6 +1,6 @@
 [package]
 name = "kitty-rc"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A Rust library for controlling the kitty terminal emulator via its remote control protocol"
 license = "MIT"
