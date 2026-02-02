@@ -97,7 +97,7 @@ impl KittyBuilder {
     /// use kitty_rc::Kitty;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let kitty = Kitty::builder()
-    ///     .socket_path("/run/user/1000/kitty/kitty-12345.sock")
+    ///     .socket_path("/run/user/1000/kitty-12345.sock")
     ///     .password("your-password")
     ///     .public_key("1:z3;{}!NzNzgiXreB&ywA!8y1H8hq^$cMG!OE$QNa")
     ///     .connect()
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn test_extract_pid_from_socket_xdg_runtime_dir() {
         let pid = KittyBuilder::extract_pid_from_socket(
-            "/run/user/1000/kitty/kitty-67890.sock",
+            "/run/user/1000/kitty-67890.sock",
         );
         assert_eq!(pid, Some(67890));
     }
