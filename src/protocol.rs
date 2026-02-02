@@ -26,6 +26,14 @@ pub struct KittyMessage {
     pub stream_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encrypted: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pubkey: Option<String>,
 }
 
 impl KittyMessage {
@@ -40,6 +48,10 @@ impl KittyMessage {
             cancel_async: None,
             stream_id: None,
             stream: None,
+            encrypted: None,
+            iv: None,
+            tag: None,
+            pubkey: None,
         }
     }
 
@@ -153,8 +165,19 @@ impl KittyMessage {
     }
 
     pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
-        let json = serde_json::to_string(self)?;
-        let message = format!("{}{}{}", PREFIX, json, SUFFIX);
+        let json = if self.encrypted.is_some() {
+            serde_json::json!({
+                "version": self.version,
+                "iv": self.iv,
+                "tag": self.tag,
+                "pubkey": self.pubkey,
+                "encrypted": self.encrypted,
+            })
+        } else {
+            serde_json::to_value(self)?
+        };
+        let json_str = serde_json::to_string(&json)?;
+        let message = format!("{}{}{}", PREFIX, json_str, SUFFIX);
         Ok(message.into_bytes())
     }
 

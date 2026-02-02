@@ -169,7 +169,7 @@ impl Kitty {
         KittyBuilder::new()
     }
 
-    fn encrypt_command(&self, mut message: KittyMessage) -> Result<KittyMessage, KittyError> {
+    fn encrypt_command(&self, message: KittyMessage) -> Result<KittyMessage, KittyError> {
         let Some(encryptor) = &self.encryptor else {
             return Ok(message);
         };
@@ -187,22 +187,31 @@ impl Kitty {
             })?
             .as_nanos();
 
-        if let Some(payload) = &mut message.payload {
-            if let Some(obj) = payload.as_object_mut() {
-                obj.insert("password".to_string(), serde_json::json!(password));
-                obj.insert("timestamp".to_string(), serde_json::json!(timestamp));
-            }
-        } else {
-            let mut obj = serde_json::Map::new();
+        let mut command_json = serde_json::to_value(&message)
+            .map_err(|e| KittyError::Encryption(EncryptionError::EncryptionFailed(e.to_string())))?;
+
+        if let Some(obj) = command_json.as_object_mut() {
             obj.insert("password".to_string(), serde_json::json!(password));
             obj.insert("timestamp".to_string(), serde_json::json!(timestamp));
-            message.payload = Some(serde_json::Value::Object(obj));
         }
 
-        let encrypted_payload = encryptor.encrypt_command(message.payload.unwrap())?;
-        message.payload = Some(encrypted_payload);
+        let encrypted = encryptor.encrypt_command(command_json)?;
 
-        Ok(message)
+        Ok(KittyMessage {
+            cmd: String::new(),
+            version: vec![0, 43, 1],
+            no_response: None,
+            kitty_window_id: None,
+            payload: None,
+            async_id: None,
+            cancel_async: None,
+            stream_id: None,
+            stream: None,
+            encrypted: encrypted.get("encrypted").and_then(|v| v.as_str().map(String::from)),
+            iv: encrypted.get("iv").and_then(|v| v.as_str().map(String::from)),
+            tag: encrypted.get("tag").and_then(|v| v.as_str().map(String::from)),
+            pubkey: encrypted.get("pubkey").and_then(|v| v.as_str().map(String::from)),
+        })
     }
 
     async fn send(&mut self, message: &KittyMessage) -> Result<(), KittyError> {

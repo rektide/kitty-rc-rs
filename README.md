@@ -134,6 +134,8 @@ The encryption uses kitty's protocol:
 - AES-256-GCM authenticated encryption
 - SHA-256 derived shared secret
 
+For detailed specifications of the encrypted communication protocol, see [Encrypted communication](https://sw.kovidgoyal.net/kitty/rc_protocol/#encrypted-communication).
+
 ### Listing Windows
 
 ```rust
