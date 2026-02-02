@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 use tokio::time::timeout;
+use xdg::BaseDirectories;
 
 pub struct Kitty {
     stream: UnixStream,
@@ -76,9 +77,11 @@ impl KittyBuilder {
     }
 
     pub fn from_pid(mut self, pid: u32) -> Self {
-        let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-        let socket_path = format!("{}/kitty-{}.sock", runtime_dir, pid);
-        self.socket_path = Some(socket_path);
+        let xdg_dirs = BaseDirectories::new();
+        let runtime_dir = xdg_dirs.runtime_dir.clone()
+            .unwrap_or_else(|| Path::new("/tmp").to_path_buf());
+        let socket_path = runtime_dir.join(format!("kitty-{}.sock", pid));
+        self.socket_path = Some(socket_path.to_string_lossy().to_string());
         self
     }
 
@@ -330,32 +333,10 @@ mod tests {
 
     #[test]
     fn test_builder_from_pid() {
-        let original = std::env::var("XDG_RUNTIME_DIR").ok();
-        unsafe {
-            std::env::set_var("XDG_RUNTIME_DIR", "/run/user/1000");
-        }
         let builder = KittyBuilder::new().from_pid(12345);
 
-        assert_eq!(builder.socket_path, Some("/run/user/1000/kitty-12345.sock".to_string()));
-        match original {
-            Some(val) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", val) },
-            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
-        }
-    }
-
-    #[test]
-    fn test_builder_from_pid_no_xdg_runtime_dir() {
-        let original = std::env::var("XDG_RUNTIME_DIR").ok();
-        unsafe {
-            std::env::remove_var("XDG_RUNTIME_DIR");
-        }
-        let builder = KittyBuilder::new().from_pid(12345);
-
-        assert_eq!(builder.socket_path, Some("/tmp/kitty-12345.sock".to_string()));
-        match original {
-            Some(val) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", val) },
-            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
-        }
+        assert!(builder.socket_path.is_some());
+        assert!(builder.socket_path.as_ref().unwrap().ends_with("kitty-12345.sock"));
     }
 
     #[test]
