@@ -1,7 +1,7 @@
 use crate::command::CommandBuilder;
 use crate::error::CommandError;
 use crate::protocol::KittyMessage;
-use bon::{bon, builder, Builder};
+use bon::{bon, Builder};
 use serde::Serialize;
 use serde_json::Map;
 
@@ -29,7 +29,7 @@ pub struct SetBackgroundOpacityCommand {
 }
 
 impl SetBackgroundOpacityCommand {
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.opacity < 0.0 || self.opacity > 1.0 {
             return Err(CommandError::ValidationError(
                 "opacity must be between 0.0 and 1.0".to_string(),
@@ -65,7 +65,7 @@ pub struct SetBackgroundImageCommand {
 }
 
 impl SetBackgroundImageCommand {
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.data.is_empty() {
             return Err(CommandError::MissingParameter(
                 "data".to_string(),
@@ -106,7 +106,7 @@ pub struct SetColorsCommand {
 }
 
 impl SetColorsCommand {
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.colors.is_empty() {
             return Err(CommandError::MissingParameter(
                 "colors".to_string(),
@@ -135,7 +135,7 @@ pub struct SetFontSizeCommand {
 }
 
 impl SetFontSizeCommand {
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         let payload =
             serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
@@ -165,7 +165,7 @@ pub struct SetSpacingCommand {
 }
 
 impl SetSpacingCommand {
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.settings.is_empty() {
             return Err(CommandError::MissingParameter(
                 "settings".to_string(),
@@ -193,7 +193,7 @@ pub struct SetTabColorCommand {
 }
 
 impl SetTabColorCommand {
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.colors.is_empty() {
             return Err(CommandError::MissingParameter(
                 "colors".to_string(),
@@ -231,7 +231,7 @@ impl GetColorsCommand {
 }
 
 impl GetColorsCommand {
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         let payload =
             serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
@@ -248,7 +248,7 @@ mod tests {
         let cmd = SetBackgroundOpacityCommand::builder()
             .opacity(0.5)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-background-opacity");
@@ -259,7 +259,7 @@ mod tests {
         let cmd = SetBackgroundOpacityCommand::builder()
             .opacity(1.5)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::ValidationError(msg)) = cmd {
             assert!(msg.contains("opacity"));
@@ -275,7 +275,7 @@ mod tests {
             .all(true)
             .toggle(true)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-background-opacity");
@@ -286,7 +286,7 @@ mod tests {
         let cmd = SetBackgroundImageCommand::builder()
             .data("base64data".to_string())
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-background-image");
@@ -297,7 +297,7 @@ mod tests {
         let cmd = SetBackgroundImageCommand::builder()
             .data("".to_string())
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "data");
@@ -314,7 +314,7 @@ mod tests {
             .layout("tiled".to_string())
             .all(true)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-background-image");
@@ -327,7 +327,10 @@ mod tests {
             "foreground".to_string(),
             serde_json::Value::String("#ffffff".to_string()),
         );
-        let cmd = SetColorsCommand::builder().colors(colors).build().build();
+        let cmd = SetColorsCommand::builder()
+            .colors(colors)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-colors");
@@ -338,7 +341,7 @@ mod tests {
         let cmd = SetColorsCommand::builder()
             .colors(Map::new())
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "colors");
@@ -360,7 +363,7 @@ mod tests {
             .all(true)
             .reset(true)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-colors");
@@ -368,7 +371,10 @@ mod tests {
 
     #[test]
     fn test_set_font_size_basic() {
-        let cmd = SetFontSizeCommand::builder().size(14.0).build().build();
+        let cmd = SetFontSizeCommand::builder()
+            .size(14.0)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-font-size");
@@ -381,7 +387,7 @@ mod tests {
             .all(true)
             .increment_op("set".to_string())
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-font-size");
@@ -394,7 +400,7 @@ mod tests {
         let cmd = SetSpacingCommand::builder()
             .settings(settings)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-spacing");
@@ -405,7 +411,7 @@ mod tests {
         let cmd = SetSpacingCommand::builder()
             .settings(Map::new())
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "settings");
@@ -424,7 +430,7 @@ mod tests {
             .all(true)
             .configured(true)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-spacing");
@@ -437,7 +443,10 @@ mod tests {
             "active_tab_foreground".to_string(),
             serde_json::Value::String("#ffffff".to_string()),
         );
-        let cmd = SetTabColorCommand::builder().colors(colors).build().build();
+        let cmd = SetTabColorCommand::builder()
+            .colors(colors)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-tab-color");
@@ -448,7 +457,7 @@ mod tests {
         let cmd = SetTabColorCommand::builder()
             .colors(Map::new())
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "colors");
@@ -469,7 +478,7 @@ mod tests {
             .colors(colors)
             .self_tab(true)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-tab-color");
@@ -477,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_get_colors_basic() {
-        let cmd = GetColorsCommand::builder().build().build();
+        let cmd = GetColorsCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "get-colors");
@@ -489,7 +498,7 @@ mod tests {
             .match_spec("id:1".to_string())
             .configured(true)
             .build()
-            .build();
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "get-colors");

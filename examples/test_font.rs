@@ -11,9 +11,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Testing set-font-size increment command...");
     
     // Try increment
-    let cmd = SetFontSizeCommand::new(0)
-        .increment_op("+")
-        .build()?;
+    let cmd = SetFontSizeCommand::builder()
+        .size(0.0)
+        .increment_op("+".to_string())
+        .build()
+        .to_message()?;
 
     let result = kitty.execute(&cmd).await?;
     println!("Increment result: ok={}, data={:?}, error={:?}", result.ok, result.data, result.error);
