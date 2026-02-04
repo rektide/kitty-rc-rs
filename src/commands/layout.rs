@@ -1,28 +1,23 @@
 use crate::command::CommandBuilder;
 use crate::error::CommandError;
 use crate::protocol::KittyMessage;
+use bon::Builder;
+use serde::Serialize;
 
+fn is_false(v: &bool) -> bool {
+    !v
+}
+
+#[derive(Builder, Serialize)]
 pub struct GotoLayoutCommand {
     layout: String,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
 }
 
 impl GotoLayoutCommand {
-    pub fn new(layout: impl Into<String>) -> Self {
-        Self {
-            layout: layout.into(),
-            match_spec: None,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.layout.is_empty() {
             return Err(CommandError::MissingParameter(
                 "layout".to_string(),
@@ -30,46 +25,27 @@ impl GotoLayoutCommand {
             ));
         }
 
-        payload.insert("layout".to_string(), serde_json::Value::String(self.layout));
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        Ok(CommandBuilder::new("goto-layout")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("goto-layout").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct SetEnabledLayoutsCommand {
     layouts: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     configured: bool,
 }
 
 impl SetEnabledLayoutsCommand {
-    pub fn new(layouts: Vec<String>) -> Self {
-        Self {
-            layouts,
-            match_spec: None,
-            configured: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn configured(mut self, value: bool) -> Self {
-        self.configured = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.layouts.is_empty() {
             return Err(CommandError::MissingParameter(
                 "layouts".to_string(),
@@ -77,67 +53,32 @@ impl SetEnabledLayoutsCommand {
             ));
         }
 
-        let layouts_value: Vec<serde_json::Value> = self
-            .layouts
-            .into_iter()
-            .map(serde_json::Value::String)
-            .collect();
-
-        payload.insert(
-            "layouts".to_string(),
-            serde_json::Value::Array(layouts_value),
-        );
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.configured {
-            payload.insert("configured".to_string(), serde_json::Value::Bool(true));
-        }
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("set-enabled-layouts")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct LastUsedLayoutCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     all: bool,
 }
 
 impl LastUsedLayoutCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            all: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn all(mut self, value: bool) -> Self {
-        self.all = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.all {
-            payload.insert("all".to_string(), serde_json::Value::Bool(true));
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("last-used-layout")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
@@ -148,7 +89,10 @@ mod tests {
 
     #[test]
     fn test_goto_layout() {
-        let cmd = GotoLayoutCommand::new("tall").build();
+        let cmd = GotoLayoutCommand::builder()
+            .layout("tall".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "goto-layout");
@@ -157,7 +101,10 @@ mod tests {
 
     #[test]
     fn test_goto_layout_empty() {
-        let cmd = GotoLayoutCommand::new("").build();
+        let cmd = GotoLayoutCommand::builder()
+            .layout("".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "layout");
@@ -169,7 +116,11 @@ mod tests {
 
     #[test]
     fn test_goto_layout_with_match() {
-        let cmd = GotoLayoutCommand::new("grid").match_spec("id:0").build();
+        let cmd = GotoLayoutCommand::builder()
+            .layout("grid".to_string())
+            .match_spec("id:0".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "goto-layout");
@@ -178,7 +129,10 @@ mod tests {
     #[test]
     fn test_set_enabled_layouts() {
         let layouts = vec!["tall".to_string(), "grid".to_string()];
-        let cmd = SetEnabledLayoutsCommand::new(layouts).build();
+        let cmd = SetEnabledLayoutsCommand::builder()
+            .layouts(layouts)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-enabled-layouts");
@@ -187,7 +141,10 @@ mod tests {
 
     #[test]
     fn test_set_enabled_layouts_empty() {
-        let cmd = SetEnabledLayoutsCommand::new(vec![]).build();
+        let cmd = SetEnabledLayoutsCommand::builder()
+            .layouts(vec![])
+            .build()
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "layouts");
@@ -200,9 +157,11 @@ mod tests {
     #[test]
     fn test_set_enabled_layouts_with_match() {
         let layouts = vec!["stack".to_string()];
-        let cmd = SetEnabledLayoutsCommand::new(layouts)
-            .match_spec("id:1")
-            .build();
+        let cmd = SetEnabledLayoutsCommand::builder()
+            .layouts(layouts)
+            .match_spec("id:1".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-enabled-layouts");
@@ -211,9 +170,11 @@ mod tests {
     #[test]
     fn test_set_enabled_layouts_configured() {
         let layouts = vec!["tall".to_string()];
-        let cmd = SetEnabledLayoutsCommand::new(layouts)
+        let cmd = SetEnabledLayoutsCommand::builder()
+            .layouts(layouts)
             .configured(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-enabled-layouts");
@@ -221,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_last_used_layout() {
-        let cmd = LastUsedLayoutCommand::new().build();
+        let cmd = LastUsedLayoutCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "last-used-layout");
@@ -229,7 +190,10 @@ mod tests {
 
     #[test]
     fn test_last_used_layout_with_match() {
-        let cmd = LastUsedLayoutCommand::new().match_spec("id:0").build();
+        let cmd = LastUsedLayoutCommand::builder()
+            .match_spec("id:0".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "last-used-layout");
@@ -237,7 +201,10 @@ mod tests {
 
     #[test]
     fn test_last_used_layout_all() {
-        let cmd = LastUsedLayoutCommand::new().all(true).build();
+        let cmd = LastUsedLayoutCommand::builder()
+            .all(true)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "last-used-layout");
