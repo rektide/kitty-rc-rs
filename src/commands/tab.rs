@@ -1,55 +1,38 @@
 use crate::command::CommandBuilder;
 use crate::error::CommandError;
 use crate::protocol::KittyMessage;
+use bon::Builder;
+use serde::Serialize;
 
+fn is_false(v: &bool) -> bool {
+    !v
+}
+
+#[derive(Builder, Serialize)]
 pub struct FocusTabCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
 }
 
 impl FocusTabCommand {
-    pub fn new() -> Self {
-        Self { match_spec: None }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        Ok(CommandBuilder::new("focus-tab")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("focus-tab").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct SetTabTitleCommand {
     title: String,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
 }
 
 impl SetTabTitleCommand {
-    pub fn new(title: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            match_spec: None,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.title.is_empty() {
             return Err(CommandError::MissingParameter(
                 "title".to_string(),
@@ -57,120 +40,57 @@ impl SetTabTitleCommand {
             ));
         }
 
-        payload.insert("title".to_string(), serde_json::Value::String(self.title));
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("set-tab-title")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct CloseTabCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_tab: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     ignore_no_match: bool,
 }
 
 impl CloseTabCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            self_tab: false,
-            ignore_no_match: false,
-        }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn self_tab(mut self, value: bool) -> Self {
-        self.self_tab = value;
-        self
-    }
-
-    pub fn ignore_no_match(mut self, value: bool) -> Self {
-        self.ignore_no_match = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.self_tab {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.ignore_no_match {
-            payload.insert("ignore_no_match".to_string(), serde_json::Value::Bool(true));
-        }
-
-        Ok(CommandBuilder::new("close-tab")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("close-tab").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct DetachTabCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     target_tab: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_tab: bool,
 }
 
 impl DetachTabCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            target_tab: None,
-            self_tab: false,
-        }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn target_tab(mut self, spec: impl Into<String>) -> Self {
-        self.target_tab = Some(spec.into());
-        self
-    }
-
-    pub fn self_tab(mut self, value: bool) -> Self {
-        self.self_tab = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(target_tab) = self.target_tab {
-            payload.insert(
-                "target_tab".to_string(),
-                serde_json::Value::String(target_tab),
-            );
-        }
-
-        if self.self_tab {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        Ok(CommandBuilder::new("detach-tab")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("detach-tab").payload(payload).build())
     }
 }
 
@@ -180,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_focus_tab_basic() {
-        let cmd = FocusTabCommand::new().build();
+        let cmd = FocusTabCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "focus-tab");
@@ -188,7 +108,10 @@ mod tests {
 
     #[test]
     fn test_focus_tab_with_match() {
-        let cmd = FocusTabCommand::new().match_spec("id:0").build();
+        let cmd = FocusTabCommand::builder()
+            .match_spec("id:0".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "focus-tab");
@@ -197,7 +120,10 @@ mod tests {
 
     #[test]
     fn test_set_tab_title() {
-        let cmd = SetTabTitleCommand::new("My Tab").build();
+        let cmd = SetTabTitleCommand::builder()
+            .title("My Tab".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-tab-title");
@@ -206,7 +132,10 @@ mod tests {
 
     #[test]
     fn test_set_tab_title_empty() {
-        let cmd = SetTabTitleCommand::new("").build();
+        let cmd = SetTabTitleCommand::builder()
+            .title("".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "title");
@@ -218,9 +147,11 @@ mod tests {
 
     #[test]
     fn test_set_tab_title_with_match() {
-        let cmd = SetTabTitleCommand::new("New Title")
-            .match_spec("id:1")
-            .build();
+        let cmd = SetTabTitleCommand::builder()
+            .title("New Title".to_string())
+            .match_spec("id:1".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-tab-title");
@@ -228,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_close_tab_basic() {
-        let cmd = CloseTabCommand::new().build();
+        let cmd = CloseTabCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "close-tab");
@@ -236,7 +167,10 @@ mod tests {
 
     #[test]
     fn test_close_tab_with_match() {
-        let cmd = CloseTabCommand::new().match_spec("id:2").build();
+        let cmd = CloseTabCommand::builder()
+            .match_spec("id:2".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "close-tab");
@@ -244,7 +178,10 @@ mod tests {
 
     #[test]
     fn test_close_tab_self() {
-        let cmd = CloseTabCommand::new().self_tab(true).build();
+        let cmd = CloseTabCommand::builder()
+            .self_tab(true)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "close-tab");
@@ -252,7 +189,10 @@ mod tests {
 
     #[test]
     fn test_close_tab_ignore_no_match() {
-        let cmd = CloseTabCommand::new().ignore_no_match(true).build();
+        let cmd = CloseTabCommand::builder()
+            .ignore_no_match(true)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "close-tab");
@@ -260,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_detach_tab_basic() {
-        let cmd = DetachTabCommand::new().build();
+        let cmd = DetachTabCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "detach-tab");
@@ -268,7 +208,10 @@ mod tests {
 
     #[test]
     fn test_detach_tab_with_match() {
-        let cmd = DetachTabCommand::new().match_spec("id:0").build();
+        let cmd = DetachTabCommand::builder()
+            .match_spec("id:0".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "detach-tab");
@@ -276,7 +219,10 @@ mod tests {
 
     #[test]
     fn test_detach_tab_with_target_tab() {
-        let cmd = DetachTabCommand::new().target_tab("id:1").build();
+        let cmd = DetachTabCommand::builder()
+            .target_tab("id:1".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "detach-tab");
@@ -284,7 +230,10 @@ mod tests {
 
     #[test]
     fn test_detach_tab_self() {
-        let cmd = DetachTabCommand::new().self_tab(true).build();
+        let cmd = DetachTabCommand::builder()
+            .self_tab(true)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "detach-tab");
@@ -292,11 +241,12 @@ mod tests {
 
     #[test]
     fn test_detach_tab_all_options() {
-        let cmd = DetachTabCommand::new()
-            .match_spec("id:0")
-            .target_tab("id:1")
+        let cmd = DetachTabCommand::builder()
+            .match_spec("id:0".to_string())
+            .target_tab("id:1".to_string())
             .self_tab(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "detach-tab");
