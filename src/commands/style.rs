@@ -245,13 +245,13 @@ impl SetColorsCommand {
 }
 
 pub struct SetFontSizeCommand {
-    size: i32,
+    size: f64,
     all: bool,
     increment_op: Option<String>,
 }
 
 impl SetFontSizeCommand {
-    pub fn new(size: i32) -> Self {
+    pub fn new(size: f64) -> Self {
         Self {
             size,
             all: false,
@@ -569,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_set_font_size_basic() {
-        let cmd = SetFontSizeCommand::new(14).build();
+        let cmd = SetFontSizeCommand::new(14.0).build();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-font-size");
@@ -577,7 +577,7 @@ mod tests {
 
     #[test]
     fn test_set_font_size_with_options() {
-        let cmd = SetFontSizeCommand::new(16)
+        let cmd = SetFontSizeCommand::new(16.0)
             .all(true)
             .increment_op("set")
             .build();
