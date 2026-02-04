@@ -11,7 +11,7 @@ async fn main() -> Result<(), KittyError> {
 
     println!("Connected! Listing windows...\n");
 
-    let cmd = LsCommand::new().build()?;
+    let cmd = LsCommand::builder().build().to_message()?;
     let response = kitty.execute(&cmd).await?;
 
     println!("Response ok: {}", response.ok);

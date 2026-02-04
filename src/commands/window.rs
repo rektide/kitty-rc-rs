@@ -2,9 +2,14 @@ use crate::command::CommandBuilder;
 use crate::commands::process::ProcessInfo;
 use crate::error::CommandError;
 use crate::protocol::KittyMessage;
-use serde::Deserialize;
+use bon::Builder;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+
+fn is_false(v: &bool) -> bool {
+    !v
+}
 
 #[derive(Debug, Deserialize)]
 pub struct WindowInfo {
@@ -120,68 +125,29 @@ pub fn parse_response_data(data: &Value) -> Result<Vec<OsInstance>, serde_json::
 
 use crate::protocol::KittyResponse;
 
+#[derive(Builder, Serialize)]
 pub struct LsCommand {
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     all_env_vars: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     match_tab: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
 }
 
 impl LsCommand {
-    pub fn new() -> Self {
-        Self {
-            all_env_vars: false,
-            match_spec: None,
-            match_tab: None,
-            self_window: false,
-        }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn all_env_vars(mut self, value: bool) -> Self {
-        self.all_env_vars = value;
-        self
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn match_tab(mut self, spec: impl Into<String>) -> Self {
-        self.match_tab = Some(spec.into());
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if self.all_env_vars {
-            payload.insert("all_env_vars".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(match_tab) = self.match_tab {
-            payload.insert(
-                "match_tab".to_string(),
-                serde_json::Value::String(match_tab),
-            );
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        Ok(CommandBuilder::new("ls")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("ls").payload(payload).build())
     }
 
     pub fn parse_response(response: &KittyResponse) -> Result<Vec<OsInstance>, serde_json::Error> {
@@ -193,55 +159,35 @@ impl LsCommand {
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct SendTextCommand {
     data: String,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     match_tab: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     all: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     exclude_active: bool,
+
+    #[builder(default = "disable".to_string())]
+    #[serde(skip_serializing_if = "is_skip_bracketed_paste")]
     bracketed_paste: String,
 }
 
+fn is_skip_bracketed_paste(v: &String) -> bool {
+    v == "disable"
+}
+
 impl SendTextCommand {
-    pub fn new(data: impl Into<String>) -> Self {
-        Self {
-            data: data.into(),
-            match_spec: None,
-            match_tab: None,
-            all: false,
-            exclude_active: false,
-            bracketed_paste: "disable".to_string(),
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn match_tab(mut self, spec: impl Into<String>) -> Self {
-        self.match_tab = Some(spec.into());
-        self
-    }
-
-    pub fn all(mut self, value: bool) -> Self {
-        self.all = value;
-        self
-    }
-
-    pub fn exclude_active(mut self, value: bool) -> Self {
-        self.exclude_active = value;
-        self
-    }
-
-    pub fn bracketed_paste(mut self, value: impl Into<String>) -> Self {
-        self.bracketed_paste = value.into();
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.data.is_empty() {
             return Err(CommandError::MissingParameter(
                 "data".to_string(),
@@ -249,82 +195,34 @@ impl SendTextCommand {
             ));
         }
 
-        payload.insert("data".to_string(), serde_json::Value::String(self.data));
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(match_tab) = self.match_tab {
-            payload.insert(
-                "match_tab".to_string(),
-                serde_json::Value::String(match_tab),
-            );
-        }
-
-        if self.all {
-            payload.insert("all".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.exclude_active {
-            payload.insert("exclude_active".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.bracketed_paste != "disable" {
-            payload.insert(
-                "bracketed_paste".to_string(),
-                serde_json::Value::String(self.bracketed_paste),
-            );
-        }
-
-        Ok(CommandBuilder::new("send-text")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("send-text").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct SendKeyCommand {
     keys: String,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     match_tab: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     all: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     exclude_active: bool,
 }
 
 impl SendKeyCommand {
-    pub fn new(keys: impl Into<String>) -> Self {
-        Self {
-            keys: keys.into(),
-            match_spec: None,
-            match_tab: None,
-            all: false,
-            exclude_active: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn match_tab(mut self, spec: impl Into<String>) -> Self {
-        self.match_tab = Some(spec.into());
-        self
-    }
-
-    pub fn all(mut self, value: bool) -> Self {
-        self.all = value;
-        self
-    }
-
-    pub fn exclude_active(mut self, value: bool) -> Self {
-        self.exclude_active = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.keys.is_empty() {
             return Err(CommandError::MissingParameter(
                 "keys".to_string(),
@@ -332,433 +230,188 @@ impl SendKeyCommand {
             ));
         }
 
-        payload.insert("keys".to_string(), serde_json::Value::String(self.keys));
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(match_tab) = self.match_tab {
-            payload.insert(
-                "match_tab".to_string(),
-                serde_json::Value::String(match_tab),
-            );
-        }
-
-        if self.all {
-            payload.insert("all".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.exclude_active {
-            payload.insert("exclude_active".to_string(), serde_json::Value::Bool(true));
-        }
-
-        Ok(CommandBuilder::new("send-key")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("send-key").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct CloseWindowCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     ignore_no_match: bool,
 }
 
 impl CloseWindowCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            self_window: false,
-            ignore_no_match: false,
-        }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn ignore_no_match(mut self, value: bool) -> Self {
-        self.ignore_no_match = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.ignore_no_match {
-            payload.insert("ignore_no_match".to_string(), serde_json::Value::Bool(true));
-        }
-
-        Ok(CommandBuilder::new("close-window")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("close-window").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct ResizeWindowCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
+
+    #[builder(default = 2)]
     increment: i32,
+
+    #[builder(default = "horizontal".to_string())]
+    #[serde(skip_serializing_if = "is_skip_horizontal")]
     axis: String,
 }
 
+fn is_skip_horizontal(v: &String) -> bool {
+    v == "horizontal"
+}
+
 impl ResizeWindowCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            self_window: false,
-            increment: 2,
-            axis: "horizontal".to_string(),
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn increment(mut self, value: i32) -> Self {
-        self.increment = value;
-        self
-    }
-
-    pub fn axis(mut self, value: impl Into<String>) -> Self {
-        self.axis = value.into();
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        payload.insert(
-            "increment".to_string(),
-            serde_json::Value::Number(self.increment.into()),
-        );
-
-        if self.axis != "horizontal" {
-            payload.insert("axis".to_string(), serde_json::Value::String(self.axis));
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("resize-window")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct FocusWindowCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
 }
 
 impl FocusWindowCommand {
-    pub fn new() -> Self {
-        Self { match_spec: None }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        Ok(CommandBuilder::new("focus-window")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("focus-window").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct SelectWindowCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     title: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     exclude_active: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     reactivate_prev_tab: bool,
 }
 
 impl SelectWindowCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            title: None,
-            exclude_active: false,
-            reactivate_prev_tab: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn title(mut self, value: impl Into<String>) -> Self {
-        self.title = Some(value.into());
-        self
-    }
-
-    pub fn exclude_active(mut self, value: bool) -> Self {
-        self.exclude_active = value;
-        self
-    }
-
-    pub fn reactivate_prev_tab(mut self, value: bool) -> Self {
-        self.reactivate_prev_tab = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(title) = self.title {
-            payload.insert("title".to_string(), serde_json::Value::String(title));
-        }
-
-        if self.exclude_active {
-            payload.insert("exclude_active".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.reactivate_prev_tab {
-            payload.insert(
-                "reactivate_prev_tab".to_string(),
-                serde_json::Value::Bool(true),
-            );
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("select-window")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct NewWindowCommand {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     args: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     title: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     cwd: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     keep_focus: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     window_type: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     new_tab: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     tab_title: Option<String>,
 }
 
 impl NewWindowCommand {
-    pub fn new() -> Self {
-        Self {
-            args: None,
-            title: None,
-            cwd: None,
-            keep_focus: false,
-            window_type: None,
-            new_tab: false,
-            tab_title: None,
-        }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn args(mut self, value: impl Into<String>) -> Self {
-        self.args = Some(value.into());
-        self
-    }
-
-    pub fn title(mut self, value: impl Into<String>) -> Self {
-        self.title = Some(value.into());
-        self
-    }
-
-    pub fn cwd(mut self, value: impl Into<String>) -> Self {
-        self.cwd = Some(value.into());
-        self
-    }
-
-    pub fn keep_focus(mut self, value: bool) -> Self {
-        self.keep_focus = value;
-        self
-    }
-
-    pub fn window_type(mut self, value: impl Into<String>) -> Self {
-        self.window_type = Some(value.into());
-        self
-    }
-
-    pub fn new_tab(mut self, value: bool) -> Self {
-        self.new_tab = value;
-        self
-    }
-
-    pub fn tab_title(mut self, value: impl Into<String>) -> Self {
-        self.tab_title = Some(value.into());
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(args) = self.args {
-            payload.insert("args".to_string(), serde_json::Value::String(args));
-        }
-
-        if let Some(title) = self.title {
-            payload.insert("title".to_string(), serde_json::Value::String(title));
-        }
-
-        if let Some(cwd) = self.cwd {
-            payload.insert("cwd".to_string(), serde_json::Value::String(cwd));
-        }
-
-        if self.keep_focus {
-            payload.insert("keep_focus".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if let Some(window_type) = self.window_type {
-            payload.insert(
-                "window_type".to_string(),
-                serde_json::Value::String(window_type),
-            );
-        }
-
-        if self.new_tab {
-            payload.insert("new_tab".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if let Some(tab_title) = self.tab_title {
-            payload.insert(
-                "tab_title".to_string(),
-                serde_json::Value::String(tab_title),
-            );
-        }
-
-        Ok(CommandBuilder::new("new-window")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("new-window").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct DetachWindowCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     target_tab: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     stay_in_tab: bool,
 }
 
 impl DetachWindowCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            target_tab: None,
-            self_window: false,
-            stay_in_tab: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn target_tab(mut self, spec: impl Into<String>) -> Self {
-        self.target_tab = Some(spec.into());
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn stay_in_tab(mut self, value: bool) -> Self {
-        self.stay_in_tab = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(target_tab) = self.target_tab {
-            payload.insert(
-                "target_tab".to_string(),
-                serde_json::Value::String(target_tab),
-            );
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.stay_in_tab {
-            payload.insert("stay_in_tab".to_string(), serde_json::Value::Bool(true));
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("detach-window")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct SetWindowTitleCommand {
-    match_spec: Option<String>,
     title: String,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
+    match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     temporary: bool,
 }
 
 impl SetWindowTitleCommand {
-    pub fn new(title: impl Into<String>) -> Self {
-        Self {
-            match_spec: None,
-            title: title.into(),
-            temporary: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn temporary(mut self, value: bool) -> Self {
-        self.temporary = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
         if self.title.is_empty() {
             return Err(CommandError::MissingParameter(
                 "title".to_string(),
@@ -766,313 +419,143 @@ impl SetWindowTitleCommand {
             ));
         }
 
-        payload.insert("title".to_string(), serde_json::Value::String(self.title));
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.temporary {
-            payload.insert("temporary".to_string(), serde_json::Value::Bool(true));
-        }
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("set-window-title")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct SetWindowLogoCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     data: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     position: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     alpha: Option<f32>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
 }
 
 impl SetWindowLogoCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            data: None,
-            position: None,
-            alpha: None,
-            self_window: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn data(mut self, value: impl Into<String>) -> Self {
-        self.data = Some(value.into());
-        self
-    }
-
-    pub fn position(mut self, value: impl Into<String>) -> Self {
-        self.position = Some(value.into());
-        self
-    }
-
-    pub fn alpha(mut self, value: f32) -> Self {
-        self.alpha = Some(value);
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(data) = self.data {
-            payload.insert("data".to_string(), serde_json::Value::String(data));
-        }
-
-        if let Some(position) = self.position {
-            payload.insert("position".to_string(), serde_json::Value::String(position));
-        }
-
-        if let Some(alpha) = self.alpha {
-            payload.insert("alpha".to_string(), serde_json::json!(alpha));
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("set-window-logo")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct GetTextCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     extent: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     ansi: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     cursor: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     wrap_markers: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false")]
     clear_selection: bool,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
 }
 
 impl GetTextCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            extent: None,
-            ansi: false,
-            cursor: false,
-            wrap_markers: false,
-            clear_selection: false,
-            self_window: false,
-        }
-    }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn extent(mut self, value: impl Into<String>) -> Self {
-        self.extent = Some(value.into());
-        self
-    }
-
-    pub fn ansi(mut self, value: bool) -> Self {
-        self.ansi = value;
-        self
-    }
-
-    pub fn cursor(mut self, value: bool) -> Self {
-        self.cursor = value;
-        self
-    }
-
-    pub fn wrap_markers(mut self, value: bool) -> Self {
-        self.wrap_markers = value;
-        self
-    }
-
-    pub fn clear_selection(mut self, value: bool) -> Self {
-        self.clear_selection = value;
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if let Some(extent) = self.extent {
-            payload.insert("extent".to_string(), serde_json::Value::String(extent));
-        }
-
-        if self.ansi {
-            payload.insert("ansi".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.cursor {
-            payload.insert("cursor".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.wrap_markers {
-            payload.insert("wrap_markers".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.clear_selection {
-            payload.insert("clear_selection".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        Ok(CommandBuilder::new("get-text")
-            .payload(serde_json::Value::Object(payload))
-            .build())
+        Ok(CommandBuilder::new("get-text").payload(payload).build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct ScrollWindowCommand {
     amount: i32,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
 }
 
 impl ScrollWindowCommand {
-    pub fn new(amount: i32) -> Self {
-        Self {
-            amount,
-            match_spec: None,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        payload.insert("amount".to_string(), serde_json::json!(self.amount));
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("scroll-window")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct CreateMarkerCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     marker_spec: Option<String>,
 }
 
 impl CreateMarkerCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            self_window: false,
-            marker_spec: None,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn marker_spec(mut self, value: impl Into<String>) -> Self {
-        self.marker_spec = Some(value.into());
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
-
-        if let Some(marker_spec) = self.marker_spec {
-            payload.insert(
-                "marker_spec".to_string(),
-                serde_json::Value::String(marker_spec),
-            );
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("create-marker")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
 
+#[derive(Builder, Serialize)]
 pub struct RemoveMarkerCommand {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "match", default)]
     match_spec: Option<String>,
+
+    #[builder(default = false)]
+    #[serde(skip_serializing_if = "is_false", rename = "self")]
     self_window: bool,
 }
 
 impl RemoveMarkerCommand {
-    pub fn new() -> Self {
-        Self {
-            match_spec: None,
-            self_window: false,
-        }
-    }
-
-    pub fn match_spec(mut self, spec: impl Into<String>) -> Self {
-        self.match_spec = Some(spec.into());
-        self
-    }
-
-    pub fn self_window(mut self, value: bool) -> Self {
-        self.self_window = value;
-        self
-    }
-
-    pub fn build(self) -> Result<KittyMessage, CommandError> {
-        let mut payload = serde_json::Map::new();
-
-        if let Some(match_spec) = self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(match_spec));
-        }
-
-        if self.self_window {
-            payload.insert("self".to_string(), serde_json::Value::Bool(true));
-        }
+    pub fn to_message(self) -> Result<KittyMessage, CommandError> {
+        let payload =
+            serde_json::to_value(self).map_err(|e| CommandError::ValidationError(e.to_string()))?;
 
         Ok(CommandBuilder::new("remove-marker")
-            .payload(serde_json::Value::Object(payload))
+            .payload(payload)
             .build())
     }
 }
@@ -1083,7 +566,7 @@ mod tests {
 
     #[test]
     fn test_ls_basic() {
-        let cmd = LsCommand::new().build();
+        let cmd = LsCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "ls");
@@ -1091,10 +574,11 @@ mod tests {
 
     #[test]
     fn test_ls_with_options() {
-        let cmd = LsCommand::new()
+        let cmd = LsCommand::builder()
             .all_env_vars(true)
             .self_window(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "ls");
@@ -1102,7 +586,10 @@ mod tests {
 
     #[test]
     fn test_ls_with_match() {
-        let cmd = LsCommand::new().match_spec("id:1").build();
+        let cmd = LsCommand::builder()
+            .match_spec("id:1".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "ls");
@@ -1110,7 +597,10 @@ mod tests {
 
     #[test]
     fn test_send_text_basic() {
-        let cmd = SendTextCommand::new("text:hello").build();
+        let cmd = SendTextCommand::builder()
+            .data("text:hello".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "send-text");
@@ -1118,7 +608,10 @@ mod tests {
 
     #[test]
     fn test_send_text_empty() {
-        let cmd = SendTextCommand::new("").build();
+        let cmd = SendTextCommand::builder()
+            .data("".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "data");
@@ -1130,10 +623,12 @@ mod tests {
 
     #[test]
     fn test_send_text_with_options() {
-        let cmd = SendTextCommand::new("text:test")
-            .match_spec("id:1")
+        let cmd = SendTextCommand::builder()
+            .data("text:test".to_string())
+            .match_spec("id:1".to_string())
             .all(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "send-text");
@@ -1141,7 +636,10 @@ mod tests {
 
     #[test]
     fn test_send_key_basic() {
-        let cmd = SendKeyCommand::new("ctrl+c").build();
+        let cmd = SendKeyCommand::builder()
+            .keys("ctrl+c".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "send-key");
@@ -1149,7 +647,10 @@ mod tests {
 
     #[test]
     fn test_send_key_empty() {
-        let cmd = SendKeyCommand::new("").build();
+        let cmd = SendKeyCommand::builder()
+            .keys("".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "keys");
@@ -1161,10 +662,12 @@ mod tests {
 
     #[test]
     fn test_send_key_with_options() {
-        let cmd = SendKeyCommand::new("alt+f4")
-            .match_spec("id:1")
+        let cmd = SendKeyCommand::builder()
+            .keys("alt+f4".to_string())
+            .match_spec("id:1".to_string())
             .all(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "send-key");
@@ -1172,7 +675,7 @@ mod tests {
 
     #[test]
     fn test_close_window_basic() {
-        let cmd = CloseWindowCommand::new().build();
+        let cmd = CloseWindowCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "close-window");
@@ -1180,11 +683,12 @@ mod tests {
 
     #[test]
     fn test_close_window_with_options() {
-        let cmd = CloseWindowCommand::new()
-            .match_spec("id:1")
+        let cmd = CloseWindowCommand::builder()
+            .match_spec("id:1".to_string())
             .self_window(true)
             .ignore_no_match(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "close-window");
@@ -1192,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_resize_window_basic() {
-        let cmd = ResizeWindowCommand::new().build();
+        let cmd = ResizeWindowCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "resize-window");
@@ -1200,11 +704,12 @@ mod tests {
 
     #[test]
     fn test_resize_window_with_options() {
-        let cmd = ResizeWindowCommand::new()
-            .match_spec("id:1")
+        let cmd = ResizeWindowCommand::builder()
+            .match_spec("id:1".to_string())
             .increment(5)
-            .axis("vertical")
-            .build();
+            .axis("vertical".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "resize-window");
@@ -1212,7 +717,7 @@ mod tests {
 
     #[test]
     fn test_focus_window_basic() {
-        let cmd = FocusWindowCommand::new().build();
+        let cmd = FocusWindowCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "focus-window");
@@ -1220,7 +725,10 @@ mod tests {
 
     #[test]
     fn test_focus_window_with_match() {
-        let cmd = FocusWindowCommand::new().match_spec("id:1").build();
+        let cmd = FocusWindowCommand::builder()
+            .match_spec("id:1".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "focus-window");
@@ -1228,7 +736,7 @@ mod tests {
 
     #[test]
     fn test_select_window_basic() {
-        let cmd = SelectWindowCommand::new().build();
+        let cmd = SelectWindowCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "select-window");
@@ -1236,12 +744,13 @@ mod tests {
 
     #[test]
     fn test_select_window_with_options() {
-        let cmd = SelectWindowCommand::new()
-            .match_spec("id:1")
-            .title("Select Me")
+        let cmd = SelectWindowCommand::builder()
+            .match_spec("id:1".to_string())
+            .title("Select Me".to_string())
             .exclude_active(true)
             .reactivate_prev_tab(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "select-window");
@@ -1249,7 +758,7 @@ mod tests {
 
     #[test]
     fn test_new_window_basic() {
-        let cmd = NewWindowCommand::new().build();
+        let cmd = NewWindowCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "new-window");
@@ -1257,15 +766,16 @@ mod tests {
 
     #[test]
     fn test_new_window_with_options() {
-        let cmd = NewWindowCommand::new()
-            .args("bash")
-            .title("My Window")
-            .cwd("/home/user")
+        let cmd = NewWindowCommand::builder()
+            .args("bash".to_string())
+            .title("My Window".to_string())
+            .cwd("/home/user".to_string())
             .keep_focus(true)
-            .window_type("overlay")
+            .window_type("overlay".to_string())
             .new_tab(true)
-            .tab_title("New Tab")
-            .build();
+            .tab_title("New Tab".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "new-window");
@@ -1273,7 +783,7 @@ mod tests {
 
     #[test]
     fn test_detach_window_basic() {
-        let cmd = DetachWindowCommand::new().build();
+        let cmd = DetachWindowCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "detach-window");
@@ -1281,12 +791,13 @@ mod tests {
 
     #[test]
     fn test_detach_window_with_options() {
-        let cmd = DetachWindowCommand::new()
-            .match_spec("id:1")
-            .target_tab("id:2")
+        let cmd = DetachWindowCommand::builder()
+            .match_spec("id:1".to_string())
+            .target_tab("id:2".to_string())
             .self_window(true)
             .stay_in_tab(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "detach-window");
@@ -1294,7 +805,10 @@ mod tests {
 
     #[test]
     fn test_set_window_title_basic() {
-        let cmd = SetWindowTitleCommand::new("My Title").build();
+        let cmd = SetWindowTitleCommand::builder()
+            .title("My Title".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-window-title");
@@ -1302,7 +816,10 @@ mod tests {
 
     #[test]
     fn test_set_window_title_empty() {
-        let cmd = SetWindowTitleCommand::new("").build();
+        let cmd = SetWindowTitleCommand::builder()
+            .title("".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_err());
         if let Err(CommandError::MissingParameter(field, cmd_name)) = cmd {
             assert_eq!(field, "title");
@@ -1314,10 +831,12 @@ mod tests {
 
     #[test]
     fn test_set_window_title_with_options() {
-        let cmd = SetWindowTitleCommand::new("New Title")
-            .match_spec("id:1")
+        let cmd = SetWindowTitleCommand::builder()
+            .title("New Title".to_string())
+            .match_spec("id:1".to_string())
             .temporary(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-window-title");
@@ -1325,7 +844,7 @@ mod tests {
 
     #[test]
     fn test_set_window_logo_basic() {
-        let cmd = SetWindowLogoCommand::new().build();
+        let cmd = SetWindowLogoCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-window-logo");
@@ -1333,13 +852,14 @@ mod tests {
 
     #[test]
     fn test_set_window_logo_with_options() {
-        let cmd = SetWindowLogoCommand::new()
-            .match_spec("id:1")
-            .data("base64data")
-            .position("top-left")
+        let cmd = SetWindowLogoCommand::builder()
+            .match_spec("id:1".to_string())
+            .data("base64data".to_string())
+            .position("top-left".to_string())
             .alpha(0.5)
             .self_window(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "set-window-logo");
@@ -1347,7 +867,7 @@ mod tests {
 
     #[test]
     fn test_get_text_basic() {
-        let cmd = GetTextCommand::new().build();
+        let cmd = GetTextCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "get-text");
@@ -1355,15 +875,16 @@ mod tests {
 
     #[test]
     fn test_get_text_with_options() {
-        let cmd = GetTextCommand::new()
-            .match_spec("id:1")
-            .extent("all")
+        let cmd = GetTextCommand::builder()
+            .match_spec("id:1".to_string())
+            .extent("all".to_string())
             .ansi(true)
             .cursor(true)
             .wrap_markers(true)
             .clear_selection(true)
             .self_window(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "get-text");
@@ -1371,7 +892,10 @@ mod tests {
 
     #[test]
     fn test_scroll_window_basic() {
-        let cmd = ScrollWindowCommand::new(5).build();
+        let cmd = ScrollWindowCommand::builder()
+            .amount(5)
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "scroll-window");
@@ -1379,7 +903,11 @@ mod tests {
 
     #[test]
     fn test_scroll_window_with_match() {
-        let cmd = ScrollWindowCommand::new(-5).match_spec("id:1").build();
+        let cmd = ScrollWindowCommand::builder()
+            .amount(-5)
+            .match_spec("id:1".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "scroll-window");
@@ -1387,7 +915,7 @@ mod tests {
 
     #[test]
     fn test_create_marker_basic() {
-        let cmd = CreateMarkerCommand::new().build();
+        let cmd = CreateMarkerCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "create-marker");
@@ -1395,11 +923,12 @@ mod tests {
 
     #[test]
     fn test_create_marker_with_options() {
-        let cmd = CreateMarkerCommand::new()
-            .match_spec("id:1")
+        let cmd = CreateMarkerCommand::builder()
+            .match_spec("id:1".to_string())
             .self_window(true)
-            .marker_spec("marker1")
-            .build();
+            .marker_spec("marker1".to_string())
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "create-marker");
@@ -1407,7 +936,7 @@ mod tests {
 
     #[test]
     fn test_remove_marker_basic() {
-        let cmd = RemoveMarkerCommand::new().build();
+        let cmd = RemoveMarkerCommand::builder().build().to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "remove-marker");
@@ -1415,10 +944,11 @@ mod tests {
 
     #[test]
     fn test_remove_marker_with_options() {
-        let cmd = RemoveMarkerCommand::new()
-            .match_spec("id:1")
+        let cmd = RemoveMarkerCommand::builder()
+            .match_spec("id:1".to_string())
             .self_window(true)
-            .build();
+            .build()
+            .to_message();
         assert!(cmd.is_ok());
         let msg = cmd.unwrap();
         assert_eq!(msg.cmd, "remove-marker");

@@ -60,7 +60,7 @@ async fn handle_list_windows() -> Result<(), KittyError> {
 
     println!("Connected! Listing windows...\n");
 
-    let cmd = kitty_rc::LsCommand::new().build()?;
+    let cmd = kitty_rc::LsCommand::builder().build().to_message()?;
     let response = kitty.execute(&cmd).await?;
 
     println!("Response ok: {}", response.ok);
