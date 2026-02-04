@@ -24,14 +24,84 @@ pub struct KittyBuilder {
     timeout: Duration,
 }
 
-impl KittyBuilder {
-    pub fn new() -> Self {
+impl Default for KittyBuilder {
+    fn default() -> Self {
         Self {
             socket_path: None,
             password: None,
             public_key: None,
             timeout: Duration::from_secs(10),
         }
+    }
+}
+
+impl KittyBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn socket_path<P: AsRef<Path>>(mut self, path: P) -> Self {
+        self.socket_path = Some(path.as_ref().to_string_lossy().to_string());
+        self
+    }
+
+    pub fn from_pid(mut self, pid: u32) -> Self {
+        let xdg_dirs = BaseDirectories::new();
+        let runtime_dir = xdg_dirs.runtime_dir.clone()
+            .unwrap_or_else(|| Path::new("/tmp").to_path_buf());
+        let socket_path = runtime_dir.join(format!("kitty-{}.sock", pid));
+        self.socket_path = Some(socket_path.to_string_lossy().to_string());
+        self
+    }
+
+    pub fn timeout(mut self, duration: Duration) -> Self {
+        self.timeout = duration;
+        self
+    }
+
+    pub fn password(mut self, password: impl Into<String>) -> Self {
+        self.password = Some(password.into());
+        self
+    }
+
+    pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
+        self.public_key = Some(public_key.into());
+        self
+    }
+
+    pub async fn connect(self) -> Result<Kitty, KittyError> {
+        let socket_path = self.socket_path.ok_or_else(|| {
+            KittyError::Connection(ConnectionError::SocketNotFound(
+                "No socket path provided".to_string(),
+            ))
+        })?;
+
+        let stream = timeout(self.timeout, UnixStream::connect(&socket_path))
+            .await
+            .map_err(|_| ConnectionError::TimeoutError(self.timeout))?
+            .map_err(|e| ConnectionError::ConnectionFailed(socket_path.clone(), e))?;
+
+        let encryptor = if self.password.is_some() {
+            let public_key = if let Some(pk) = self.public_key {
+                Some(pk)
+            } else if let Some(pid) = Self::extract_pid_from_socket(&socket_path) {
+                Self::query_public_key_database(pid).map_err(KittyError::Encryption)?
+            } else {
+                None
+            };
+
+            Some(Encryptor::new_with_public_key(public_key.as_deref())?)
+        } else {
+            None
+        };
+
+        Ok(Kitty {
+            stream,
+            timeout: self.timeout,
+            socket_path,
+            password: self.password,
+            encryptor,
+        })
     }
 
     fn extract_pid_from_socket(socket_path: &str) -> Option<u32> {
@@ -69,98 +139,6 @@ impl KittyBuilder {
         } else {
             Ok(Some(pubkey))
         }
-    }
-
-    pub fn socket_path<P: AsRef<Path>>(mut self, path: P) -> Self {
-        self.socket_path = Some(path.as_ref().to_string_lossy().to_string());
-        self
-    }
-
-    pub fn from_pid(mut self, pid: u32) -> Self {
-        let xdg_dirs = BaseDirectories::new();
-        let runtime_dir = xdg_dirs.runtime_dir.clone()
-            .unwrap_or_else(|| Path::new("/tmp").to_path_buf());
-        let socket_path = runtime_dir.join(format!("kitty-{}.sock", pid));
-        self.socket_path = Some(socket_path.to_string_lossy().to_string());
-        self
-    }
-
-    pub fn timeout(mut self, duration: Duration) -> Self {
-        self.timeout = duration;
-        self
-    }
-
-    pub fn password(mut self, password: impl Into<String>) -> Self {
-        self.password = Some(password.into());
-        self
-    }
-
-    /// Set kitty's public key explicitly.
-    ///
-    /// Format: `1:<base85_encoded_key>` where `1` is protocol version.
-    ///
-    /// When set, this key is used instead of querying KITTY_PUBLIC_KEY
-    /// env var or kitty-pubkey-db database.
-    ///
-    /// Example:
-    /// ```no_run
-    /// use kitty_rc::Kitty;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let kitty = Kitty::builder()
-    ///     .socket_path("/run/user/1000/kitty-12345.sock")
-    ///     .password("your-password")
-    ///     .public_key("1:z3;{}!NzNzgiXreB&ywA!8y1H8hq^$cMG!OE$QNa")
-    ///     .connect()
-    ///     .await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
-        self.public_key = Some(public_key.into());
-        self
-    }
-
-    /// Connect to kitty instance with configured authentication.
-    ///
-    /// Public key resolution order (when password is set):
-    /// 1. Explicit key set via `.public_key()` method
-    /// 2. Query kitty-pubkey-db database (extracts PID from socket path)
-    /// 3. KITTY_PUBLIC_KEY environment variable (set by kitty when launching subprocesses)
-    ///
-    /// When no password is set, no encryption is used.
-    pub async fn connect(self) -> Result<Kitty, KittyError> {
-        let socket_path = self.socket_path.ok_or_else(|| {
-            KittyError::Connection(ConnectionError::SocketNotFound(
-                "No socket path provided".to_string(),
-            ))
-        })?;
-
-        let stream = timeout(self.timeout, UnixStream::connect(&socket_path))
-            .await
-            .map_err(|_| ConnectionError::TimeoutError(self.timeout))?
-            .map_err(|e| ConnectionError::ConnectionFailed(socket_path.clone(), e))?;
-
-        let encryptor = if self.password.is_some() {
-            let public_key = if let Some(pk) = self.public_key {
-                Some(pk)
-            } else if let Some(pid) = Self::extract_pid_from_socket(&socket_path) {
-                Self::query_public_key_database(pid).map_err(KittyError::Encryption)?
-            } else {
-                None
-            };
-
-            Some(Encryptor::new_with_public_key(public_key.as_deref())?)
-        } else {
-            None
-        };
-
-        Ok(Kitty {
-            stream,
-            timeout: self.timeout,
-            socket_path,
-            password: self.password,
-            encryptor,
-        })
     }
 }
 
@@ -220,7 +198,7 @@ impl Kitty {
 
         timeout(self.timeout, self.stream.write_all(&data))
             .await
-            .map_err(|_| ConnectionError::TimeoutError(self.timeout))??;
+            .map_err(|_| ConnectionError::TimeoutError(self.timeout))?;
 
         Ok(())
     }
@@ -383,7 +361,7 @@ mod tests {
     #[tokio::test]
     async fn test_builder_missing_socket() {
         let builder = KittyBuilder::new();
-        let result = builder.connect().await;
+        let result: Result<Kitty, KittyError> = builder.connect().await;
 
         assert!(result.is_err());
     }
