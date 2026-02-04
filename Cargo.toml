@@ -27,6 +27,7 @@ path = "examples/test-encrypted.rs"
 [dependencies]
 aes-gcm = "0.10"
 base85 = "2.0"
+bon = "3.5"
 clap = { version = "4.0", features = ["derive"] }
 rand_core = "0.6"
 serde = { version = "1.0", features = ["derive"] }
