@@ -137,6 +137,244 @@ fn focus() -> FocusWindow {
         match_spec: "id:1".into(),
     }
 }
+
+#[tokio::test]
+async fn captured_discovery_and_legacy_store_resolve_into_actual_encrypted_operations() {
+    use kitty_rc_credentials::{
+        CapturedKittyKey, CapturedPassword, MissingPolicy, Policy, StoreKey,
+    };
+    use kitty_rc_discovery::{CapturedEnvironment, SelectionPolicy};
+    let secret = x25519_dalek::StaticSecret::from([73; 32]);
+    let published = format!(
+        "1:{}",
+        base85::encode(x25519_dalek::PublicKey::from(&secret).as_bytes())
+    );
+    let mut fixture = Fixture::new(Some(secret));
+    let environment = std::collections::BTreeMap::from([
+        (
+            "KITTY_LISTEN_ON".into(),
+            format!("unix:{}", fixture.path.display()).into(),
+        ),
+        ("KITTY_PID".into(), "4242".into()),
+        ("SELECTED_PASSWORD".into(), "chosen-password".into()),
+    ]);
+    let snapshot = CapturedEnvironment::capture(&environment);
+    let chosen = kitty_rc_discovery::discover(None, &[&snapshot], &SelectionPolicy::Unique, 8)
+        .await
+        .unwrap();
+    let store_path = fixture.path.with_extension("tsv");
+    let legacy = format!("4242\t7\t{published}\n4242\t8\t{published}\t20\n");
+    std::fs::write(&store_path, &legacy).unwrap();
+    let captured_key = CapturedKittyKey::capture(&environment);
+    let store = StoreKey {
+        binding: chosen.binding.clone(),
+        path: store_path.clone(),
+        max_bytes: 4096,
+    };
+    let password = CapturedPassword::capture(&environment, "SELECTED_PASSWORD");
+    let registry = Registry::new(Limits::default()).unwrap();
+    let ticket = registry
+        .register_pending(chosen.binding.address.clone())
+        .unwrap();
+    let id = ticket.endpoint();
+    registry
+        .acquire_setup(ticket, async {
+            kitty_rc_credentials::resolve(
+                &chosen.binding,
+                Policy::Encrypted {
+                    keys: &[&captured_key, &store],
+                    passwords: &[&password],
+                    missing: MissingPolicy::TryNext,
+                },
+            )
+            .await
+            .map(|resolved| resolved.protection)
+        })
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read_to_string(&store_path).unwrap(), legacy);
+    let driver = registry.start().unwrap();
+    let listing = registry
+        .submit(&registry.reserve(), id, Ls::default(), options())
+        .unwrap();
+    let (cmd, request) = fixture.next().await;
+    assert_eq!(cmd, "ls");
+    assert_eq!(request["password"], "chosen-password");
+    listing.wait().await.unwrap();
+    assert!(matches!(listing.take().unwrap(), Completion::Reply(_)));
+    // One successful read is not a blanket authorization certificate. The next
+    // exact command's native denial is still decoded and retained as a failure.
+    let denied = registry
+        .submit(&registry.reserve(), id, raw("remote-error"), options())
+        .unwrap();
+    fixture.next().await;
+    denied.wait().await.unwrap();
+    assert!(matches!(denied.take(), Err(Failure::Remote { error, .. }) if error == "denied"));
+    registry.shutdown(Shutdown::Drain).await.unwrap();
+    driver.stop().await;
+    std::fs::remove_file(store_path).unwrap();
+}
+
+#[tokio::test]
+async fn changed_credentials_preserve_inflight_basis_but_never_pool_old_completion() {
+    let secret = x25519_dalek::StaticSecret::from([42; 32]);
+    let published = format!(
+        "1:{}",
+        base85::encode(x25519_dalek::PublicKey::from(&secret).as_bytes())
+    );
+    let key = kitty_rc_crypto::ServerPublicKey::parse(&published).unwrap();
+    let mut fixture = Fixture::new(Some(secret));
+    let setup = |password: &str| Endpoint {
+        address: Address::Unix(fixture.path.clone()),
+        protection: Protection::Encrypted {
+            key: key.clone(),
+            password: password.into(),
+            key_origin: "explicit same server".into(),
+        },
+    };
+    let registry = Registry::new(Limits::default()).unwrap();
+    let id = registry.register(setup("old-password")).unwrap();
+    let old_basis = registry.setup_version(id).unwrap();
+    let driver = registry.start().unwrap();
+    let old = registry
+        .submit(
+            &registry.reserve(),
+            id,
+            LaunchWait { args: vec![] },
+            options(),
+        )
+        .unwrap();
+    let (cmd, request) = fixture.next().await;
+    assert_eq!(cmd, "launch");
+    assert_eq!(request["password"], "old-password");
+    let new_setup = Endpoint {
+        address: Address::Unix(fixture.path.clone()),
+        protection: Protection::Encrypted {
+            key,
+            password: "new-password".into(),
+            key_origin: "explicit same server".into(),
+        },
+    };
+    let new_basis = registry.replace_endpoint(id, new_setup).unwrap();
+    assert_eq!(new_basis.binding, old_basis.binding);
+    assert_ne!(new_basis.credentials, old_basis.credentials);
+    let new = registry
+        .submit(&registry.reserve(), id, Ls::default(), options())
+        .unwrap();
+    let (cmd, request) = fixture.next().await;
+    assert_eq!(cmd, "ls");
+    assert_eq!(request["password"], "new-password");
+    new.wait().await.unwrap();
+    let tokens = registry.pool_stats().idle_tokens[&id].clone();
+    assert_eq!(tokens.len(), 1);
+    fixture.long.add_permits(1);
+    old.wait().await.unwrap();
+    assert_eq!(registry.summary(old.token()).unwrap().setup, old_basis);
+    assert!(matches!(old.take().unwrap(), Completion::Reply(value) if value == "0"));
+    assert_eq!(registry.pool_stats().idle_tokens[&id], tokens);
+    let next = registry
+        .submit(&registry.reserve(), id, focus(), options())
+        .unwrap();
+    assert_eq!(fixture.next().await.1["password"], "new-password");
+    next.wait().await.unwrap();
+    assert_eq!(fixture.accepts.load(Ordering::SeqCst), 2);
+    assert_eq!(registry.pool_stats().idle_tokens[&id], tokens);
+    registry.shutdown(Shutdown::Drain).await.unwrap();
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn explicit_rebind_retires_idle_and_preserves_historical_result() {
+    let mut first = Fixture::new(None);
+    let mut second = Fixture::new(None);
+    let registry = Registry::new(Limits::default()).unwrap();
+    let id = registry.register(first.endpoint()).unwrap();
+    let driver = registry.start().unwrap();
+    let old = registry
+        .submit(&registry.reserve(), id, Ls::default(), options())
+        .unwrap();
+    first.next().await;
+    old.wait().await.unwrap();
+    let old_basis = registry.summary(old.token()).unwrap().setup;
+    let old_tokens = registry.pool_stats().idle_tokens[&id].clone();
+    let pending = registry.rebind(id, second.endpoint().address).unwrap();
+    assert_eq!(registry.pool_stats().idle, 0);
+    assert_eq!(registry.pool_stats().retiring, 0);
+    registry
+        .install_setup(pending.clone(), Protection::Plain)
+        .unwrap();
+    let new = registry
+        .submit(&registry.reserve(), id, Ls::default(), options())
+        .unwrap();
+    second.next().await;
+    new.wait().await.unwrap();
+    assert_eq!(first.accepts.load(Ordering::SeqCst), 1);
+    assert_eq!(second.accepts.load(Ordering::SeqCst), 1);
+    assert_ne!(registry.pool_stats().idle_tokens[&id], old_tokens);
+    assert_eq!(registry.summary(old.token()).unwrap().setup, old_basis);
+    assert!(matches!(old.take().unwrap(), Completion::Reply(_)));
+    assert_eq!(
+        registry.summary(new.token()).unwrap().setup,
+        pending.version()
+    );
+    registry.shutdown(Shutdown::Drain).await.unwrap();
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn setup_update_and_driver_loss_keep_original_uncertainty_without_replay() {
+    let mut fixture = Fixture::new(None);
+    let registry = Registry::new(Limits::default()).unwrap();
+    let id = registry.register(fixture.endpoint()).unwrap();
+    let basis = registry.setup_version(id).unwrap();
+    let driver = registry.start().unwrap();
+    let old = registry
+        .submit(
+            &registry.reserve(),
+            id,
+            LaunchWait { args: vec![] },
+            options(),
+        )
+        .unwrap();
+    assert_eq!(fixture.next().await.0, "launch");
+    let queued = registry
+        .submit(
+            &registry.reserve(),
+            id,
+            LaunchWait { args: vec![] },
+            options(),
+        )
+        .unwrap();
+    let ticket = registry.invalidate_credentials(id).unwrap();
+    registry
+        .install_setup(ticket.clone(), Protection::Plain)
+        .unwrap();
+    driver.stop().await;
+    assert_eq!(registry.summary(old.token()).unwrap().setup, basis);
+    assert!(registry.summary(old.token()).unwrap().unresolved);
+    assert_eq!(
+        registry.summary(queued.token()).unwrap().status,
+        Status::Completed
+    );
+    assert!(!registry.summary(queued.token()).unwrap().unresolved);
+    let driver = registry.start().unwrap();
+    let new = registry
+        .submit(&registry.reserve(), id, Ls::default(), options())
+        .unwrap();
+    assert_eq!(fixture.next().await.0, "ls");
+    new.wait().await.unwrap();
+    assert!(registry.summary(old.token()).unwrap().unresolved);
+    assert_eq!(registry.summary(old.token()).unwrap().setup, basis);
+    assert_eq!(fixture.accepts.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        registry.summary(new.token()).unwrap().setup,
+        ticket.version()
+    );
+    let unresolved = registry.shutdown(Shutdown::Drain).await.unwrap();
+    assert_eq!(unresolved.len(), 1);
+    assert_eq!(unresolved[0].token, old.token());
+    driver.stop().await;
+}
 fn launch() -> LaunchWait {
     LaunchWait {
         args: vec!["sh".into(), "-c".into(), "exit 0".into()],

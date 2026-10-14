@@ -406,7 +406,9 @@ name = "kitty-rc"
 version = "0.1.0"
 dependencies = [
  "kitty-rc-commands",
+ "kitty-rc-credentials",
  "kitty-rc-crypto",
+ "kitty-rc-discovery",
  "kitty-rc-endpoint",
  "kitty-rc-exchange",
  "kitty-rc-registry",
@@ -434,6 +436,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kitty-rc-credentials"
+version = "0.1.0"
+dependencies = [
+ "base85",
+ "kitty-rc-crypto",
+ "kitty-rc-discovery",
+ "kitty-rc-endpoint",
+ "kitty-rc-key-store",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "kitty-rc-crypto"
 version = "0.1.0"
 dependencies = [
@@ -445,6 +460,15 @@ dependencies = [
  "sha2",
  "thiserror 2.0.21",
  "x25519-dalek",
+]
+
+[[package]]
+name = "kitty-rc-discovery"
+version = "0.1.0"
+dependencies = [
+ "kitty-rc-endpoint",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -506,7 +530,9 @@ dependencies = [
  "base85",
  "futures-util",
  "kitty-rc-commands",
+ "kitty-rc-credentials",
  "kitty-rc-crypto",
+ "kitty-rc-discovery",
  "kitty-rc-endpoint",
  "kitty-rc-exchange",
  "kitty-rc-frame",

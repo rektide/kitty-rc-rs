@@ -8,6 +8,8 @@ members = [
   "access/key-store",
   "apps/cli",
   "access/endpoint",
+  "access/discovery",
+  "access/credentials",
   "execution/exchange",
   "execution/tokio",
   "control/registry",
@@ -30,6 +32,8 @@ kitty-rc-commands = { path = "protocol/commands" }
 kitty-rc-crypto = { path = "access/crypto" }
 kitty-rc-frame = { path = "protocol/frame" }
 kitty-rc-endpoint = { path = "access/endpoint" }
+kitty-rc-discovery = { path = "access/discovery" }
+kitty-rc-credentials = { path = "access/credentials" }
 kitty-rc-exchange = { path = "execution/exchange" }
 kitty-rc-tokio = { path = "execution/tokio" }
 kitty-rc-registry = { path = "control/registry" }

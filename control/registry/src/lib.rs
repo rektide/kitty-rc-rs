@@ -24,6 +24,11 @@ use std::{
 use tokio::{sync::Notify, task::JoinHandle, time::Instant};
 
 static NEXT_OWNER: AtomicU64 = AtomicU64::new(1);
+mod setup;
+pub use setup::{
+    AcquisitionError, BindingGeneration, CredentialGeneration, SetupError, SetupRejection,
+    SetupTicket, SetupVersion,
+};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Token {
     owner: u64,
@@ -104,11 +109,16 @@ pub struct Summary {
     pub status: Status,
     pub progress: Progress,
     pub unresolved: bool,
+    /// Exact locally captured basis, not a server incarnation or permission.
+    pub setup: SetupVersion,
+    pub setup_rejection: Option<SetupRejection>,
 }
 #[derive(Debug)]
 pub struct PoolStats {
     pub idle: usize,
     pub active_or_connecting: usize,
+    /// Slots held until stale transports close outside the owner lock.
+    pub retiring: usize,
     pub endpoints: BTreeMap<EndpointId, (usize, usize)>,
     pub idle_tokens: BTreeMap<EndpointId, Vec<kitty_rc_tokio::ConnectionToken>>,
 }
@@ -127,6 +137,10 @@ pub enum RefusalReason {
     ResponseReservation,
     #[error("unknown endpoint")]
     UnknownEndpoint,
+    #[error("endpoint credential setup is pending")]
+    SetupUnavailable,
+    #[error("endpoint setup changed during preparation")]
+    SetupChanged,
     #[error("token already accepted")]
     AlreadyAccepted,
     #[error("deadline elapsed before acceptance")]
@@ -172,6 +186,9 @@ pub enum RegistryError {
 
 struct Record {
     endpoint: EndpointId,
+    setup_version: SetupVersion,
+    setup_rejection: Option<SetupRejection>,
+    rejected_input: Option<Prepared>,
     class: usize,
     deadline: Instant,
     max_response: usize,
@@ -187,13 +204,14 @@ struct Record {
     done: Arc<Notify>,
 }
 struct State {
-    endpoints: BTreeMap<EndpointId, Endpoint>,
+    endpoints: BTreeMap<EndpointId, setup::Entry>,
     records: BTreeMap<Token, Record>,
     closed: bool,
     driver: bool,
     generation: u64,
     cursor: Option<EndpointId>,
     idle: BTreeMap<EndpointId, Vec<Session>>,
+    retiring: BTreeMap<EndpointId, usize>,
 }
 struct Shared {
     owner: u64,
@@ -242,6 +260,7 @@ impl Registry {
         PoolStats {
             idle: endpoints.values().map(|(idle, _)| idle).sum(),
             active_or_connecting: endpoints.values().map(|(_, active)| active).sum(),
+            retiring: s.retiring.values().sum(),
             endpoints,
             idle_tokens,
         }
@@ -276,6 +295,7 @@ impl Registry {
                     generation: 0,
                     cursor: None,
                     idle: BTreeMap::new(),
+                    retiring: BTreeMap::new(),
                 }),
                 wake: Notify::new(),
                 lifecycle: Notify::new(),
@@ -297,37 +317,8 @@ impl Registry {
             committed: AtomicBool::new(false),
         }
     }
-    pub fn register(&self, mut endpoint: Endpoint) -> Result<EndpointId, RegistryError> {
-        let address_bytes = match &endpoint.address {
-            kitty_rc_endpoint::Address::Unix(path) => path.as_os_str().as_encoded_bytes().len(),
-            kitty_rc_endpoint::Address::Tcp(_) => 32,
-        };
-        let access_bytes = match &endpoint.protection {
-            kitty_rc_endpoint::Protection::Plain => 0,
-            kitty_rc_endpoint::Protection::Encrypted {
-                password,
-                key_origin,
-                ..
-            } => password
-                .len()
-                .saturating_add(key_origin.len())
-                .saturating_add(32),
-        };
-        if address_bytes.saturating_add(access_bytes) > self.shared.limits.max_request {
-            return Err(RegistryError::EndpointSetupLimit);
-        }
-        if let kitty_rc_endpoint::Address::Unix(path) = &mut endpoint.address {
-            path.shrink_to_fit();
-        }
-        if let kitty_rc_endpoint::Protection::Encrypted {
-            password,
-            key_origin,
-            ..
-        } = &mut endpoint.protection
-        {
-            password.shrink_to_fit();
-            key_origin.shrink_to_fit();
-        }
+    pub fn register(&self, endpoint: Endpoint) -> Result<EndpointId, RegistryError> {
+        let endpoint = setup::normalize(endpoint, &self.shared.limits)?;
         let mut state = self.shared.state.lock().unwrap();
         if state.closed {
             return Err(RegistryError::Closed);
@@ -340,7 +331,7 @@ impl Registry {
             owner: t.owner,
             sequence: t.sequence,
         };
-        state.endpoints.insert(id, endpoint);
+        state.endpoints.insert(id, setup::Entry::ready(endpoint));
         Ok(id)
     }
     /// No await occurs between input installation and handle delivery. Refusal
@@ -360,7 +351,7 @@ impl Registry {
             .unwrap()
             .endpoints
             .get(&endpoint)
-            .cloned();
+            .map(|entry| (entry.version, entry.setup.clone()));
         let prepared = (|| {
             if token.owner != self.shared.owner {
                 return Err(RefusalReason::ForeignToken);
@@ -368,7 +359,8 @@ impl Registry {
             if options.max_response < 256 {
                 return Err(RefusalReason::ResponseReservation);
             }
-            let setup = setup.as_ref().ok_or(RefusalReason::UnknownEndpoint)?;
+            let (_, setup) = setup.as_ref().ok_or(RefusalReason::UnknownEndpoint)?;
+            let setup = setup.as_ref().ok_or(RefusalReason::SetupUnavailable)?;
             prepare(&command, &setup.protection, self.shared.limits.max_request)
                 .map_err(RefusalReason::Prepare)
         })();
@@ -377,7 +369,8 @@ impl Registry {
             Err(reason) => return Err(Refused { command, reason }),
         };
         let class = class_index(command.class());
-        let cause_bytes = match &setup.as_ref().unwrap().address {
+        let (setup_version, frozen_setup) = setup.as_ref().unwrap();
+        let cause_bytes = match &frozen_setup.as_ref().unwrap().address {
             kitty_rc_endpoint::Address::Unix(path) => path.as_os_str().as_encoded_bytes().len(),
             kitty_rc_endpoint::Address::Tcp(_) => 32,
         };
@@ -399,6 +392,12 @@ impl Registry {
             .sum::<usize>();
         let reason = if state.closed {
             Some(RefusalReason::Closed)
+        } else if state
+            .endpoints
+            .get(&endpoint)
+            .is_none_or(|entry| entry.version != *setup_version || entry.setup.is_none())
+        {
+            Some(RefusalReason::SetupChanged)
         } else if state.records.contains_key(&token) {
             Some(RefusalReason::AlreadyAccepted)
         } else if options.deadline <= Instant::now() {
@@ -431,6 +430,9 @@ impl Registry {
             token,
             Record {
                 endpoint,
+                setup_version: *setup_version,
+                setup_rejection: None,
+                rejected_input: None,
                 class,
                 deadline: options.deadline,
                 max_response: options.max_response,
@@ -467,6 +469,8 @@ impl Registry {
                 status: r.status,
                 progress: r.evidence.progress(),
                 unresolved: r.unresolved,
+                setup: r.setup_version,
+                setup_rejection: r.setup_rejection,
             })
     }
     pub fn inventory(&self) -> Vec<Summary> {
@@ -482,6 +486,8 @@ impl Registry {
                 status: r.status,
                 progress: r.evidence.progress(),
                 unresolved: r.unresolved,
+                setup: r.setup_version,
+                setup_rejection: r.setup_rejection,
             })
             .collect()
     }
@@ -715,6 +721,7 @@ fn complete(r: &mut Record, outcome: Outcome) {
 struct Work {
     token: Token,
     endpoint_id: EndpointId,
+    setup_version: SetupVersion,
     session: Session,
     retired: Option<Session>,
     prepared: Prepared,
@@ -748,7 +755,8 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
         .filter(|r| r.status == Status::Running)
         .map(|r| (r.endpoint, r.class))
         .collect();
-    if running.len() >= l.connections {
+    let retiring_count = s.retiring.values().sum::<usize>();
+    if running.len().saturating_add(retiring_count) >= l.connections {
         return None;
     }
     let mut endpoints: Vec<_> = s.endpoints.keys().copied().collect();
@@ -757,7 +765,13 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
         endpoints.rotate_left(split);
     }
     for endpoint in endpoints {
-        if running.iter().filter(|(ep, _)| *ep == endpoint).count() >= l.connections_per_endpoint {
+        if running
+            .iter()
+            .filter(|(ep, _)| *ep == endpoint)
+            .count()
+            .saturating_add(s.retiring.get(&endpoint).copied().unwrap_or(0))
+            >= l.connections_per_endpoint
+        {
             continue;
         }
         for class in 0..3 {
@@ -778,14 +792,19 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                 })
                 .map(|(token, _)| *token);
             if let Some(token) = token {
-                let setup = s.endpoints[&endpoint].clone();
+                let entry = &s.endpoints[&endpoint];
+                let setup = entry
+                    .setup
+                    .clone()
+                    .expect("accepted queued setup remains ready");
+                let setup_version = entry.version;
                 let mut retired = None;
                 let session =
                     if let Some(session) = s.idle.get_mut(&endpoint).and_then(|idle| idle.pop()) {
                         session
                     } else {
                         let idle_count = s.idle.values().map(Vec::len).sum::<usize>();
-                        if running.len() + idle_count >= l.connections {
+                        if running.len() + idle_count + retiring_count >= l.connections {
                             // Demand-driven capacity transfer, not TTL pruning.
                             let victim = s
                                 .idle
@@ -809,6 +828,7 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                 return Some(Work {
                     token,
                     endpoint_id: endpoint,
+                    setup_version,
                     session,
                     retired,
                     prepared,
@@ -841,7 +861,7 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
                     _ = work.cancel.notified() => Outcome::Interrupted { progress: evidence.progress(), reason: ExecutionError::Cancelled { phase: evidence.phase() } },
                     outcome = work.session.execute_prepared(work.prepared, work.deadline, work.max_response, work.evidence) => outcome,
                 };
-                (work.token, work.endpoint_id, work.session, outcome)
+                (work.token, work.endpoint_id, work.setup_version, work.session, outcome)
             });
         }
         let next_deadline = shared
@@ -857,15 +877,43 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
             _ = &mut wake => {},
             _ = async { match next_deadline { Some(d) => tokio::time::sleep_until(d).await, None => std::future::pending().await } } => {},
             returned = tasks.next(), if !tasks.is_empty() => {
-                if let Some((token, endpoint, session, outcome)) = returned {
-                        let idle = if session.is_connected() && matches!(&outcome, Outcome::Reply(_)) && !outcome.unresolved() { Some(session) } else { drop(session); None };
-                        let mut s = shared.state.lock().unwrap();
-                        if let Some(r) = s.records.get_mut(&token) { if r.status == Status::Running && r.generation == generation { complete(r, outcome); if let Some(session) = idle { s.idle.entry(endpoint).or_default().push(session); } } }
-                        shared.lifecycle.notify_waiters();
+                if let Some((token, endpoint, setup_version, session, outcome)) = returned {
+                    let reusable = session.is_connected() && matches!(&outcome, Outcome::Reply(_)) && !outcome.unresolved();
+                    let mut returned_session = Some(session);
+                    let mut s = shared.state.lock().unwrap();
+                    let current = s.endpoints.get(&endpoint).is_some_and(|entry| entry.version == setup_version && entry.setup.is_some());
+                    if let Some(r) = s.records.get_mut(&token)
+                        && r.status == Status::Running && r.generation == generation && r.setup_version == setup_version {
+                        complete(r, outcome);
+                        if reusable && current { s.idle.entry(endpoint).or_default().push(returned_session.take().unwrap()); }
+                    }
+                    let retiring = returned_session.is_some();
+                    if retiring { *s.retiring.entry(endpoint).or_default() += 1; }
+                    drop(s);
+                    drop(returned_session); // Stale completion closes outside lock.
+                    if retiring { finish_retirement(&shared, endpoint, 1); }
+                    shared.lifecycle.notify_waiters();
                 }
             }
         }
     }
+}
+
+fn finish_retirement(shared: &Shared, endpoint: EndpointId, count: usize) {
+    if count == 0 {
+        return;
+    }
+    let mut s = shared.state.lock().unwrap();
+    let reserved = s
+        .retiring
+        .get_mut(&endpoint)
+        .expect("retirement slot owned");
+    *reserved -= count;
+    if *reserved == 0 {
+        s.retiring.remove(&endpoint);
+    }
+    drop(s);
+    shared.wake.notify_one();
 }
 
 #[cfg(test)]

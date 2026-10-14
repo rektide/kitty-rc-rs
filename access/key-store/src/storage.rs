@@ -26,11 +26,27 @@ pub enum StoreError {
     },
     #[error("public key record cannot contain TSV line/field separators")]
     RecordSeparators,
+    #[error("key store is not a regular file: {path:?}")]
+    NotRegular { path: PathBuf },
 }
 
 /// Missing file is distinct from an existing empty/malformed store. Every
 /// malformed record remains reported by the shared parser; this never rewrites.
 pub fn read(path: &Path, max_bytes: usize) -> Result<Option<StoreContents>, StoreError> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => {
+            return Err(StoreError::Io {
+                operation: "inspect",
+                path: path.into(),
+                source,
+            });
+        }
+    };
+    if !metadata.is_file() {
+        return Err(StoreError::NotRegular { path: path.into() });
+    }
     let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -42,6 +58,17 @@ pub fn read(path: &Path, max_bytes: usize) -> Result<Option<StoreContents>, Stor
             });
         }
     };
+    if !file
+        .metadata()
+        .map_err(|source| StoreError::Io {
+            operation: "inspect opened file",
+            path: path.into(),
+            source,
+        })?
+        .is_file()
+    {
+        return Err(StoreError::NotRegular { path: path.into() });
+    }
     let mut bytes = vec![];
     file.take((max_bytes as u64).saturating_add(1))
         .read_to_end(&mut bytes)
@@ -70,12 +97,29 @@ pub fn append(path: &Path, record: &PubkeyRecord) -> Result<(), StoreError> {
     if record.pubkey.contains(['\t', '\r', '\n']) {
         return Err(StoreError::RecordSeparators);
     }
+    match std::fs::metadata(path) {
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(StoreError::NotRegular { path: path.into() });
+        }
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(source) => {
+            return Err(StoreError::Io {
+                operation: "inspect before append",
+                path: path.into(),
+                source,
+            });
+        }
+    }
     let action = || -> std::io::Result<()> {
         let mut file = OpenOptions::new()
             .read(true)
             .append(true)
             .create(true)
             .open(path)?;
+        if !file.metadata()?.is_file() {
+            return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));
+        }
         let mut prefix = "";
         if file.metadata()?.len() != 0 {
             file.seek(SeekFrom::End(-1))?;

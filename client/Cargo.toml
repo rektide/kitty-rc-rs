@@ -11,6 +11,8 @@ kitty-rc-exchange.workspace = true
 kitty-rc-tokio.workspace = true
 kitty-rc-registry.workspace = true
 kitty-rc-crypto.workspace = true
+kitty-rc-discovery.workspace = true
+kitty-rc-credentials.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
