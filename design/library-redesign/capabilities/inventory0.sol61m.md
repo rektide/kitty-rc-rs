@@ -17,13 +17,17 @@ sources:
   - resource: /design/library-redesign/teardown0.glm53m.md#5-restoration-inventory-for-the-command-catalog
     title: Restoration inventory, corrected against stable handlers here
   - resource: https://github.com/kovidgoyal/kitty/tree/e300597364aabb4890ebdd3a5491397f858fd714/kitty/rc
-    title: All 40 stable v0.49.2 command specs, client payloads and handlers directly inspected
+    title: All 41 stable v0.49.2 command specs, client payloads and handlers directly inspected
   - resource: https://github.com/kovidgoyal/kitty/blob/e300597364aabb4890ebdd3a5491397f858fd714/kitty/options/utils.py
     title: Directly inspected nested action argument parsers
   - resource: https://github.com/kovidgoyal/kitty/blob/e300597364aabb4890ebdd3a5491397f858fd714/kitty/remote_control.py
     title: Native terminal responses, async registration and stream handshake
   - resource: https://github.com/kovidgoyal/kitty/blob/5bf3c2dc676efd5c4b4526eb135c922701565707/kitty/rc/base.py
     title: StreamInFlight replacement/abort and empty-terminator behavior
+  - resource: https://github.com/kovidgoyal/kitty/blob/e300597364aabb4890ebdd3a5491397f858fd714/kitty/boss.py
+    title: Nested combine dispatch, interactive create_marker and resize return behavior
+  - resource: https://github.com/kovidgoyal/kitty/blob/5bf3c2dc676efd5c4b4526eb135c922701565707/kitty/conf/utils.py
+    title: ToCmdline splits then expands tilde and server environment even for quoted tokens
 verification:
   scope: Source audit, not live server or minimum-version conformance
   evidence: Stable tag peeled to e300597364aabb4890ebdd3a5491397f858fd714; HEAD 5bf3c2dc676efd5c4b4526eb135c922701565707; git diff of kitty/rc and direct handler/parser reads
@@ -61,7 +65,7 @@ required output fields must not become default/empty successes. Additive object
 fields can be ignored. Process exit failure is successful *command data*, not
 an `ok:false` RC failure.
 
-## Complete stable RC inventory (40 commands)
+## Complete stable RC inventory (41 commands)
 
 Payload fields below omit injected peer/async metadata. Optional scope fields
 keep upstream names, not a universal fabricated `target` field.
@@ -89,7 +93,7 @@ keep upstream names, not a universal fabricated `target` field.
 | new-window | client translates old `window_type`/`new_tab` into launch `type`; `args`, title/cwd etc | required ID string R/S | Deprecated; use typed launch; raw entrance only |
 | remove-marker | `match`, `self` | ack R | Remove window marker |
 | resize-os-window | `match`, `self`, `incremental`, `action`, `unit`, width/height, `os_panel` list | ack R/S | cells/pixels; resize/toggle-fullscreen/toggle-maximized/toggle-visibility/hide/show/os-panel; WM may refuse |
-| resize-window | `match`, `self`, integer `increment`, `axis` horizontal/vertical/reset | bool or absent R; string is native error | **Not** scroll amount pair; source `string_return_is_error` handled by boss |
+| resize-window | `match`, `self`, integer `increment`, `axis` horizontal/vertical/reset | bool, absent, or layout-refusal string R | **Not** scroll amount pair; `string_return_is_error` is reference-client interpretation, not an envelope rewrite |
 | run | `cmdline` list, `env` list, privilege options, base64 `data`, stream ID | required object stdout/stderr base64, exit_code/exit_status D+U | Even empty input uses shared accumulator; defer execution until exclusion lane |
 | screenshot | `match`, `match_tab`, `output_path` | PNG base64 string D, or `Screenshot saved to: <absolute path>` string D | Visible target required; distinguish server-path and image profiles; introduced 0.49 |
 | scroll-window | `match`, `self`, `amount` pair | ack R/S | number + l/p/u/r, start/end + null; unscroll/prompt integral |
@@ -119,6 +123,10 @@ kitten/launch/config/color commands use shell-like splitting; integer navigation
 uses integers; send_text is mode + Python/ANSI-C escapes, not raw UTF-8 args.
 These are not RC payload objects. Target is first matched window via outer
 `match_window`/`self`; effects may reach tab/server/OS-window beyond that target.
+Nested `new_*`/`launch`/`kitten` use `to_cmdline`, which expands tilde/environment
+variables **after** splitting. Quoting preserves token boundaries but is not
+literal argv preservation. Use the outer RC Launch/Kitten JSON lists for literal
+values. load_config_file/set_colors use shlex splitting without that helper.
 
 | Restoration group | Stable names / argument contract | Standing |
 |---|---|---|
@@ -129,7 +137,7 @@ These are not RC payload objects. Target is first matched window via outer
 | OS window | toggle_fullscreen, toggle_maximized | Typed no-arg; environment-dependent UI effects |
 | Clipboard | copy_to_clipboard, paste_from_clipboard, paste_selection, clear_selection, copy_or_interrupt; paste escaped remainder | Known no-arg profiles typed; raw escaped paste deferred |
 | Scroll | scroll_line_up/down, scroll_page_up/down, scroll_home/end, show_scrollback; scroll_to_prompt integer plus offset; scroll_to_mark prev/next group | Typed finite grammar, show_scrollback may launch overlay |
-| Markers | toggle_marker shell-split type/pairs; remove_marker; create_marker legacy name | RC create-marker typed; mappable create_marker name not assumed supported; use toggle_marker/raw |
+| Markers | toggle_marker shell-split type/pairs; remove_marker; create_marker no args | RC create-marker sets specification; mappable create_marker opens interactive ask kitten, not equivalent completion |
 | Mouse/debug | mouse_selection enum; legacy mouse_click_url; debug_config; dump_lines_with_attrs optional remainder | Context-specific mouse actions left raw; mouse_click_url legacy spelling not asserted; debug/raw only |
 | Process/nested | send_key whitespace keys; send_text mode+escaped text; kitten shell argv; launch shell argv; signal_child whitespace signals | kitten/launch/signal typed grammar; send_text raw nested grammar initially |
 | Config/style | clear_terminal action + active/all; show_kitty_doc remainder; edit_config_file; change_font_size all/current + operator/amount; set_background_opacity remainder; load_config_file shell argv; set_colors shell argv | Typed audited grammar for clear/font/config/colors; config effects broad |

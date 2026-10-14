@@ -12,6 +12,10 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 
+fn required_id<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<u64>, D::Error> {
+    u64::deserialize(de).map(Some)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProcessInfo {
     pub pid: Option<u64>,
@@ -22,6 +26,7 @@ pub struct ProcessInfo {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct WindowInfo {
+    #[serde(deserialize_with = "required_id")]
     pub id: Option<u64>,
     pub title: Option<String>,
     pub pid: Option<u64>,
@@ -90,7 +95,6 @@ pub struct TabGroup {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TabInfo {
-    #[serde(default)]
     pub windows: Vec<WindowInfo>,
     #[serde(default)]
     pub active_window_history: Vec<u64>,
@@ -98,6 +102,7 @@ pub struct TabInfo {
     pub enabled_layouts: Vec<String>,
     #[serde(default)]
     pub groups: Vec<TabGroup>,
+    #[serde(deserialize_with = "required_id")]
     pub id: Option<u64>,
     pub is_active: Option<bool>,
     pub is_focused: Option<bool>,
@@ -109,9 +114,9 @@ pub struct TabInfo {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OsWindow {
-    #[serde(default)]
     pub tabs: Vec<TabInfo>,
     pub background_opacity: Option<f32>,
+    #[serde(deserialize_with = "required_id")]
     pub id: Option<u64>,
     pub is_active: Option<bool>,
     pub is_focused: Option<bool>,
@@ -173,9 +178,9 @@ mod tests {
     #[test]
     fn layout_specific_options_do_not_assume_integer_bias() {
         let listing = json!([{"id": 1, "tabs": [
-            {"layout": "tall", "layout_opts": {"bias": 50.5, "full_size": 1, "mirrored": "n"}},
-            {"layout": "grid", "layout_opts": {"bias": [1.0, 2.0]}},
-            {"layout": "splits", "layout_opts": {"minimal_borders": true}}
+            {"id": 2, "windows": [], "layout": "tall", "layout_opts": {"bias": 50.5, "full_size": 1, "mirrored": "n"}},
+            {"id": 3, "windows": [], "layout": "grid", "layout_opts": {"bias": [1.0, 2.0]}},
+            {"id": 4, "windows": [], "layout": "splits", "layout_opts": {"minimal_borders": true}}
         ]}]);
         let parsed = parse_ls_data(&listing).unwrap();
         assert_eq!(

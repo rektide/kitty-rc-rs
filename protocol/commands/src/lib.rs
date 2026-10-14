@@ -1,11 +1,11 @@
 //! Typed kitty remote-control commands and output models.
 //!
-//! This crate is the seed of the command catalog on the accepted redesign's
+//! This crate implements the finite command catalog on the accepted redesign's
 //! terms: a command binds its typed payload construction to a
 //! [`PlainRequest`](kitty_rc_schema::PlainRequest) and its typed output
 //! decoding runs only after the remote outcome has been validated. It
-//! implements the finite first slice rather than a migrated pile of drifted
-//! legacy builders. New commands follow this
+//! implements audited domain families rather than drifted legacy builders.
+//! Upload execution is deliberately deferred. New commands follow this
 //! pattern against upstream-derived fixtures, never by treating an old
 //! serializer as an oracle.
 //!
@@ -13,8 +13,32 @@
 //! an empty success.** Execution classifies native errors before invoking
 //! [`Command::decode`]. The optional pure [`ls_from_response`] helper likewise
 //! reports [`LsError::RemoteFailure`] instead of fabricating an empty listing.
+//!
+//! ```
+//! use kitty_rc_commands::{Command, Submission};
+//! use kitty_rc_commands::actions::{Action, KnownAction};
+//! use kitty_rc_commands::configuration::LoadConfig;
+//! use kitty_rc_commands::targets::{WindowId, WindowTarget};
+//! let action = Action::builder()
+//!     .action(KnownAction::GotoTab(2))
+//!     .target(WindowTarget::Id(WindowId(7)))
+//!     .build();
+//! assert_eq!(action.request().cmd, "action");
+//! // Deliberate suppression acknowledges only local submission.
+//! let config = Submission(LoadConfig::builder()
+//!     .overrides(vec!["font_size=16".into()]).build());
+//! assert!(!config.reusable());
+//! ```
 
+pub mod actions;
+pub mod appearance;
+pub mod catalog;
+pub mod configuration;
 pub mod outputs;
+pub mod process;
+pub mod tab;
+pub mod targets;
+pub mod window;
 
 use kitty_rc_schema::{PlainRequest, ResponseEnvelope, ResponseKind};
 use outputs::OsWindow;
@@ -85,6 +109,29 @@ pub enum TextExtent {
     Screen,
     All,
     Selection,
+    FirstCommandOutputOnScreen,
+    LastCommandOutput,
+    LastVisitedCommandOutput,
+    LastNonEmptyOutput,
+    /// Observed since kitty 0.48; not a global support-floor claim.
+    Alternate,
+    AlternateScrollback,
+}
+
+impl TextExtent {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Screen => "screen",
+            Self::All => "all",
+            Self::Selection => "selection",
+            Self::FirstCommandOutputOnScreen => "first_cmd_output_on_screen",
+            Self::LastCommandOutput => "last_cmd_output",
+            Self::LastVisitedCommandOutput => "last_visited_cmd_output",
+            Self::LastNonEmptyOutput => "last_non_empty_output",
+            Self::Alternate => "alternate",
+            Self::AlternateScrollback => "alternate_scrollback",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, bon::Builder)]
@@ -93,6 +140,16 @@ pub struct GetText {
     pub match_spec: Option<String>,
     #[builder(default)]
     pub extent: TextExtent,
+    #[builder(default)]
+    pub ansi: bool,
+    #[builder(default)]
+    pub cursor: bool,
+    #[builder(default)]
+    pub wrap_markers: bool,
+    #[builder(default)]
+    pub clear_selection: bool,
+    #[builder(default)]
+    pub only_self: bool,
 }
 impl Command for GetText {
     fn reusable(&self) -> bool {
@@ -102,7 +159,7 @@ impl Command for GetText {
     fn request(&self) -> PlainRequest {
         let mut r = PlainRequest::new("get-text");
         r.payload = Some(
-            serde_json::json!({"match": self.match_spec, "extent": match self.extent { TextExtent::Screen => "screen", TextExtent::All => "all", TextExtent::Selection => "selection" }, "ansi": false, "cursor": false, "wrap_markers": false, "clear_selection": false, "self": false}),
+            serde_json::json!({"match": self.match_spec, "extent": self.extent.as_str(), "ansi": self.ansi, "cursor": self.cursor, "wrap_markers": self.wrap_markers, "clear_selection": self.clear_selection, "self": self.only_self}),
         );
         r
     }
@@ -170,6 +227,60 @@ fn decode_string(data: Option<serde_json::Value>) -> Result<String, DecodeError>
     match data {
         Some(serde_json::Value::String(s)) => Ok(s),
         _ => Err(DecodeError::MissingData),
+    }
+}
+
+pub(crate) fn request(name: &str, payload: serde_json::Value) -> PlainRequest {
+    let mut request = PlainRequest::new(name);
+    request.payload = Some(payload);
+    request
+}
+
+/// Only commands whose audited native contract permits reply suppression.
+/// This does not establish remote execution or replay safety.
+pub trait CanSubmitWithoutReply: Command {}
+
+/// Deliberately suppress the native reply of an eligible command. A completed
+/// submission proves only local outbound completion; its transport retires.
+#[derive(Debug, Clone)]
+pub struct Submission<C: CanSubmitWithoutReply>(pub C);
+impl<C: CanSubmitWithoutReply> Command for Submission<C> {
+    type Output = ();
+    fn request(&self) -> PlainRequest {
+        self.0.request()
+    }
+    fn class(&self) -> Class {
+        self.0.class()
+    }
+    fn mode(&self) -> Mode {
+        Mode::SubmissionOnly
+    }
+    fn decode(_: Option<serde_json::Value>) -> Result<(), DecodeError> {
+        Ok(())
+    }
+}
+impl CanSubmitWithoutReply for FocusWindow {}
+
+/// Session serialization is a separate unfiltered listing result profile;
+/// upstream ignores output_format=session when match/self filters are supplied.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SessionText;
+impl Command for SessionText {
+    type Output = String;
+    fn request(&self) -> PlainRequest {
+        request(
+            "ls",
+            serde_json::json!({"output_format": "session", "all_env_vars": false}),
+        )
+    }
+    fn class(&self) -> Class {
+        Class::Observation
+    }
+    fn reusable(&self) -> bool {
+        true
+    }
+    fn decode(data: Option<serde_json::Value>) -> Result<String, DecodeError> {
+        decode_string(data)
     }
 }
 
