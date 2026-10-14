@@ -31,8 +31,8 @@ use aes_gcm::{
     Aes256Gcm,
     aead::{Aead, KeyInit, generic_array::GenericArray},
 };
-use kitty_rc_schema::{PlainRequest, ProtectedEnvelope};
-use rand_core::{CryptoRngCore, RngCore};
+use kitty_rc_schema::ProtectedEnvelope;
+use rand_core::CryptoRngCore;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -140,11 +140,6 @@ pub fn encrypt_request(
 
     let plaintext = serde_json::to_vec(&command)?;
 
-    let request_version = command
-        .get("version")
-        .cloned()
-        .unwrap_or_else(|| serde_json::to_value(kitty_rc_schema::SUPPORTED).expect("serializable"));
-
     let ephemeral = StaticSecret::random_from_rng(&mut *rng);
     let sender_public = PublicKey::from(&ephemeral);
     let shared = ephemeral.diffie_hellman(&server_key.0);
@@ -234,11 +229,12 @@ pub fn decrypt_envelope(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kitty_rc_schema::PlainRequest;
     use kitty_rc_schema::SUPPORTED;
     use rand_core::OsRng;
 
     fn server_pair() -> (StaticSecret, ServerPublicKey) {
-        let secret = StaticSecret::random_from_rng(&mut OsRng);
+        let secret = StaticSecret::random_from_rng(OsRng);
         let key = ServerPublicKey(PublicKey::from(&secret));
         (secret, key)
     }
@@ -340,7 +336,7 @@ mod tests {
         assert_eq!(base85::decode(&envelope.iv).unwrap().len(), IV_LEN);
         assert_eq!(base85::decode(&envelope.tag).unwrap().len(), TAG_LEN);
         assert_eq!(base85::decode(&envelope.pubkey).unwrap().len(), KEY_LEN);
-        assert!(base85::decode(&envelope.encrypted).unwrap().len() > 0);
+        assert!(!base85::decode(&envelope.encrypted).unwrap().is_empty());
         assert_eq!(envelope.enc_proto, None);
         // The envelope must not carry the password or plaintext command.
         let encoded = serde_json::to_string(&envelope).unwrap();
@@ -399,7 +395,7 @@ mod tests {
         )
         .unwrap();
 
-        let other_party = StaticSecret::random_from_rng(&mut OsRng);
+        let other_party = StaticSecret::random_from_rng(OsRng);
         assert!(matches!(
             decrypt_envelope(&envelope, &other_party),
             Err(CryptoError::AuthenticationFailed)

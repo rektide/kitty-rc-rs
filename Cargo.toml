@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "protocol/schema",
   "protocol/frame",
+  "protocol/commands",
   "access/crypto",
   "access/key-store",
   "apps/cli",
@@ -20,9 +21,6 @@ base85 = "2.0"
 bon = "3.5"
 clap = { version = "4.0", features = ["derive"] }
 kitty-rc-schema = { path = "protocol/schema" }
-kitty-rc-frame = { path = "protocol/frame" }
-kitty-rc-commands = { path = "protocol/commands" }
-kitty-rc-crypto = { path = "access/crypto" }
 kitty-rc-key-store = { path = "access/key-store" }
 rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { version = "1.0", features = ["derive"] }
