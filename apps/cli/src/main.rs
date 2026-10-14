@@ -10,8 +10,8 @@
 //! erased.
 
 use clap::{Parser, Subcommand};
-use kitty_rc_key_store::{PubkeyRecord, latest_for_pid, parse_store};
-use std::fs::{self, File, OpenOptions};
+use kitty_rc_key_store::{PubkeyRecord, latest_for_pid, storage};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -41,7 +41,11 @@ enum Commands {
         window_id: Option<u32>,
     },
     /// Clean up stale entries (explicit; keeps records for running processes)
-    Cleanup,
+    Cleanup {
+        /// Assert that all non-CLI publishers are stopped during maintenance
+        #[arg(long, required = true)]
+        quiescent: bool,
+    },
     /// Get the newest public key recorded for a PID
     Get {
         /// PID of the kitty instance
@@ -59,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             window_id,
             pubkey,
         } => add(pid, window_id, pubkey)?,
-        Commands::Cleanup => cleanup()?,
+        Commands::Cleanup { quiescent: _ } => cleanup()?,
         Commands::Get { pid } => get(pid)?,
     }
 
@@ -71,11 +75,18 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&db_dir)?;
 
     let db_path = db_path()?;
-    if !db_path.exists() {
-        File::create(&db_path)?;
-        println!("Created database: {}", db_path.display());
-    } else {
-        println!("Database already exists: {}", db_path.display());
+    let _lock = StoreLock::acquire(&db_path)?;
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&db_path)
+    {
+        Ok(_) => println!("Created database: {}", db_path.display()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            storage::read(&db_path, MAX_STORE)?;
+            println!("Database already exists: {}", db_path.display());
+        }
+        Err(error) => return Err(error.into()),
     }
 
     println!("\nAdd this to your ~/.zshrc:");
@@ -125,12 +136,10 @@ fn add(
         timestamp: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
     };
 
-    let mut file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(db_path()?)?;
-    writeln!(file, "{}", record.render())?;
-    file.flush()?;
+    let path = db_path()?;
+    fs::create_dir_all(path.parent().ok_or("store has no parent")?)?;
+    let _lock = StoreLock::acquire(&path)?;
+    storage::append(&path, &record)?;
 
     Ok(())
 }
@@ -138,15 +147,14 @@ fn add(
 fn cleanup() -> Result<(), Box<dyn std::error::Error>> {
     let db_path = db_path()?;
 
-    if !db_path.exists() {
+    fs::create_dir_all(db_dir()?)?;
+    let _lock = StoreLock::acquire(&db_path)?;
+    let Some(contents) = storage::read(&db_path, MAX_STORE)? else {
         println!("Database does not exist");
         return Ok(());
-    }
-
-    let contents = parse_store(&fs::read_to_string(&db_path)?);
-    for (line, error) in &contents.malformed {
-        eprintln!("malformed record at line {line}: {error}");
-    }
+    };
+    reject_malformed(&contents)?;
+    let before = fs::read(&db_path)?;
 
     let alive: Vec<&PubkeyRecord> = contents
         .records
@@ -155,11 +163,38 @@ fn cleanup() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     let removed = contents.records.len() - alive.len();
 
-    let mut file = File::create(&db_path)?;
-    for record in &alive {
-        writeln!(file, "{}", record.render())?;
+    // Preserve surviving legacy record bytes (including CRLF/no final LF).
+    let replacement: Vec<u8> = before
+        .split_inclusive(|byte| *byte == b'\n')
+        .filter(|line| {
+            let text = std::str::from_utf8(line).expect("shared read validated UTF-8");
+            kitty_rc_key_store::parse_store(text)
+                .records
+                .first()
+                .is_none_or(|record| is_process_running(record.pid))
+        })
+        .flatten()
+        .copied()
+        .collect();
+    let temporary = db_path.with_extension("tsv.cleanup");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let result = (|| -> io::Result<()> {
+        file.write_all(&replacement)?;
+        file.sync_all()?;
+        if fs::read(&db_path)? != before {
+            return Err(io::Error::other(
+                "store changed during cleanup; stopped without replacing it",
+            ));
+        }
+        fs::rename(&temporary, &db_path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
     }
-    file.flush()?;
+    result?;
 
     println!(
         "Cleanup complete: kept {} of {} entries (removed {} stale)",
@@ -174,21 +209,14 @@ fn cleanup() -> Result<(), Box<dyn std::error::Error>> {
 fn get(pid: u32) -> Result<(), Box<dyn std::error::Error>> {
     let db_path = db_path()?;
 
-    if !db_path.exists() {
-        eprintln!("Database does not exist");
-        std::process::exit(1);
-    }
-
-    let contents = parse_store(&fs::read_to_string(&db_path)?);
-    for (line, error) in &contents.malformed {
-        eprintln!("malformed record at line {line}: {error}");
-    }
+    let contents =
+        storage::read(&db_path, MAX_STORE)?.ok_or("database does not exist; run init or add")?;
+    reject_malformed(&contents)?;
 
     if let Some(record) = latest_for_pid(&contents.records, pid) {
         println!("{}", record.pubkey);
     } else {
-        eprintln!("No public key found for PID {pid}");
-        std::process::exit(1);
+        return Err(format!("no public key found for PID {pid}").into());
     }
 
     Ok(())
@@ -215,5 +243,37 @@ fn is_process_running(pid: u32) -> bool {
     {
         let _ = pid;
         true
+    }
+}
+
+const MAX_STORE: usize = 16 * 1024 * 1024;
+
+fn reject_malformed(
+    contents: &kitty_rc_key_store::StoreContents,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if contents.malformed.is_empty() {
+        return Ok(());
+    }
+    for (line, error) in &contents.malformed {
+        eprintln!("malformed record at line {line}: {error}");
+    }
+    Err("malformed store; refusing operation without changing its bytes".into())
+}
+
+/// Cooperative CLI-writer lock. No stale-lock deletion or automatic cleanup.
+struct StoreLock(PathBuf);
+impl StoreLock {
+    fn acquire(path: &Path) -> io::Result<Self> {
+        let path = path.with_extension("tsv.lock");
+        let mut file = OpenOptions::new().write(true).create_new(true).open(&path)
+            .map_err(|error| io::Error::new(error.kind(), format!("acquire store lock {path:?}: {error}; stop competing writers; inspect stale locks deliberately")))?;
+        let lock = Self(path);
+        writeln!(file, "{}", std::process::id())?;
+        Ok(lock)
+    }
+}
+impl Drop for StoreLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
     }
 }
