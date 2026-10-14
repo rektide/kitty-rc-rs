@@ -1,4 +1,10 @@
 # SQLite databases
+# Canonical Dolt database and local backups/runtime (never Git snapshots)
+dolt/
+embeddeddolt/
+backup/
+dolt-server.*
+
 *.db
 *.db?*
 *.db-journal
@@ -37,6 +43,7 @@ beads.right.meta.json
 .sync.lock
 sync_base.jsonl
 export-state/
+export-state.json
 
 # NOTE: Do NOT add negation patterns (e.g., !issues.jsonl) here.
 # They would override fork protection in .git/info/exclude, allowing
