@@ -28,6 +28,8 @@ sources:
     title: Completed CLI and shared-store adoption, including watch absence and response-budget corrections
   - resource: /design/library-redesign/uploads/implementation0.sol61xh.md
     title: Bounded image/logo/run conversations, exact managed lanes and verified upload evidence
+  - resource: /design/library-redesign/verification/rust-tooling0.glm53m.md
+    title: Rust verification replacement, converged workspace checks and version/mode-specific live evidence
 ---
 
 # kitty-rc (unstable redesign)
@@ -80,6 +82,7 @@ from the exact server versions and profiles exercised live.
 | [`observation/listing`](observation/listing) | Scoped finite snapshots, detachable receipts, sampled changes and caller-driven polling |
 | [`observation/check`](observation/check) | Explicit fresh listing checks after uncertainty, with matching/satisfaction separate from original native outcomes |
 | [`client`](client) | Direct/managed re-exports and public examples |
+| [`tool/verification`](tool/verification) | Rust-owned private server fixtures, live matrix, release acquisition, CLI smoke and source/probe checks |
 
 Bounded PNG background/logo uploads and buffered asynchronous `run` are implemented.
 The facade exposes `UploadSource`, `SessionUploadOptions` and
@@ -157,25 +160,33 @@ unresolved remote work can consume it; local quotas cannot prevent their evictio
 ## Building and testing
 
 ```sh
-cargo build            # build all crates and the kitty-pubkey-db binary
+cargo build --workspace
 cargo nextest run      # test suite (or: cargo test)
 cargo clippy --workspace --all-targets
 cargo fmt --check
-python3 scripts/verify-isolated-kitty.py  # optional: installed kitty + headless Weston
+mise exec -- cargo run -p kitty-rc-verify -- finite
+mise exec -- cargo run -p kitty-rc-verify -- uploads
+mise exec -- cargo run -p kitty-rc-verify -- matrix --cli-smoke
 ```
 
 Use the user's current Rust toolchain, selected through mise in this workspace.
 The repository does not pin a toolchain or maintain a fixed Rust minimum-version
 commitment. If your shell has not activated mise, prefix commands with
-`mise exec --`, including `mise exec -- python3 scripts/verify-isolated-kitty.py`
-so its Cargo subprocess uses the same environment. `mise current rust` and
+`mise exec --` so verification subprocesses use the same environment. `mise current rust` and
 `mise exec -- rustc --version` show the actual selection. Earlier reports retain
 their historical Rust 1.88 verification results.
 
-Scripted tests verify concurrency and lifecycle;
-an isolated real **kitty 0.48.2** passed repeated encrypted direct/managed commands
-on unchanged connection tokens and concurrent launch-wait/text/focus. The wire version remains `[0,43,1]`; this is not a tested
-kitty-minimum or full support matrix. See the [implementation report](design/library-redesign/implementation0.sol61m.md).
+Scripted tests verify concurrency and lifecycle. The Rust-runner matrix exercised
+private kitty **0.43.1, 0.48.2 and 0.49.2**: selected finite/nested commands and CLI
+smoke in encrypted and plain modes, plus **encrypted uploads** on all three.
+Version-sensitive cases are explicitly gated. This is not a whole-catalog,
+oldest-supported-version or plain-upload claim. The wire coordinate remains
+`[0,43,1]`; see [support evidence](doc/usage/support.md) and the
+[verification guide](tool/verification/README.md).
+
+Verification orchestration and fixture children are Rust. Two small Python
+fixtures remain: a native kitty kitten and an executor for upstream Python
+constructors used as independent semantic oracles.
 
 The `kitty-pubkey-db` store stays at `$XDG_STATE_HOME/kitty/pubkey.tsv`
 with its existing line format (`pid\twindow_id\tpubkey\ttimestamp`);

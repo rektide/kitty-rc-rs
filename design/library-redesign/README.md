@@ -40,6 +40,8 @@ sources:
     title: Completed CLI/store adoption and verified no-focus watch and maximum-response corrections
   - resource: /design/library-redesign/uploads/implementation0.sol61xh.md
     title: Completed image/logo/run exchanges and exact alias-aware managed lanes
+  - resource: /design/library-redesign/verification/rust-tooling0.glm53m.md
+    title: Rust tooling conversion and selected three-release live matrix
 ---
 
 # Library redesign
@@ -100,8 +102,14 @@ and separated discovery/authentication steps.
   bounded source consumption, handshake/EOF/terminal modes, binary run results,
   explicit alias groups and exact interruption/supersession lane accounting.
   Core gates passed 185 workspace tests plus private encrypted kitty 0.48.2
-  upload conformance. Python verification runners are migration inputs being
-  replaced by G's human-commissioned Rust tooling.
+  upload conformance. Its original Python runners are preserved in revision history;
+  maintained orchestration is now Rust.
+- [Rust verification tooling and live matrix](verification/rust-tooling0.glm53m.md):
+  [maintained runner guide](../../tool/verification/README.md), Rust fixture children,
+  and selected 0.43.1/0.48.2/0.49.2 finite/CLI profiles in both modes, with encrypted
+  uploads on all three. Two small fixtures remain Python at native kitten and
+  upstream semantic-oracle boundaries. Parent review also commissioned cold-start,
+  default-binary and no-build entrance corrections before verification closure.
 
 The first slice and its review-driven corrections are committed. Audited
 reply-bearing sessions now reuse sockets; idle/active/connecting resources count
@@ -118,9 +126,9 @@ pool selection and error/evidence code. A full supported-version/live matrix,
 full upload conversations and CLI adoption remain tracked work. Discovery and
 finite catalog breadth are now implemented by the subsequent slices above.
 
-Active follow-on work is Rust verification-tooling conversion and final isolated
-multi-version verification. The core upload, access, CLI and observation agents
-have completed their handoffs. User-directed Rust policy follows the user's mise selection without
+Active follow-on work is the final Rust-runner entrance correction. The core
+upload, access, CLI and observation agents have completed their handoffs.
+User-directed Rust policy follows the user's mise selection without
 repository pinning; historical toolchain results remain historical evidence.
 
 ## Research contributions

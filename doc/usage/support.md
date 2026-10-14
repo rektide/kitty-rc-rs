@@ -5,7 +5,7 @@ description: Explicit wire baseline, source and live evidence tiers, capability 
 resource: /doc/usage/support.md
 status: provisional
 generated:
-  by: "model:openai/gpt-6.1-sol#medium"
+  by: "model:openai/gpt-6-astra#medium"
   at: 2026-10-14
 sources:
   - resource: "opencode://ses_ec5dcd3b6ffeofqbiGNfwr1Cf4"
@@ -20,14 +20,18 @@ sources:
     title: Source-backed typed profiles and finite versus upload boundaries
   - resource: /design/library-redesign/implementation0.sol61m.md#actual-verification
     title: Reported isolated installed kitty 0.48.2 evidence and remaining live-matrix boundary
+  - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
+    title: Parent review and integration of Rust-runner version/mode evidence without expanding compatibility claims
+  - resource: /design/library-redesign/verification/rust-tooling0.glm53m.md
+    title: Post-conversion real three-release matrix, encrypted uploads and both-mode finite/CLI evidence
 ---
 
 # Support boundary
 
 Work anchor: `kitty-rc-proto-rs-redesign-verification-support`. This is the selected
 **provisional evidence-based policy**, not a claim of a tested minimum kitty
-release. The full supported-version live matrix remains
-`kitty-rc-proto-rs-redesign-verification-live` work.
+release. The selected live matrix is recorded below; runner entrance corrections
+remain part of `kitty-rc-proto-rs-redesign-verification-live` until verified.
 
 ## Rust belongs to the user
 
@@ -45,13 +49,28 @@ formats are separate obligations, not established by compiling once.
 |---|---|---|
 | Request envelope baseline | `SUPPORTED = [0,43,1]` in `kitty-rc-schema` | Existing declared wire coordinate, retained without a global bump. The name is **not** a tested support matrix. |
 | Stable source audit | v0.49.2 commit `b2cb871254fbdac19a085188813c8dfb258b95cd` | Inspected handler/payload contracts and source-executed fixtures. Not live conformance or proof of earliest release. |
-| Actually exercised server | Private installed kitty **0.48.2** | The implementation report records encrypted direct/managed listing, text, focus, launch-wait and reuse journeys in an isolated Weston/kitty instance. Only those recorded journeys are exercised evidence. |
+| Actually exercised servers | Private kitty **0.43.1**, installed **0.48.2**, and **0.49.2** | Rust-runner finite/nested and CLI profiles passed encrypted and plain; encrypted image/logo/run uploads passed all three. Exact recorded profiles/options and version gates define the evidence. |
 
 The dispatcher compares request major/minor against its own version. Accepting
 the envelope does not establish that the named command, field, option or result
 shape exists. Keeping `[0,43,1]` does **not** promise every catalog entry works on
 0.43.1. Nor does auditing 0.49.2 justify changing every request to `[0,49,2]`.
-No oldest tested version or whole-catalog live compatibility range is selected.
+The oldest server in the selected matrix is 0.43.1; that is not a guaranteed
+minimum or a whole-catalog live compatibility range.
+
+### Recorded Rust-runner matrix
+
+| Server | Finite/nested profiles | Upload profiles | CLI smoke |
+| --- | --- | --- | --- |
+| 0.43.1 | Encrypted and plain; 0.48/0.49 features skipped | Encrypted background/logo, suppression handshake, binary empty/small/exact/large run, managed aliases | Both modes |
+| 0.48.2 | Encrypted and plain; 0.49 features skipped | Same encrypted upload journeys | Both modes |
+| 0.49.2 | Encrypted and plain, including screenshots and OS-window title | Same encrypted upload journeys | Both modes |
+
+Plain uploads remain unclaimed. The [Rust verification report](../../design/library-redesign/verification/rust-tooling0.glm53m.md)
+records exact release/source and executable provenance, selected toolchain and
+witness path; [the maintained tool](../../tool/verification/README.md) reproduces
+the runs. Earlier Python-runner witnesses remain historical evidence, distinct
+from the new Rust-runner witness.
 
 ## Gate the exact profile
 
@@ -63,7 +82,7 @@ select features using supplied server/version/capability evidence; unsupported
 remote errors remain errors, not silent downgraded success.
 
 - Screenshot and OS-window title have earliest documented release **0.49**.
-  Do not select those profiles on the exercised 0.48.2 server just because they
+   Do not select those profiles on 0.43.1 or 0.48.2 just because they
   compile or the envelope is accepted.
 - Alternate text extents have release evidence from **0.48**. Gate the extent,
   not merely the `get-text` command name. Some text extents also require shell
@@ -98,8 +117,8 @@ endpoint and server permissions and is never an error fallback from encryption.
 For each additional server, record exact installed version/source, isolation,
 protection mode, exact profile/options, native output, cancellation/reuse and
 failure coverage. A failed capability gate is useful evidence, not permission
-to falsify the envelope. Expand the matrix deliberately after the upload work;
-this policy ticket may close without pretending that matrix is complete.
+to falsify the envelope. Extend the matrix by named profiles and versions rather
+than implying universal coverage from a passing subset.
 
 ## Cross-references
 
