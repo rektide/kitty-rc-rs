@@ -7,7 +7,7 @@ status: draft
 generated: { by: "model:openai/gpt-6.1-sol#medium", at: 2026-10-14 }
 sources:
   - resource: "opencode://ses_ec60376ecffey5Px0wsjSP7MhR"
-    title: Implementation, custody and partial coverage decisions for listing snapshots
+    title: Listing implementation, strict structural coverage adaptation, and seven verified custody/publication/polling journeys
   - resource: /design/library-redesign/draft1.gpt6a.md#10-observation-and-optional-reconciliation
     title: Accepted observation boundary and sampled freshness requirements
     revision: "jj-commit:956d0596"
@@ -18,8 +18,11 @@ sources:
     title: Fact knowledge, observation ownership and capability basis concepts
     revision: "jj-commit:956d0596"
   - resource: /protocol/commands/src/outputs.rs
-    title: Inspected tolerant typed listing model and omitted-container limitation
+    title: Inspected baseline tolerant listing model
     revision: "jj-commit:956d0596"
+  - resource: /protocol/commands/src/outputs.rs
+    title: Concurrent catalog correction now requires structural listing IDs and containers
+    revision: "sha256:70e80f9e1af8255ca0b99a0a39e2bd73fbdeae64cc02f0fd40ad794a2319a7eb"
 extensions:
   ticket: kitty-rc-proto-rs-redesign-observation-snapshots
 ---
@@ -53,9 +56,11 @@ endpoint identity is invented: binding generation is explicitly caller-supplied.
   cleanup task that might erase uncertain outcomes.
 - Exact route, subject assertion, endpoint ID, binding generation, scope,
   interpretation evidence, local issuance and acquisition interval are retained.
-- The existing decoder defaults omitted nested containers. Rather than claim
-  completeness it cannot verify, coverage explicitly stays returned-rows-only.
-  Duplicate/missing IDs are reported, missing facts differ from unsupported
+- The catalog correction requires structural IDs/containers, so successful
+  unambiguous decoding establishes complete selected-response membership, never
+  unfiltered desktop membership or atomicity. Duplicate IDs produce explicit
+  partial projection coverage. Missing structural data is a typed failure;
+  missing optional facts differ from unsupported
   capability and known false, and sampled disappearance is `NoLongerReturned`.
 - Polling is caller-driven fixed delay, with scheduled time/cadence recorded in
   receipts. Delayed polls are skipped, with no implicit catch-up queue, permanent
@@ -74,12 +79,44 @@ The first targeted test attempt was blocked by the concurrent access workspace
 member being declared before its manifest existed. A later attempt advanced to
 commands compilation, where concurrent catalog module declarations preceded their
 files (`actions`, `appearance`, `catalog`, `configuration`, `process`). These are
-temporary sibling-work blockers, not observation gate results. Tests and lint
-results will be recorded here after dependencies become buildable.
+temporary sibling-work blockers, not observation gate results. An ignored scratch
+archive at `.test-agent/observation-baseline/` first verified six journeys against
+the committed managed API at `0ace4ac3`; it exposed a missing public-module import
+and a fixture that incorrectly closed reusable connections. Both were corrected.
+That scratch result is not credited as compatibility with later sibling changes.
+
+The final shared working-copy gates passed after catalog files became buildable:
+
+| Gate | Result |
+|---|---|
+| `mise exec -- cargo nextest run -p kitty-rc-listing --locked` | 7 passed |
+| `mise exec -- cargo check -p kitty-rc-listing --all-targets --locked` | Passed |
+| `mise exec -- cargo clippy -p kitty-rc-listing --all-targets --no-deps --locked -- -D warnings` | Passed; owned crate/all targets linted |
+| `mise exec -- rustfmt --check --edition 2024 observation/listing/src/lib.rs observation/listing/tests/journeys.rs` | Passed |
+
+The seven journeys check exact filtered wire scope and receipt binding, complete
+selected-response coverage, missing optional facts versus unsupported focus,
+partial duplicate-ID coverage, missing structural-data failure, projection
+overflow, sampled focus changes, failed acquisition retaining the baseline,
+stale arrival, failed-new-generation invalidation, replacement-binding ownership,
+waiter/acquisition drop recovery, driver-stop uncertainty, polling sleep/drop
+ownership, and premature take followed by explicit recovery/release.
+
+An initial scratch Clippy invocation including dependencies found the existing
+registry `collapsible_if` lint. Dependency-wide lint is not claimed here; the
+owned all-target `--no-deps` gate passed. Parent integration owns full-workspace
+gates and shared index/root README connections.
+
+Saved coherent implementation checkpoint `3e31c409`; workspace member and lock
+package were isolated with full-ID `jj-hunk` dry-run/commit in `0708df24`, leaving
+other agents' access/catalog hunks untouched. The follow-up correction seals
+receipt ordering behind accessors, bounds error result sizes, and adapts coverage
+to strict structural listing decoding. These checkpoints are implementation
+evidence, not human promotion of the unstable API.
 
 ## Remaining limits and connections
 
-No server identity verification, authoritative exhaustive collection coverage,
+No server identity verification, exhaustive unfiltered desktop coverage,
 global desktop focus winner, terminal channel, active-window CLI, watch CLI, or
 check-only uncertain mutation follow-up is implemented. Those require their own
 native policies/entrances. Polling and sampled focus/window facts equip the

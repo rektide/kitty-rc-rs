@@ -33,6 +33,7 @@ impl Fixture {
                         let (mut socket, _) = connection.unwrap();
                         let tx = tx.clone();
                         children.spawn(async move {
+                            loop {
                             let mut decoder = kitty_rc_frame::FrameDecoder::new(16_384);
                             let mut bytes = [0; 1024];
                             let request = loop {
@@ -44,7 +45,8 @@ impl Fixture {
                             let (reply, response) = oneshot::channel();
                             tx.send((request, reply)).await.unwrap();
                             if let Ok(value) = response.await {
-                                let _ = socket.write_all(&kitty_rc_frame::frame(&serde_json::to_vec(&value).unwrap())).await;
+                                if socket.write_all(&kitty_rc_frame::frame(&serde_json::to_vec(&value).unwrap())).await.is_err() { return; }
+                            } else { return; }
                             }
                         });
                     },
@@ -132,10 +134,14 @@ async fn filtered_coverage_sampled_changes_and_failed_acquisition_preserve_basel
     reply.send(listing(3, None)).unwrap();
     first.wait().await.unwrap();
     let first = first.finish().unwrap();
-    assert_eq!(first.receipt().scope, scope);
-    assert_eq!(first.receipt().binding.generation, 7);
-    assert!(first.ended() >= first.receipt().started);
+    assert_eq!(first.receipt().scope(), &scope);
+    assert_eq!(first.receipt().binding().generation, 7);
+    assert!(first.ended() >= first.receipt().started());
     assert!(first.coverage().filtered);
+    assert_eq!(
+        first.coverage().membership,
+        MembershipBasis::CompleteSelectedResponse
+    );
     assert_eq!(first.windows()[&3].focused, Fact::Missing);
     assert!(o.baseline().is_none());
     o.accept(first).unwrap();
@@ -172,7 +178,9 @@ async fn filtered_coverage_sampled_changes_and_failed_acquisition_preserve_basel
     focus.wait().await.unwrap();
     let focus = focus.finish().unwrap();
     let changes: Vec<_> = o.changes(&focus).unwrap().collect();
-    assert!(matches!(changes.as_slice(), [Change::Changed { id: 4, before, after }] if before.focused == Fact::Known(true) && after.focused == Fact::Known(false)));
+    assert!(
+        matches!(changes.as_slice(), [Change::Changed { id: 4, before, after }] if before.focused == Fact::Known(true) && after.focused == Fact::Known(false))
+    );
     o.accept(focus).unwrap();
     r.shutdown(Shutdown::Drain).await.unwrap();
     driver.stop().await;
@@ -200,7 +208,20 @@ async fn old_response_arrival_and_new_binding_cannot_publish() {
     let foreign = o.acquire(options()).unwrap();
     f.request().await.1.send(listing(10, Some(true))).unwrap();
     foreign.wait().await.unwrap();
-    let mut replacement = observer(&r, ep, Scope::default());
+    let mut replacement = Observer::new(
+        r.clone(),
+        Binding {
+            subject: "replacement binding".into(),
+            endpoint: ep,
+            generation: 8,
+        },
+        Scope::default(),
+        Interpretation {
+            basis: "new access binding".into(),
+            focus: Support::Supported,
+        },
+        Limits::default(),
+    );
     assert_eq!(
         replacement.accept(foreign.finish().unwrap()).unwrap_err().0,
         Reject::ForeignOwner
@@ -222,7 +243,7 @@ async fn dropped_acquisition_can_be_recovered_and_driver_stop_retains_uncertaint
     assert!(timeout(Duration::from_millis(5), a.wait()).await.is_err());
     drop(a);
     reply.send(listing(1, Some(true))).unwrap();
-    r.wait(receipt.token).await.unwrap();
+    r.wait(receipt.token()).await.unwrap();
     o.accept(receipt.finish(&r).unwrap()).unwrap();
     assert!(r.inventory().is_empty());
     let a = o.acquire(options()).unwrap();
@@ -251,7 +272,7 @@ async fn polling_is_caller_driven_and_drop_creates_no_hidden_work() {
     let a = poll.next(Duration::from_secs(3), 4096).await.unwrap();
     let receipt = a.receipt().clone();
     drop(a);
-    assert!(receipt.poll.unwrap().scheduled_for <= receipt.started);
+    assert!(receipt.poll().unwrap().scheduled_for <= receipt.started());
     assert!(
         timeout(
             Duration::from_millis(5),
@@ -263,8 +284,8 @@ async fn polling_is_caller_driven_and_drop_creates_no_hidden_work() {
     assert_eq!(r.inventory().len(), 1);
     drop(poll);
     assert_eq!(r.inventory().len(), 1);
-    assert!(r.cancel(receipt.token));
-    r.wait(receipt.token).await.unwrap();
+    assert!(r.cancel(receipt.token()));
+    r.wait(receipt.token()).await.unwrap();
     assert!(receipt.finish(&r).is_err());
     assert!(r.inventory().is_empty());
 }
@@ -300,17 +321,17 @@ async fn partial_unsupported_and_projection_bounds_are_not_empty_authoritative_s
     f.request()
         .await
         .1
-        .send(json!({"ok":true,"data":"[{\"tabs\":[{\"windows\":[{\"id\":2},{}, {\"id\":2}]}]}]"}))
+        .send(json!({"ok":true,"data":json!([{"id":1,"tabs":[{"id":2,"windows":[{"id":2},{"id":2}]}]}]).to_string()}))
         .unwrap();
     newest.wait().await.unwrap();
     let newest = newest.finish().unwrap();
     assert_eq!(
         newest.coverage().membership,
-        MembershipBasis::ReturnedRowsOnly
+        MembershipBasis::PartialSelectedResponse
     );
-    assert_eq!(newest.coverage().unidentified_windows, 1);
+    assert_eq!(newest.coverage().unidentified_windows, 0);
     assert!(newest.coverage().duplicate_window_ids);
-    assert_eq!(newest.windows()[&2].os_window, Fact::Missing);
+    assert_eq!(newest.windows()[&2].os_window, Fact::Known(1));
     assert!(matches!(
         o.changes(&newest),
         Err(Reject::AmbiguousProjection)
@@ -325,13 +346,30 @@ async fn partial_unsupported_and_projection_bounds_are_not_empty_authoritative_s
         Reject::Stale
     );
     let excessive = o.acquire(options()).unwrap();
-    f.request().await.1.send(json!({"ok":true,"data":json!([{"tabs":[{"windows":[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]}]}]).to_string()})).unwrap();
+    f.request().await.1.send(json!({"ok":true,"data":json!([{"id":1,"tabs":[{"id":2,"windows":[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]}]}]).to_string()})).unwrap();
     excessive.wait().await.unwrap();
     assert!(matches!(
         excessive.finish().unwrap_err().error,
         AcquisitionError::WindowLimit
     ));
     assert!(o.baseline().unwrap().coverage().duplicate_window_ids);
+    for data in [
+        "[{}]",
+        "[{\"id\":1,\"tabs\":[{\"id\":2,\"windows\":[{}]}]}]",
+    ] {
+        let malformed = o.acquire(options()).unwrap();
+        f.request()
+            .await
+            .1
+            .send(json!({"ok":true,"data":data}))
+            .unwrap();
+        malformed.wait().await.unwrap();
+        assert!(matches!(
+            malformed.finish().unwrap_err().error,
+            AcquisitionError::Native(Failure::TypedDecode { .. })
+        ));
+        assert!(o.baseline().unwrap().coverage().duplicate_window_ids);
+    }
     assert!(r.inventory().is_empty());
     r.shutdown(Shutdown::Drain).await.unwrap();
     driver.stop().await;
@@ -366,4 +404,31 @@ async fn failed_new_generation_invalidates_old_inflight_even_without_new_baselin
     assert!(r.inventory().is_empty());
     r.shutdown(Shutdown::Drain).await.unwrap();
     driver.stop().await;
+}
+
+#[tokio::test]
+async fn premature_take_returns_recoverable_receipt_not_release_or_empty_listing() {
+    let f = Fixture::new().await;
+    let (r, ep) = registry(&f);
+    let mut o = observer(&r, ep, Scope::default());
+    let a = o.acquire(options()).unwrap();
+    let failure = a.finish().unwrap_err();
+    assert!(matches!(
+        failure.error,
+        AcquisitionError::Native(Failure::Unavailable(_))
+    ));
+    assert_eq!(r.inventory().len(), 1);
+    assert!(o.baseline().is_none());
+    let receipt = failure.receipt;
+    assert!(r.cancel(receipt.token()));
+    r.wait(receipt.token()).await.unwrap();
+    let failure = receipt.finish(&r).unwrap_err();
+    assert!(matches!(
+        failure.error,
+        AcquisitionError::Native(Failure::Interrupted {
+            progress: Progress::NotWritten,
+            ..
+        })
+    ));
+    assert!(r.inventory().is_empty());
 }

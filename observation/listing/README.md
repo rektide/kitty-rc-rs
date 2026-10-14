@@ -14,6 +14,9 @@ sources:
   - resource: /control/registry/src/lib.rs
     title: Inspected reserve, submit, wait, take and release custody API
     revision: "jj-commit:956d0596"
+  - resource: /protocol/commands/src/outputs.rs
+    title: Concurrent catalog correction requires listing IDs and nested containers
+    revision: "sha256:70e80f9e1af8255ca0b99a0a39e2bd73fbdeae64cc02f0fd40ad794a2319a7eb"
 ---
 
 # Scoped managed listing observations
@@ -54,20 +57,24 @@ ones for the same endpoint. Rejection returns the snapshot intact.
 
 ## Knowledge and coverage
 
-The typed `Ls` decoder tolerates additive unknown fields and defaults omitted
-nested containers. It cannot establish exhaustive membership from every decoded
-response. `Coverage::membership` therefore explicitly says `ReturnedRowsOnly`,
-never “complete server state.” Filtered snapshots are not absence evidence for
-unselected windows/tabs. Environment completeness is recorded as **requested**,
-not invented for the default differing-environment response.
+The typed `Ls` decoder tolerates additive unknown fields but requires structural
+IDs and nested containers. A successfully decoded unambiguous listing has
+`CompleteSelectedResponse` membership; duplicate IDs make it
+`PartialSelectedResponse`. Completeness is relative to the response and exact
+filters, never a claim about an entire desktop or a server-atomic interval.
+Filtered snapshots are not absence evidence for unselected windows/tabs.
+Environment completeness is recorded as **requested**, not invented for the
+default differing-environment response.
 
 Known IDs produce compact samples of parent OS-window/tab IDs, focus and active
-status. Coverage records missing window IDs and duplicate IDs. Missing parent
-IDs and focus values are `Fact::Missing`, not false/zero. Focus support is chosen
+status. Coverage defensively accounts for unidentified/duplicate IDs; the current
+decoder rejects missing structural IDs before snapshot construction. Missing
+focus values are `Fact::Missing`, not false. Focus support is chosen
 from caller-supplied capability evidence: `Unsupported` differs from `Missing`;
 unknown support with no value is `UnknownSupport`. An explicit supported false
 value remains `Known(false)`. No global-focus winner is guessed from missing data
-or filtered results.
+or filtered results. Required IDs/containers missing from a native reply produce
+a typed acquisition failure rather than a partial authoritative listing.
 
 `changes` compares compact samples lazily: `Returned`, `Changed`, and
 `NoLongerReturned`. The last means only absence from the new returned projection,
@@ -76,7 +83,7 @@ rejected, while the raw partial snapshot remains inspectable. The caller decides
 whether to accept partial coverage. Missing success data, invalid typed output,
 remote refusal, interruption and projection overflow are acquisition failures,
 not fabricated empty snapshots. A valid `[]` remains an inspectable sampled empty
-response, with the same limited membership basis.
+response, complete only for its selected scope.
 
 ## Custody and shutdown
 
@@ -85,7 +92,7 @@ accepted operation. Registry custody is deliberately retained until explicitly
 taken/released. Save the receipt before detaching:
 
 ```rust,ignore
-registry.wait(receipt.token).await?;
+registry.wait(receipt.token()).await?;
 let recovered = receipt.finish(&registry)?;
 ```
 

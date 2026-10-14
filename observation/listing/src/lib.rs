@@ -2,7 +2,7 @@
 //! No task is started here. Dropping an acquisition detaches, not cancels: save
 //! its receipt and recover its token through the registry. Publication and
 //! baseline advancement require an explicit call on the caller-owned observer.
-use kitty_rc_commands::{Ls, OsWindow};
+use kitty_rc_commands::{Ls, outputs::OsWindow};
 use kitty_rc_exchange::{Completion, Failure};
 use kitty_rc_registry::{CustodyError, EndpointId, Operation, Options, Refused, Registry, Token};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
@@ -74,14 +74,14 @@ impl Default for Limits {
 }
 #[derive(Debug, Clone)]
 pub struct Receipt {
-    pub binding: Binding,
-    pub scope: Scope,
-    pub interpretation: Interpretation,
-    pub token: Token,
+    binding: Binding,
+    scope: Scope,
+    interpretation: Interpretation,
+    token: Token,
     /// Local acquisition issuance order, never a remote event/resume cursor.
-    pub order: u64,
-    pub started: Instant,
-    pub poll: Option<PollTiming>,
+    order: u64,
+    started: Instant,
+    poll: Option<PollTiming>,
     owner: Arc<()>,
     limits: Limits,
 }
@@ -92,21 +92,42 @@ pub struct PollTiming {
     pub cadence: Duration,
 }
 impl Receipt {
+    pub fn binding(&self) -> &Binding {
+        &self.binding
+    }
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+    pub fn interpretation(&self) -> &Interpretation {
+        &self.interpretation
+    }
+    pub fn token(&self) -> Token {
+        self.token
+    }
+    pub fn order(&self) -> u64 {
+        self.order
+    }
+    pub fn started(&self) -> Instant {
+        self.started
+    }
+    pub fn poll(&self) -> Option<PollTiming> {
+        self.poll
+    }
     pub fn route(&self) -> &'static str {
         "kitty-rc/ls"
     }
     /// Recover a detached acquisition after `registry.wait(token)`. Receipt
     /// clones are not replay authority: the registry permits only one take.
-    pub fn finish(self, registry: &Registry) -> Result<Snapshot, AcquisitionFailure> {
+    pub fn finish(self, registry: &Registry) -> Result<Snapshot, Box<AcquisitionFailure>> {
         let ended = Instant::now();
         let native = match registry.take_native(self.token) {
             Ok(native) => native,
             Err(error) => {
-                return Err(AcquisitionFailure {
+                return Err(Box::new(AcquisitionFailure {
                     receipt: self,
                     ended,
                     error: AcquisitionError::Native(Failure::Unavailable(Box::new(error))),
-                });
+                }));
             }
         };
         // A concurrent external release may already have removed this taken
@@ -117,20 +138,22 @@ impl Receipt {
             Ok(Completion::Submitted) => Err(AcquisitionError::UnexpectedSubmission),
             Err(error) => Err(AcquisitionError::Native(error)),
         };
-        result.map_err(|error| AcquisitionFailure {
-            receipt: self,
-            ended,
-            error,
+        result.map_err(|error| {
+            Box::new(AcquisitionFailure {
+                receipt: self,
+                ended,
+                error,
+            })
         })
     }
 }
-/// Coverage is deliberately about rows returned by `ls`. It never establishes
-/// absence outside filters, a server-atomic interval, or omitted nested fields
-/// (the tolerant typed decoder defaults omitted containers).
+/// Coverage is about the selected `ls` response, never absence outside filters
+/// or a server-atomic interval. The typed decoder requires IDs and containers;
+/// duplicate IDs still make the membership projection partial.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Coverage {
-    /// Tolerant `Ls` decoding cannot distinguish an omitted collection from an
-    /// empty one. Never use this projection as proof of exhaustive membership.
+    /// Completeness is relative to this response and its exact selection scope,
+    /// not the desktop or unknown facts omitted from individual rows.
     pub membership: MembershipBasis,
     pub filtered: bool,
     pub all_environment_requested: bool,
@@ -139,7 +162,8 @@ pub struct Coverage {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MembershipBasis {
-    ReturnedRowsOnly,
+    CompleteSelectedResponse,
+    PartialSelectedResponse,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowSample {
@@ -179,7 +203,7 @@ impl Snapshot {
     ) -> Result<Self, AcquisitionError> {
         let mut windows = BTreeMap::new();
         let mut coverage = Coverage {
-            membership: MembershipBasis::ReturnedRowsOnly,
+            membership: MembershipBasis::CompleteSelectedResponse,
             filtered: receipt.scope.match_window.is_some()
                 || receipt.scope.match_tab.is_some()
                 || receipt.scope.only_self,
@@ -210,6 +234,9 @@ impl Snapshot {
                     }
                 }
             }
+        }
+        if coverage.unidentified_windows != 0 || coverage.duplicate_window_ids {
+            coverage.membership = MembershipBasis::PartialSelectedResponse;
         }
         Ok(Self {
             receipt,
@@ -257,7 +284,7 @@ impl Acquisition {
     /// Nonblocking sole take. Call after wait. An unavailable take retains the
     /// native record; every actually taken outcome is transferred to this return
     /// value before its registry record is explicitly released.
-    pub fn finish(self) -> Result<Snapshot, AcquisitionFailure> {
+    pub fn finish(self) -> Result<Snapshot, Box<AcquisitionFailure>> {
         self.receipt.finish(&self.registry)
     }
 }
@@ -385,9 +412,12 @@ impl Observer {
     }
     /// Explicit publish/accept; returns the displaced baseline for caller-owned
     /// retention or immediate drop. Rejected snapshots are returned intact.
-    pub fn accept(&mut self, snapshot: Snapshot) -> Result<Option<Snapshot>, (Reject, Snapshot)> {
+    pub fn accept(
+        &mut self,
+        snapshot: Snapshot,
+    ) -> Result<Option<Snapshot>, (Reject, Box<Snapshot>)> {
         if let Err(error) = self.validate(&snapshot) {
-            return Err((error, snapshot));
+            return Err((error, Box::new(snapshot)));
         }
         Ok(self.baseline.replace(snapshot))
     }
@@ -452,7 +482,10 @@ impl Poller {
             deadline: now + timeout,
             max_response,
         })?;
-        acquisition.receipt.poll = Some(PollTiming { scheduled_for, cadence: self.cadence });
+        acquisition.receipt.poll = Some(PollTiming {
+            scheduled_for,
+            cadence: self.cadence,
+        });
         Ok(acquisition)
     }
     pub fn into_observer(self) -> Observer {
