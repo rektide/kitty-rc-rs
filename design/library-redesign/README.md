@@ -26,6 +26,12 @@ sources:
     title: Post-discussion registry-first synthesis and remaining design choices
   - resource: /design/library-redesign/implementation0.sol61m.md
     title: First implemented concurrent slice, verified evidence and parent-reviewed lifecycle gaps
+  - resource: /design/library-redesign/capabilities/implementation0.sol61m.md
+    title: Source-audited finite catalog and nested Action implementation
+  - resource: /design/library-redesign/implementation/access0.sol61xh.md
+    title: Explicit acquisition and generation-safe setup implementation, shared-store CLI gap
+  - resource: /design/library-redesign/observation/implementation0.sol61m.md
+    title: Scoped snapshot, sampled change and detached receipt implementation
 ---
 
 # Library redesign
@@ -62,6 +68,16 @@ and separated discovery/authentication steps.
 - [Sol's first concurrent slice](implementation0.sol61m.md): typed direct/managed
   execution, detached waiters, bounded native outcome custody, scripted concurrency
   tests and isolated real-kitty 0.48.2 encrypted conformance.
+- [Finite catalog and nested actions](capabilities/implementation0.sol61m.md):
+  inventory of 41 stable command names, 39 fully or partially typed finite
+  entrances, grouped action grammar, and independently executed upstream fixtures.
+  Run and image/logo input still require the upload conversation.
+- [Explicit access and setup generations](implementation/access0.sol61xh.md):
+  discovery/credential source policies, preserved shared-store I/O, recoverable
+  rejected queued preparation, and exact old/new pool setup accounting.
+- [Scoped listing observations](observation/implementation0.sol61m.md): finite
+  acquisition receipts, caller-owned baseline acceptance, sampled differences,
+  bounded projection and caller-driven polling. [Library guide](../../observation/listing/README.md).
 
 The first slice and its review-driven corrections are committed. Audited
 reply-bearing sessions now reuse sockets; idle/active/connecting resources count
@@ -75,7 +91,14 @@ records 82 passing workspace tests, Rust 1.88 all-target/Clippy/format gates,
 scripted connection-count/reuse checks, and repeated encrypted direct/managed
 reuse against isolated kitty 0.48.2. Parent review inspected the corrected session,
 pool selection and error/evidence code. A full supported-version/live matrix,
-discovery, uploads and catalog breadth remain tracked work.
+full upload conversations and CLI adoption remain tracked work. Discovery and
+finite catalog breadth are now implemented by the subsequent slices above.
+
+Active follow-on work is command-specific uploads/run, check-only uncertain-effect
+follow-up, and CLI/shared-store adoption. Their owning agents work in separate
+concerns; registry ownership transferred from access to upload after its checked
+handoff. User-directed Rust policy now follows the user's mise selection without
+repository pinning; historical toolchain results remain historical evidence.
 
 ## Research contributions
 
