@@ -30,6 +30,15 @@ pub fn value(row: &Row<'_>) -> Value {
         "foreground_processes": row.window.foreground_processes.iter().map(|p| json!({"pid": p.pid, "cmdline": p.cmdline, "cwd": p.cwd})).collect::<Vec<_>>() })
 }
 pub fn active<'a>(listing: &'a [OsWindow], target: &Active) -> Result<Row<'a>, Error> {
+    sampled_active(listing, target)?
+        .ok_or_else(|| "no active/focused window returned for selected target".into())
+}
+/// A valid zero-winner response is normal sampled absence, not an error.
+/// Missing facts/targets, filtered global focus and ambiguity remain errors.
+pub fn sampled_active<'a>(
+    listing: &'a [OsWindow],
+    target: &Active,
+) -> Result<Option<Row<'a>>, Error> {
     if target.tab.is_none()
         && target.os_window.is_none()
         && (target.scope.match_window.is_some() || target.scope.match_tab.is_some())
@@ -104,10 +113,23 @@ pub fn active<'a>(listing: &'a [OsWindow], target: &Active) -> Result<Row<'a>, E
         }
     }
     match candidates.len() {
-        0 => Err("no active/focused window returned for selected target".into()),
-        1 => Ok(candidates.pop().unwrap()),
+        0 => Ok(None),
+        1 => Ok(candidates.pop()),
         n => Err(format!("{n} active/focused windows returned; target is ambiguous").into()),
     }
+}
+pub fn absence_status(target: &Active) -> &'static str {
+    if target.tab.is_some() || target.os_window.is_some() {
+        "no-active"
+    } else {
+        "no-focused"
+    }
+}
+pub fn absent(target: &Active) -> Result<(), Error> {
+    let mut out = io::stdout().lock();
+    writeln!(out, "-\t({})", absence_status(target))?;
+    out.flush()?;
+    Ok(())
 }
 pub fn json_line(value: &Value) -> Result<(), Error> {
     let mut out = io::stdout().lock();
@@ -197,5 +219,24 @@ mod tests {
                 .to_string()
                 .contains("ambiguous")
         );
+    }
+
+    #[test]
+    fn valid_absence_is_nullable_only_for_sampled_selection() {
+        assert!(sampled_active(&[], &Active::default()).unwrap().is_none());
+        assert!(active(&[], &Active::default()).is_err());
+        let listing: Vec<OsWindow> = serde_json::from_value(json!([{"id":1,"tabs":[{"id":2,"windows":[{"id":3,"is_active":false,"is_focused":false}]}]}])).unwrap();
+        assert!(
+            sampled_active(&listing, &Active::default())
+                .unwrap()
+                .is_none()
+        );
+        let target = Active {
+            tab: Some(2),
+            ..Default::default()
+        };
+        assert!(sampled_active(&listing, &target).unwrap().is_none());
+        assert_eq!(absence_status(&target), "no-active");
+        assert!(sampled_active(&[], &target).is_err());
     }
 }

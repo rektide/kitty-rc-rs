@@ -585,6 +585,121 @@ fn failed_watch_does_not_publish_stale_success_or_a_fabricated_empty_sample() {
 }
 
 #[test]
+fn watch_continues_across_no_focus_and_empty_samples_without_mutation_or_custody_leaks() {
+    let mut unfocused = listing();
+    unfocused[0]["tabs"][0]["windows"][1]["is_focused"] = json!(false);
+    let cycle = [
+        reply(listing()),
+        reply(unfocused),
+        reply(json!([])),
+        reply(listing()),
+    ];
+    for json_output in [true, false] {
+        let scratch = Scratch::new();
+        let count = if json_output { 72 } else { 4 };
+        let replies = cycle.iter().cloned().cycle().take(count).collect();
+        let server = scratch.server(replies);
+        let mut command = scratch.command();
+        command
+            .args([
+                "w",
+                "--count",
+                &count.to_string(),
+                "--interval-ms",
+                "1",
+                "--to",
+            ])
+            .arg(&server.path);
+        if json_output {
+            command.arg("--json");
+        }
+        let out = command.output().unwrap();
+        success(&out);
+        assert!(
+            out.stderr.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let text = String::from_utf8(out.stdout).unwrap();
+        if json_output {
+            let samples: Vec<Value> = text
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            assert_eq!(samples.len(), 72);
+            for chunk in samples.as_chunks::<4>().0 {
+                assert_eq!(chunk[0]["active"]["id"], 31);
+                for sample in [&chunk[1], &chunk[2]] {
+                    assert_eq!(sample["active"], Value::Null);
+                    assert_eq!(sample["active_status"], "no-focused");
+                }
+                assert!(
+                    chunk[2]["changes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|c| c == &json!({"kind":"NoLongerReturned", "id":31}))
+                );
+                assert_eq!(chunk[3]["active"]["id"], 31);
+                assert_eq!(chunk[3]["active_status"], "focused");
+                assert!(
+                    chunk[3]["changes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|c| c == &json!({"kind":"Returned", "id":31}))
+                );
+            }
+        } else {
+            assert_eq!(
+                text.lines().collect::<Vec<_>>(),
+                vec![
+                    "31\tfocused",
+                    "-\t(no-focused)",
+                    "-\t(no-focused)",
+                    "31\tfocused"
+                ]
+            );
+        }
+        let requests = server.finish();
+        assert_eq!(requests.len(), count);
+        assert!(requests.iter().all(|request| request["cmd"] == "ls"));
+    }
+}
+
+#[test]
+fn watch_missing_focus_ambiguity_and_duplicate_ids_still_fail_not_become_absence() {
+    let mut missing = listing();
+    missing[0]["tabs"][0]["windows"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("is_focused");
+    let mut ambiguous = listing();
+    ambiguous[0]["tabs"][0]["windows"][0]["is_focused"] = json!(true);
+    let mut duplicate = listing();
+    duplicate[0]["tabs"][0]["windows"][0]["id"] = json!(31);
+    for (data, needle) in [
+        (missing, "fact missing"),
+        (ambiguous, "ambiguous"),
+        (duplicate, "duplicate window IDs"),
+    ] {
+        let scratch = Scratch::new();
+        let server = scratch.server(vec![reply(listing()), reply(data)]);
+        let out = scratch
+            .command()
+            .args(["w", "--count", "3", "--interval-ms", "1", "--to"])
+            .arg(&server.path)
+            .arg("--json")
+            .output()
+            .unwrap();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains(needle));
+        assert_eq!(String::from_utf8(out.stdout).unwrap().lines().count(), 1);
+        assert_eq!(server.finish().len(), 2);
+    }
+}
+
+#[test]
 fn delayed_watch_samples_skip_missed_poll_slots_instead_of_replaying_them() {
     let scratch = Scratch::new();
     let server = Server::delayed(

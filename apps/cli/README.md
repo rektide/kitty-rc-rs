@@ -154,11 +154,22 @@ delay, active row, selected scope and sampled changes: `Returned`, `Changed`,
 Titles are printed on every successful sample; compact change comparison only
 covers membership/parent/focus/active facts.
 
+For default global-focus watch, a valid response with all returned focus facts
+false—or a valid empty `[]`—is normal absence. Watch continues with JSON
+`"active": null, "active_status": "no-focused"`, including membership changes.
+Text emits the explicit sentinel `-\t(no-focused)` (a literal tab; no window ID).
+When a winner returns, JSON status is `focused` and text resumes `ID\tTITLE`.
+Explicit tab/OS active-target sampling uses `active` / `no-active` statuses
+(text absence: `-\t(no-active)`). Missing explicit targets, missing required
+focus/active facts, duplicate IDs and ambiguous winners still fail; absence
+never stands in for unknown facts. One-shot `active-window` remains nonzero for
+no winner. No-focus is not evidence that windows were destroyed.
+
 Failed/malformed/ambiguous acquisitions stop with nonzero status; no prior
 successful sample is relabeled fresh, nor is an empty sample fabricated.
 The sequential CLI cannot publish out-of-order pending observations. Each
 successful acquisition takes/releases its record; at most one accepted baseline
-is retained. A 71-sample subprocess journey exceeds the default 64-record quota
+is retained. Long subprocess journeys exceed the default per-endpoint record quota
 without leaking custody. Cadence and output are caller-driven; no subscription,
 resume cursor, desired-state controller or background watchdog is claimed.
 

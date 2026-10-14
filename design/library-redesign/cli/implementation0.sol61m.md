@@ -7,7 +7,7 @@ status: draft
 generated: { by: "model:openai/gpt-6.1-sol#medium", at: 2026-10-14 }
 sources:
   - resource: "opencode://ses_ec5e53929ffezfWrk0e0AOF9Uc"
-    title: Owned CLI/store implementation, native backlog adoption, isolated subprocess verification and parent handoff
+    title: Owned CLI/store implementation, native backlog adoption, isolated verification, parent-reviewed normal-absence correction and handoff
   - resource: /design/library-redesign/tickets0.sol61m.md#existing-backlog
     title: Native IDs and preserved list/standalone/config/observation mapping
   - resource: /design/library-redesign/draft1.gpt6a.md
@@ -27,7 +27,7 @@ sources:
     revision: "jj-commit:e78489cb"
 verification:
   scope: Actual kitty-rc and kitty-pubkey-db executables against private scripted Unix peers and isolated subprocess HOME/XDG/environment
-  evidence: 23 targeted nextest tests passed; locked all-target check, strict no-deps all-target clippy and targeted formatting check passed; compiled --help inspected
+  evidence: Initial 23 and post-review 26 targeted nextest tests passed; locked all-target check, strict no-deps all-target clippy and targeted formatting check passed; compiled --help inspected
   limits: No new live-kitty run or supported-version claim; no compositor focus, server subscription, automatic retries/pruning or transactional noncooperating-writer database
 ---
 
@@ -84,6 +84,10 @@ compositor operation or post-error mutation retry.
 record, accepts one baseline explicitly and drops displaced snapshots. Sequential
 polling prevents out-of-order publication. Failed reads stop rather than emit a
 stale success or fabricate empty state. Skipped slots aren't burst-replayed.
+After parent review, valid zero-focus and empty replies continue watch with
+`active:null` and `active_status:no-focused`; text emits `-\t(no-focused)`.
+Scoped zero-active selection uses `no-active`. One-shot active remains strict;
+missing facts/explicit targets, duplicate IDs and ambiguity remain errors.
 JSON records include local order, selected scope, acquisition duration/scheduling
 delay, active row and `Returned`/`Changed`/`NoLongerReturned` labels. Title-only
 changes aren't compact projection changes; each successful sample still prints
@@ -117,7 +121,7 @@ not a duplicate list engine or unstable Rust API compatibility obligation.
 
 User-selected mise Rust `nightly-2026-10-14`, without any toolchain/rust-version pin:
 
-- `cargo nextest run -p kitty-rc-cli`: **23 passed**, no skipped tests.
+- `cargo nextest run -p kitty-rc-cli`: initial **23**, normal-absence correction **26 passed**, no skipped tests.
 - `cargo check -p kitty-rc-cli --all-targets --locked`: passed.
 - `cargo clippy -p kitty-rc-cli --all-targets --no-deps -- -D warnings`: passed.
 - `cargo fmt -p kitty-rc-cli --check`: passed.
@@ -129,9 +133,13 @@ Journeys execute real subprocesses, not just parser/serializer round trips:
 - focused versus per-tab/OS active target, missing/ambiguous/filter restrictions;
 - stable goto payload and remote denial without retry;
 - missing data, invalid structures, remote error, bounded response and deadline;
-- 71 watch samples past the default record quota, sampled absence, skipped delayed
+- 71 watch samples past the default per-endpoint record quota, sampled absence, skipped delayed
   polls, failed second poll with no third stale sample, accepted-read Ctrl-C with
   unresolved evidence and peer EOF;
+- parent-review correction: 72 actual samples cycle focused → valid no-focus →
+  empty → focused, retaining membership changes and explicit null/status without
+  hidden mutation or record leaks; plain output tests exact no-focus sentinel;
+  missing facts, duplicates and ambiguous winners still stop watch;
 - explicit/environment/declared-config precedence, actionable missing/ambiguous
   endpoint and unsupported fd/abstract routes, non-Unicode explicit socket path;
 - actual encrypted captured environment, shared legacy TSV and declared key/

@@ -176,7 +176,7 @@ async fn watch(
             .map_err(|e| e.reason)?;
         acquisition.wait().await?;
         let sample = acquisition.finish()?;
-        let active = output::active(sample.listing(), target)?;
+        let active = output::sampled_active(sample.listing(), target)?;
         if cli.json {
             let changes = poller
                 .observer()
@@ -191,14 +191,17 @@ async fn watch(
             let timing = sample.receipt().poll().expect("poll receipt");
             output::json_line(
                 &json!({"kind":"sample", "sequence":sample.receipt().order(),
-                "active":output::value(&active), "changes":changes,
+                "active":active.as_ref().map(output::value), "changes":changes,
+                "active_status":if active.is_none() { output::absence_status(target) } else if target.tab.is_some() || target.os_window.is_some() { "active" } else { "focused" },
                 "interval_ms":interval_ms, "delay_ms":sample.receipt().started().saturating_duration_since(timing.scheduled_for).as_millis(),
                 "acquisition_ms":sample.ended().saturating_duration_since(sample.receipt().started()).as_millis(),
                 "scope":{"match":target.scope.match_window,"match_tab":target.scope.match_tab},
                 "absence_meaning":"not returned in this sample, not destroyed"}),
             )?;
+        } else if let Some(active) = &active {
+            output::selected(active, false)?;
         } else {
-            output::selected(&active, false)?;
+            output::absent(target)?;
         }
         drop(
             poller
