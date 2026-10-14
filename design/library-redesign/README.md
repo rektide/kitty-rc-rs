@@ -32,6 +32,10 @@ sources:
     title: Explicit acquisition and generation-safe setup implementation, shared-store CLI gap
   - resource: /design/library-redesign/observation/implementation0.sol61m.md
     title: Scoped snapshot, sampled change and detached receipt implementation
+  - resource: /design/library-redesign/observation/check0.sol61xh.md
+    title: Finite uncertain-effect follow-up implementation and native setup evidence
+  - resource: /design/library-redesign/verification/entrances0.sol61m.md
+    title: Support-policy and runnable independent entrance verification
 ---
 
 # Library redesign
@@ -78,6 +82,12 @@ and separated discovery/authentication steps.
 - [Scoped listing observations](observation/implementation0.sol61m.md): finite
   acquisition receipts, caller-owned baseline acceptance, sampled differences,
   bounded projection and caller-driven polling. [Library guide](../../observation/listing/README.md).
+- [Check-only follow-up](observation/check0.sol61xh.md): fresh listing assessment
+  after an unresolved native effect, with matching and satisfaction separate from
+  causal attribution. Its ticket awaits the broader typed/upload dependency.
+- [Public entrances and support evidence](verification/entrances0.sol61m.md):
+  [usage guide](../../client/README.md), compiled leaf-import examples and
+  [provisional support policy](../../doc/usage/support.md).
 
 The first slice and its review-driven corrections are committed. Audited
 reply-bearing sessions now reuse sockets; idle/active/connecting resources count
@@ -94,8 +104,8 @@ pool selection and error/evidence code. A full supported-version/live matrix,
 full upload conversations and CLI adoption remain tracked work. Discovery and
 finite catalog breadth are now implemented by the subsequent slices above.
 
-Active follow-on work is command-specific uploads/run, check-only uncertain-effect
-follow-up, and CLI/shared-store adoption. Their owning agents work in separate
+Active follow-on work is command-specific uploads/run and CLI/shared-store
+adoption. Their owning agents work in separate
 concerns; registry ownership transferred from access to upload after its checked
 handoff. User-directed Rust policy now follows the user's mise selection without
 repository pinning; historical toolchain results remain historical evidence.

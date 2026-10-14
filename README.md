@@ -15,14 +15,22 @@ sources:
   - resource: /design/library-redesign/implementation0.sol61m.md
     title: Implementation decisions, actual verification and remaining limits
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
-    title: Human direction to use the user's mise-selected Rust without repository version pinning or a maintained minimum-version commitment
+    title: Parent-led integration of catalog, access, observation and public usage; human direction to use mise-selected Rust without repository pinning
+  - resource: /design/library-redesign/capabilities/implementation0.sol61m.md
+    title: Audited finite and nested command catalog
+  - resource: /design/library-redesign/implementation/access0.sol61xh.md
+    title: Explicit discovery, credentials and generation-safe setup
+  - resource: /client/README.md
+    title: Runnable independent public entrances and lifecycle guide
+  - resource: /doc/usage/support.md
+    title: Provisional source and live evidence policy
 ---
 
-# kitty-rc (unstable first slice)
+# kitty-rc (unstable redesign)
 
 > Rust crates for the kitty terminal emulator's remote-control (RC) protocol,
 > rebuilt around typed exchanges and a concurrent registry. Under active
-> redesign; the first direct and managed execution slice is usable, not a full catalog.
+> redesign, with independently usable protocol, access, execution and observation crates.
 
 ## Current standing
 
@@ -38,10 +46,16 @@ restoration inventory live in
 [`design/library-redesign/teardown0.glm53m.md`](design/library-redesign/teardown0.glm53m.md);
 the previous implementation is recoverable from jj commit `e78489cb`.
 
-The first slice includes typed `ls`, `get-text`, `focus-window`, deferred
-launch-and-wait, and an explicit finite raw entrance; direct sessions and a
-concurrent managed registry share one protection boundary. No hidden endpoint,
-password, environment, subprocess lookup, automatic retry or pruning occurs.
+The source-audited finite catalog includes window/tab/layout/style/process/config
+commands, deferred results, nested mappable actions and deliberate raw entrances.
+Direct sessions and a concurrent managed registry share one protection boundary.
+Discovery and credential sources are explicitly selected; generation-safe setup
+changes preserve old operation evidence. Scoped snapshots and check-only
+follow-up compose above the registry without replaying uncertain mutations.
+
+Start with the [usage guide and runnable examples](client/README.md), and read the
+[support policy](doc/usage/support.md) to distinguish audited command contracts
+from the exact server versions and profiles exercised live.
 
 ## Workspace layout
 
@@ -49,19 +63,25 @@ password, environment, subprocess lookup, automatic retry or pruning occurs.
 | --- | --- |
 | [`protocol/schema`](protocol/schema) | Wire envelope types: `PlainRequest` (with the upstream `async` wire name), `ProtectedEnvelope`, `ResponseEnvelope` classification (terminal success/failure vs streaming acknowledgment), and the declared `SUPPORTED` kitty version `[0, 43, 1]` |
 | [`protocol/frame`](protocol/frame) | Incremental DCS framing (`ESC P @kitty-cmd … ESC \`): split-frame reassembly, in-order coalesced-frame delivery with surplus retention, bounded payloads, poisoning on out-of-frame bytes, clean-EOF truncation reporting |
-| [`protocol/commands`](protocol/commands) | Associated-output commands and tolerant listing models (`WindowInfo`, `TabInfo`, `OsWindow`); layout-specific options remain JSON maps |
+| [`protocol/commands`](protocol/commands) | Grouped associated-output command families and nested actions; required structural listing data and tolerant additive fields |
 | [`access/crypto`](access/crypto) | The one outbound protection boundary: exact `1:<base85>` X25519 key parsing, X25519 → SHA-256 → AES-256-GCM sealing with RFC 1924 base85, explicit inputs only (no env/file/subprocess/clock), plus a decrypt oracle for conformance fixtures |
 | [`access/key-store`](access/key-store) | The persisted pubkey record format (TSV): parsing with malformed-line reporting, rendering, newest-per-PID selection |
 | [`apps/cli`](apps/cli) | The `kitty-pubkey-db` binary (`init`/`add`/`get`/`cleanup`) over the shared store library |
 | [`access/endpoint`](access/endpoint) | Explicit Unix/TCP addresses and plain or key/password protection; secret-redacted setup diagnostics |
+| [`access/discovery`](access/discovery) | Injectable candidate acquisition, native paths, provenance and explicit ambiguity policy |
+| [`access/credentials`](access/credentials) | Endpoint-scoped key/password sources, pure validation and explicit resolution policy |
 | [`execution/exchange`](execution/exchange) | Immutable bounded plaintext, reserved protection expansion, fresh first-send encryption and structured causes/progress |
 | [`execution/tokio`](execution/tokio) | Reusable single-owner sessions, persistent framing state and absolute deadlines; interrupted/ambiguous/submission-only transports retire |
 | [`control/registry`](control/registry) | Caller-known reserve/commit IDs, bounded fair endpoint/class selection, native result custody, cancel, driver replacement and shutdown |
+| [`observation/listing`](observation/listing) | Scoped finite snapshots, detachable receipts, sampled changes and caller-driven polling |
+| [`observation/check`](observation/check) | Explicit fresh listing checks after uncertainty, with matching/satisfaction separate from original native outcomes |
 | [`client`](client) | Direct/managed re-exports and public examples |
 
-Discovery, credential-source resolution, uploads, continuing observations/goals,
-the full command catalog, and CLI command adoption remain later work. The
-registry reuses immutable setup **and clean audited reply-bearing sessions**.
+Command-specific uploads and CLI adoption are the active follow-on stages;
+continuous desired-state goals remain separately selectable. The registry reuses
+resolved setup **and clean audited reply-bearing sessions**. Setup invalidation
+rejects queued stale preparation with recoverable input; already leased work
+keeps its accepted basis and cannot populate a newer setup pool.
 Short, observation and long-wait active/connecting capacity is strictly
 partitioned; compatible idle sessions can serve any class. Idle, active and
 connecting sockets all count against global/per-endpoint connection limits.
@@ -72,7 +92,7 @@ retained native output bytes and record counts also have explicit limits.
 ## Explicit managed usage
 
 ```sh
-cargo run -p kitty-rc --example managed -- /explicit/kitty.sock
+mise exec -- cargo run -p kitty-rc --example managed -- --endpoint unix:/explicit/kitty.sock --plain
 ```
 
 The [managed example](client/examples/managed.rs) shows `register`, `start`,
@@ -92,8 +112,8 @@ Custody is in-process only. Keep the explicit `Driver` alive; use `stop().await`
 before replacement. No driver replacement replays a sent input.
 
 Prefer `Session::execute_with_options(command, SessionOptions { ... })` for the
-direct entrance. Only audited listing/text/focus/deferred-launch profiles opt into
-reuse; raw/custom profiles default to retirement. An observed stale idle peer
+direct entrance. Audited reply-bearing profiles opt into reuse; raw/custom
+profiles default to retirement. An observed stale idle peer
 returns a pre-write failure, not an automatic reconnect/replay. Each accepted
 input is protected once at first send, so queue time does not age an already
 encrypted password envelope. `RefusalReason`, `PrepareError`, `ExecutionError`
