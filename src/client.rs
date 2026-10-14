@@ -198,7 +198,7 @@ impl Kitty {
 
         timeout(self.timeout, self.stream.write_all(&data))
             .await
-            .map_err(|_| ConnectionError::TimeoutError(self.timeout))?;
+            .map_err(|_| ConnectionError::TimeoutError(self.timeout))??;
 
         Ok(())
     }
@@ -281,12 +281,6 @@ impl Kitty {
     pub async fn close(&mut self) -> Result<(), KittyError> {
         self.stream.shutdown().await.ok();
         Ok(())
-    }
-}
-
-impl Drop for Kitty {
-    fn drop(&mut self) {
-        let _ = self.stream.shutdown();
     }
 }
 

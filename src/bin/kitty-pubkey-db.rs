@@ -73,13 +73,13 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
         println!("Created epoch file: {}", epoch_path.display());
     }
 
-    print!("\nAdd this to your ~/.zshrc:\n");
-    print!("  # Record kitty public key when shell starts\n");
-    print!("  if [[ -n \"$KITTY_PUBLIC_KEY\" && -n \"$KITTY_PID\" ]]; then\n");
+    println!("\nAdd this to your ~/.zshrc:");
+    println!("  # Record kitty public key when shell starts");
+    println!("  if [[ -n \"$KITTY_PUBLIC_KEY\" && -n \"$KITTY_PID\" ]]; then");
     print!(r#"      kitty-pubkey-db add &"#);
-    print!("\n");
-    print!("      disown\n");
-    print!("  fi\n");
+    println!();
+    println!("      disown");
+    println!("  fi");
 
     Ok(())
 }
@@ -118,7 +118,7 @@ fn add(
                 .and_then(|s| s.parse().ok())
         })
         .map(|id| id.to_string())
-        .unwrap_or_else(|| "".to_string());
+        .unwrap_or_default();
 
     let entry = format!("{}\t{}\t{}\t{}", pid, window_id_str, pubkey, timestamp);
 
@@ -152,7 +152,7 @@ fn cleanup() -> Result<(), Box<dyn std::error::Error>> {
     let entries: Vec<DbEntry> = content
         .lines()
         .filter(|line| !line.is_empty())
-        .filter_map(|line| parse_db_entry(line))
+        .filter_map(parse_db_entry)
         .collect();
 
     let alive_entries: Vec<DbEntry> = entries
@@ -192,7 +192,7 @@ fn get(pid: u32) -> Result<(), Box<dyn std::error::Error>> {
     let entries: Vec<DbEntry> = content
         .lines()
         .filter(|line| !line.is_empty())
-        .filter_map(|line| parse_db_entry(line))
+        .filter_map(parse_db_entry)
         .filter(|entry| entry.pid == pid)
         .collect();
 

@@ -203,7 +203,7 @@ mod tests {
         let conn_err = ConnectionError::from(io_err);
 
         match conn_err {
-            ConnectionError::SocketNotFound(_) => assert!(true),
+            ConnectionError::SocketNotFound(_) => {}
             _ => panic!("Expected SocketNotFound error"),
         }
     }

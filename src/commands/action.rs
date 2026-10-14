@@ -11,7 +11,7 @@ pub struct ActionCommand {
     args: Vec<String>,
 }
 
-fn is_empty_args(v: &Vec<String>) -> bool {
+fn is_empty_args(v: &[String]) -> bool {
     v.is_empty()
 }
 

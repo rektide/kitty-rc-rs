@@ -1,3 +1,7 @@
+// Marker types like `QuitAction` provide `new()` returning `ActionCommand`
+// by design: they are named constructors for the generic action command.
+#![allow(clippy::new_ret_no_self)]
+
 pub mod client;
 pub mod command;
 pub mod commands;

@@ -90,7 +90,7 @@ impl Encryptor {
         }
 
         let key_bytes =
-            fs::read(&key_path).map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()))?;
+            fs::read(key_path).map_err(|e| EncryptionError::InvalidPublicKey(e.to_string()))?;
 
         Ok(key_bytes)
     }
@@ -104,7 +104,7 @@ impl Encryptor {
 
         let payload_bytes = payload_str.as_bytes();
 
-        let secret = StaticSecret::random_from_rng(&mut OsRng);
+        let secret = StaticSecret::random_from_rng(OsRng);
         let public_key = PublicKey::from(&secret);
         let shared_secret = secret.diffie_hellman(&self.kitty_public_key);
 
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_new_with_public_key() {
-        let secret = StaticSecret::random_from_rng(&mut OsRng);
+        let secret = StaticSecret::random_from_rng(OsRng);
         let public_key = PublicKey::from(&secret);
         let public_key_str = format!("1:{}", base85::encode(public_key.as_bytes()));
 
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_new_with_public_key_none() {
-        let secret = StaticSecret::random_from_rng(&mut OsRng);
+        let secret = StaticSecret::random_from_rng(OsRng);
         let public_key = PublicKey::from(&secret);
         // Note: unsafe is required to modify env vars in Rust tests
         unsafe {
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_command() {
-        let secret = StaticSecret::random_from_rng(&mut OsRng);
+        let secret = StaticSecret::random_from_rng(OsRng);
         let public_key = PublicKey::from(&secret);
         // Note: unsafe is required to modify env vars in Rust tests
         unsafe {

@@ -96,14 +96,14 @@ impl KittyMessage {
     }
 
     pub fn needs_streaming(&self) -> bool {
-        if let Some(payload) = &self.payload {
-            if let Some(obj) = payload.as_object() {
-                for (_key, value) in obj {
-                    if let Some(s) = value.as_str() {
-                        if s.len() > MAX_CHUNK_SIZE {
-                            return true;
-                        }
-                    }
+        if let Some(payload) = &self.payload
+            && let Some(obj) = payload.as_object()
+        {
+            for (_key, value) in obj {
+                if let Some(s) = value.as_str()
+                    && s.len() > MAX_CHUNK_SIZE
+                {
+                    return true;
                 }
             }
         }
@@ -117,45 +117,45 @@ impl KittyMessage {
             return vec![self];
         }
 
-        if let Some(payload) = self.payload.take() {
-            if let Some(obj) = payload.as_object() {
-                let stream_id = Self::generate_unique_id();
+        if let Some(payload) = self.payload.take()
+            && let Some(obj) = payload.as_object()
+        {
+            let stream_id = Self::generate_unique_id();
 
-                for (_key, value) in obj {
-                    if let Some(s) = value.as_str() {
-                        if s.len() > MAX_CHUNK_SIZE {
-                            for (i, chunk_data) in s.as_bytes().chunks(MAX_CHUNK_SIZE).enumerate() {
-                                let mut chunk_msg = self.clone();
-                                chunk_msg.stream_id = Some(stream_id.clone());
-                                chunk_msg.stream = Some(true);
+            for (_key, value) in obj {
+                if let Some(s) = value.as_str()
+                    && s.len() > MAX_CHUNK_SIZE
+                {
+                    for (i, chunk_data) in s.as_bytes().chunks(MAX_CHUNK_SIZE).enumerate() {
+                        let mut chunk_msg = self.clone();
+                        chunk_msg.stream_id = Some(stream_id.clone());
+                        chunk_msg.stream = Some(true);
 
-                                let mut chunk_payload = serde_json::Map::new();
-                                chunk_payload.insert(
-                                    "data".to_string(),
-                                    serde_json::Value::String(
-                                        String::from_utf8_lossy(chunk_data).to_string(),
-                                    ),
-                                );
-                                chunk_payload.insert("chunk_num".to_string(), serde_json::json!(i));
-                                chunk_msg.payload = Some(serde_json::Value::Object(chunk_payload));
+                        let mut chunk_payload = serde_json::Map::new();
+                        chunk_payload.insert(
+                            "data".to_string(),
+                            serde_json::Value::String(
+                                String::from_utf8_lossy(chunk_data).to_string(),
+                            ),
+                        );
+                        chunk_payload.insert("chunk_num".to_string(), serde_json::json!(i));
+                        chunk_msg.payload = Some(serde_json::Value::Object(chunk_payload));
 
-                                chunks.push(chunk_msg);
-                            }
-
-                            let mut end_chunk = self.clone();
-                            end_chunk.stream_id = Some(stream_id);
-                            end_chunk.stream = Some(true);
-                            let mut end_payload = serde_json::Map::new();
-                            end_payload.insert(
-                                "data".to_string(),
-                                serde_json::Value::String(String::new()),
-                            );
-                            end_chunk.payload = Some(serde_json::Value::Object(end_payload));
-                            chunks.push(end_chunk);
-
-                            return chunks;
-                        }
+                        chunks.push(chunk_msg);
                     }
+
+                    let mut end_chunk = self.clone();
+                    end_chunk.stream_id = Some(stream_id);
+                    end_chunk.stream = Some(true);
+                    let mut end_payload = serde_json::Map::new();
+                    end_payload.insert(
+                        "data".to_string(),
+                        serde_json::Value::String(String::new()),
+                    );
+                    end_chunk.payload = Some(serde_json::Value::Object(end_payload));
+                    chunks.push(end_chunk);
+
+                    return chunks;
                 }
             }
         }
