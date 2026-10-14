@@ -42,7 +42,7 @@ pub struct Cli {
     /// Absolute budget per acquisition/command in milliseconds, including queue time
     #[arg(long, default_value = "5000", value_parser = clap::value_parser!(u64).range(1..=86_400_000), global = true)]
     pub timeout_ms: u64,
-    /// Maximum native response bytes per acquisition
+    /// Maximum native response bytes; 256 B–16 MiB, with bounded registry retention
     #[arg(long, default_value = "1048576", value_parser = clap::value_parser!(u64).range(256..=16_777_216), global = true)]
     pub max_response: u64,
     /// Write machine-readable JSON (watch uses one JSON object per line)

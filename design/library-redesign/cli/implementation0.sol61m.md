@@ -7,7 +7,7 @@ status: draft
 generated: { by: "model:openai/gpt-6.1-sol#medium", at: 2026-10-14 }
 sources:
   - resource: "opencode://ses_ec5e53929ffezfWrk0e0AOF9Uc"
-    title: Owned CLI/store implementation, native backlog adoption, isolated verification, parent-reviewed normal-absence correction and handoff
+    title: Owned CLI/store implementation, native backlog adoption, isolated verification, parent-reviewed normal-absence and response-quota corrections and handoff
   - resource: /design/library-redesign/tickets0.sol61m.md#existing-backlog
     title: Native IDs and preserved list/standalone/config/observation mapping
   - resource: /design/library-redesign/draft1.gpt6a.md
@@ -20,6 +20,10 @@ sources:
     title: Scoped finite acquisition, explicit baseline, receipt custody and skipped-poll semantics
   - resource: /design/library-redesign/capabilities/implementation0.sol61m.md
     title: Typed catalog/strict output and focus completion contract
+  - resource: /control/registry/src/lib.rs
+    title: Inspected current admission reserves selected response plus route-bearing cause bytes
+  - resource: /control/registry/src/setup.rs
+    title: Endpoint setup size is bounded by max_request, grounding the CLI failure-context allowance
   - resource: /doc/PLAN-pubkey-db.md
     title: Historical shell-publication need; automatic cleanup is superseded
   - resource: /src/bin/list_windows.rs
@@ -27,7 +31,7 @@ sources:
     revision: "jj-commit:e78489cb"
 verification:
   scope: Actual kitty-rc and kitty-pubkey-db executables against private scripted Unix peers and isolated subprocess HOME/XDG/environment
-  evidence: Initial 23 and post-review 26 targeted nextest tests passed; locked all-target check, strict no-deps all-target clippy and targeted formatting check passed; compiled --help inspected
+  evidence: Initial 23 and post-review 26/28 targeted nextest tests passed; locked all-target check, strict no-deps all-target clippy and targeted formatting check passed; compiled --help inspected
   limits: No new live-kitty run or supported-version claim; no compositor focus, server subscription, automatic retries/pruning or transactional noncooperating-writer database
 ---
 
@@ -100,6 +104,19 @@ stop the driver. Ctrl-C is exit 130. Dropped command futures do not implicitly
 cancel accepted work; shutdown is the explicit owner action. Retained evidence
 is in-process and reported, not a crash-durable transcript. Response limits,
 queue/execution deadline and listing projection limits are explicit.
+Parent review also corrected the advertised response range: the CLI now selects
+global and per-endpoint registry output quotas equal to its single-operation
+`max_response` budget plus 256 KiB of bounded failure-context allowance, instead
+of inheriting the library's 8 MiB per-endpoint
+default. All response settings 256 B–16 MiB can be admitted; codec limits still
+reject an oversized actual reply. Sequential watch takes/releases before the
+next admission; this does not enlarge unrelated library defaults or claim a
+process-RSS bound for caller-owned typed snapshots.
+The allowance is grounded in inspected admission's additional address-cause
+reservation and setup's existing 256 KiB `max_request` bound. CLI output quotas
+are at most 16.25 MiB globally/per endpoint; native response limit remains at
+most 16 MiB. The first exact-response-only quota prototype was caught failing
+by executable boundary tests before commit, then corrected for this overhead.
 
 **Store maintenance:** [store report](store0.sol61m.md) records shared I/O,
 byte preservation, create-new init and deliberate CLI lock/atomic cleanup.
@@ -121,7 +138,7 @@ not a duplicate list engine or unstable Rust API compatibility obligation.
 
 User-selected mise Rust `nightly-2026-10-14`, without any toolchain/rust-version pin:
 
-- `cargo nextest run -p kitty-rc-cli`: initial **23**, normal-absence correction **26 passed**, no skipped tests.
+- `cargo nextest run -p kitty-rc-cli`: initial **23**, normal-absence correction **26**, response-budget correction **28 passed**, no skipped tests.
 - `cargo check -p kitty-rc-cli --all-targets --locked`: passed.
 - `cargo clippy -p kitty-rc-cli --all-targets --no-deps -- -D warnings`: passed.
 - `cargo fmt -p kitty-rc-cli --check`: passed.
@@ -140,6 +157,9 @@ Journeys execute real subprocesses, not just parser/serializer round trips:
   empty → focused, retaining membership changes and explicit null/status without
   hidden mutation or record leaks; plain output tests exact no-focus sentinel;
   missing facts, duplicates and ambiguous winners still stop watch;
+- response-budget review: actual tiny successful replies admit minimum 256 B,
+  exactly 8 MiB, 8 MiB+1 and full 16 MiB selections; repeated watch works at
+  16 MiB. Existing oversized-peer test still enforces the selected 256 B bound.
 - explicit/environment/declared-config precedence, actionable missing/ambiguous
   endpoint and unsupported fd/abstract routes, non-Unicode explicit socket path;
 - actual encrypted captured environment, shared legacy TSV and declared key/
@@ -169,6 +189,10 @@ Checkpoints already retained: `ddb9d505` store acceptance;
 `cb9c4112` first executable CLI stage. Later modular-store, stricter lifecycle,
 additional journeys are in `318a33d7`; full CLI reference/evidence is in
 `95b25c40`. Final closure standing is recorded separately.
+Review correction `ee4e0b52` preserves normal no-focus/empty watch samples; its
+26-test owned gate passed and `wbs` was reopened/closed with acceptance evidence.
+The response-quota correction is a separate checkpoint, not a change to socket
+selection acceptance or library limits.
 Cargo.lock's unrelated upload-engine dependency hunks remain with their owner.
 No root workspace manifest changes were necessary.
 

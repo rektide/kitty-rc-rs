@@ -769,6 +769,50 @@ fn response_bounds_and_deadline_fail_nonzero_with_no_success_output() {
 }
 
 #[test]
+fn advertised_response_budget_boundaries_admit_small_actual_replies() {
+    for budget in [256, 8_388_608, 8_388_609, 16_777_216] {
+        let scratch = Scratch::new();
+        let server = scratch.server(vec![reply(json!([]))]);
+        let out = scratch
+            .command()
+            .args(["ls", "--max-response", &budget.to_string(), "--to"])
+            .arg(&server.path)
+            .arg("--json")
+            .output()
+            .unwrap();
+        success(&out);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&out.stdout).unwrap(),
+            json!([])
+        );
+        assert_eq!(server.finish().len(), 1);
+    }
+    // Sequential acquisitions also reuse the same full-size reservation safely.
+    let scratch = Scratch::new();
+    let server = scratch.server(vec![reply(listing()); 2]);
+    let out = scratch
+        .command()
+        .args([
+            "w",
+            "--max-response",
+            "16777216",
+            "--count",
+            "2",
+            "--interval-ms",
+            "1",
+            "--to",
+        ])
+        .arg(&server.path)
+        .arg("--json")
+        .output()
+        .unwrap();
+    success(&out);
+    assert_eq!(String::from_utf8(out.stdout).unwrap().lines().count(), 2);
+    assert!(out.stderr.is_empty());
+    assert_eq!(server.finish().len(), 2);
+}
+
+#[test]
 fn encrypted_captured_publication_and_declared_file_sources_work_without_hidden_lookup() {
     let scratch = Scratch::new();
     let secret = x25519_dalek::StaticSecret::from([9u8; 32]);

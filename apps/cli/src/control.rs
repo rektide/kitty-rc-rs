@@ -24,7 +24,7 @@ pub async fn run(cli: Cli) -> Result<(), Error> {
             candidate.binding, candidate.origin, resolved.provenance
         );
     }
-    let registry = Registry::new(Limits::default())?;
+    let registry = Registry::new(registry_limits(cli.max_response as usize))?;
     let endpoint = registry.register(resolved.into_endpoint())?;
     let driver = registry.start()?;
     let result = tokio::select! {
@@ -65,6 +65,16 @@ pub async fn run(cli: Cli) -> Result<(), Error> {
     driver.stop().await;
     shutdown?;
     result
+}
+/// The CLI admits one operation at a time and takes/releases before the next.
+/// Reserve the response budget plus bounded route-bearing failure context at
+/// both quota tiers. Registry endpoint setup already cannot exceed max_request.
+fn registry_limits(max_response: usize) -> Limits {
+    let mut limits = Limits::default();
+    let retention = max_response.saturating_add(limits.max_request);
+    limits.output_bytes = retention;
+    limits.output_bytes_per_endpoint = retention;
+    limits
 }
 fn options(cli: &Cli) -> Options {
     Options {
@@ -212,6 +222,23 @@ async fn watch(
         emitted += 1;
         if count.is_some_and(|count| emitted >= count) {
             return Ok(());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn output_reservations_cover_response_and_bounded_failure_context() {
+        for budget in [256, 1_048_576, 8_388_609, 16_777_216] {
+            let limits = registry_limits(budget);
+            assert_eq!(limits.max_request, 256 * 1024);
+            assert_eq!(limits.output_bytes, budget + limits.max_request);
+            assert_eq!(
+                limits.output_bytes_per_endpoint,
+                budget + limits.max_request
+            );
         }
     }
 }

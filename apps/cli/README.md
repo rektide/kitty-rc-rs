@@ -174,7 +174,16 @@ without leaking custody. Cadence and output are caller-driven; no subscription,
 resume cursor, desired-state controller or background watchdog is claimed.
 
 `--timeout-ms` defaults to 5000 and is an absolute per-operation queue/execution
-budget. `--max-response` defaults to 1 MiB (256 bytes–16 MiB allowed). Projection
+budget. `--max-response` defaults to 1 MiB (256 bytes–16 MiB allowed).
+The CLI sets global and per-endpoint registry output quotas to the selected
+response budget **plus 256 KiB** for bounded route-bearing failure context (the
+registry's existing maximum endpoint-setup size). One operation is admitted at a time and released before
+the next. Thus the full advertised 16 MiB setting is usable, rather than rejected
+by the library's lower default per-endpoint quota. This is a bounded upper limit,
+not a mandatory 16 MiB allocation; actual oversized peer replies still fail.
+Maximum registry output retention is 16.25 MiB at either quota tier; native
+response bytes are still limited to the selected maximum, without that allowance.
+Projection
 is additionally bounded by the listing leaf's 16,384-window limit. Every process
 explicitly shuts down its registry and stops its owned driver. Ctrl-C cancels
 accepted work locally, reports retained progress/uncertainty before release,
