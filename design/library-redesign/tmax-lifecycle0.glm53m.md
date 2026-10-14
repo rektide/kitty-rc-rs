@@ -8,6 +8,10 @@ status: draft
 generated:
   at: 2026-10-14
   by: model:zai-coding-plan/glm-5.3#max
+updated:
+  at: 2026-10-14
+  by: model:zai-coding-plan/glm-5.3#max
+  reason: parent review corrections — async response correlation, ownership model, purity boundaries, schema tolerance, connection-vs-instance identity, no auto-reconciliation, preflight limits (see Correction addendum)
 sources:
   - resource: opencode://ses_ec7b1e11effeOrmZ7s7gR2AXJY
     title: Commissioned tmax lifecycle research and independent comparison wave (this document)
@@ -47,6 +51,8 @@ sources:
     title: Annealing index — cost of convergence in design documents
   - repository: kitty-rc src @ git 97990cb2 (jj rvzszymznvwz; later commits touch design/ only)
     title: kitty-rc client/protocol/error sources re-read for the comparison
+  - repository: ~/archive/kovidgoyal/kitty @ git 5bf3c2dc6 (nightly-131-g5bf3c2dc6)
+    title: kitty baseline remote_control.py — response construction and async handling, read for the correlation correction
 ---
 
 # tmax lifecycle reconstruction and what kitty-rc should and should not take from it
@@ -239,11 +245,20 @@ imitation of the marker is indistinguishable; there is no atomicity or
 progress, outside-line retention, and cardinality checks
 (`CompletionStatus::ReplyCardinality` for zero/multiple candidate blocks).
 
-**kitty-rc does not need any of this**: the kitty RC socket is a
-request/response protocol — each command yields one framed response (or is
-explicitly `no_response`). The only multiplexing wrinkle is `async_id`, which
-tags late responses; that is a small pending-map problem, not a fencing
-protocol.
+**kitty-rc does not need any of this machinery, but not because kitty "has
+IDs."** The kitty RC protocol has **no response correlation at all**: in the
+baseline implementation, sync responses are `{'ok', 'data'|'error'}` dicts
+with no request identifier (`~/archive/kovidgoyal/kitty/kitty/remote_control.py:260-264`),
+and async completions sent by `send_response_to_client` likewise do not echo
+the `async` id — the id is only a server-side key into
+`active_async_requests` used for dedupe and cancellation gating
+(`remote_control.py:472-484`, registration at `227-247`; note the wire field is
+`async`, `remote_control.py:468`). A client receiving a late frame cannot
+attribute it to a particular outstanding request. Therefore **one outstanding
+exchange at a time is not merely a safe first shape — it is the only sound
+default** given the protocol; correlating multiple concurrent requests would
+require an upstream protocol change (echoing a request id in responses), not a
+client-side pending map.
 
 ### Shutdown and cleanup
 
@@ -289,9 +304,9 @@ tmux fact. The exercise for kitty-rc is matching mechanism to protocol fact:
 | Stage-preserving failures (refused vs admitted vs timeout; no fabricated receipts) | honest retry policy | Yes — minimal version: `UnknownOutcome` after send | Adopt (small) |
 | "Timeout/cancel ≠ non-execution; no blind retry" | mutation safety | **Yes — this is exactly the zooming-kittens double-increment hazard** | Adopt as documented contract |
 | Bounded lines/bodies/mailboxes + typed capacity errors | untrusted/broken peers | Small version: max response bytes per exchange | Adopt (small) |
-| `ConnectionId` provenance token, explicitly *not* incarnation proof | cached handles across reconnects | Useful for the registry problem; cheap | Adopt concept |
+| `ConnectionId` provenance token, explicitly *not* incarnation proof | cached handles across reconnects | Useful as a **local connection token** for the registry problem; cheap; says nothing about server-instance identity | Adopt concept |
 | Engine threads + condvar delivery cells + wakers | sync-first design, later async need | **No** — kitty-rc is Tokio-first; `select`/`timeout`/cancellation are native | Skip |
-| Cooperative fences, positions, group ledger, block evidence | tmux has no request IDs and multiplexes | **No** — kitty is request/response + `async_id` | Skip |
+| Cooperative fences, positions, group ledger, block evidence | tmux has no request IDs and multiplexes | **No machinery** — but note kitty has no response correlation either, which *justifies* one-exchange-at-a-time rather than obviating it | Skip machinery, keep the serial-exchange constraint |
 | Subscriptions, notification policy, output routing, format resources | tmux push channels | **No** — kitty RC socket has no push channel | Skip (revisit only if a sidecar adopts one) |
 | Audited build table + fail-closed versioning | tmux protocol changes 3.2–3.7c | No — kitty versions degrade gracefully at runtime; keep a floor + runtime error | Skip |
 | S2 forward-completion liveness exception | audited tmux crash window | No known kitty analog | Skip |
@@ -322,14 +337,14 @@ Costs observed in the record, for calibration:
 
 | Concern | Recommended kitty-rc semantics | tmax precedent |
 |---|---|---|
-| Ownership | One `Exchange` future per command; connection handle (`Arc`-split read/write halves) not borrowed across awaits | `Request` owner; `#[must_use]`; drop cancels delivery |
+| Ownership | Exclusive-owner client: one `Exchange` future per command, borrowing `&mut client` across awaits is fine — no `Arc`/split-half prescription. The real constraint is cancellation hygiene, not borrow shape: dropping an exchange mid-receive leaves unknown stream state (possibly a partial frame and, with no response correlation, no way to resynchronize), so cancellation **marks the connection unusable or discards its buffered input**; a subsequent exchange requires a fresh connection or an explicit resync decision | `Request` owner; `#[must_use]`; drop cancels delivery |
 | Tasks | No resident engine task; each exchange owns its receive until frame complete | (tmax's threads exist only because it is sync; do not copy) |
-| Shutdown | Drop the stream; explicit `close()` optional; reconnect **creates a new identity**, never silently reuses state | `close()` nonblocking; `Shared::drop` closes (`mod.rs:196-200`) |
+| Shutdown | Drop the stream; explicit `close()` optional; reconnect yields a fresh **local connection token** (bookkeeping identity for this client's connection) — it is *not* proof of a new server instance; the same kitty may still own that socket | `close()` nonblocking; `Shared::drop` closes (`mod.rs:196-200`); `ConnectionId` is connection identity, explicitly not instance identity |
 | Cancellation | Dropping the exchange future cancels the *wait*, never implies the command did not run | cancel "abandons delivery, not tmux execution" |
 | Backpressure | One exchange at a time initially → none needed; `max_response_bytes` bound with typed overflow error | `reply_bytes` bound → `ResponseTooLarge` |
 | Deadlines | One deadline per exchange spanning send+receive; connect gets its own; no per-read resets | direct 30s covers connect→exit-ack |
 | Errors | `Connect{path}`, `Encode`, `Encrypt`, `Send`, `Framing`, `Timeout`, `TooLarge`, `Remote{error}`, `Decode` — plus `UnknownOutcome{after: Send|None}` marker on post-send failures | stage taxonomy; `ServerConnection` retains path; timeout ≠ rollback |
-| Retry | Core never retries side-effects; reconnect is a new connection; idempotent reconnect only for connect itself | "does not authorize blind resubmission" |
+| Retry | Core never retries side-effects; reconnect is a new local connection with unproven server-instance identity; idempotent retry only for connect itself | "does not authorize blind resubmission" |
 
 ## Options with triggers
 
@@ -344,15 +359,19 @@ rather than a generic length heuristic. No resident tasks, no pending maps, no
 buffers beyond one frame + one response bound. Est. ~1.5–2.5k lines.
 
 **Middle (add when triggered).**
-- *Trigger: async_id actually used by consumers* → pending map keyed by
-  `async_id` with one-outstanding-async-command limit initially.
-- *Trigger: a cached-client registry (zooming-kittens)* → instance tokens
-  (socket path + pid + generation) validated on reuse (pid liveness, socket
-  identity); registry-level reconciliation (compare current state before
-  re-applying an increment) instead of replay.
-- *Trigger: interleaved concurrent exchanges on one socket* → explicit
-  correlation layer; at that point re-read tmax's receipts/observer split and
-  bounded lanes before inventing one.
+- *Trigger: async commands (`async` id) actually used by consumers* → still
+  one outstanding exchange at a time; responses do not echo the id
+  (`remote_control.py:472-484`), so a pending map cannot attribute late frames
+  and multiple concurrent async commands are uncorrelatable without an
+  upstream protocol extension. A library can only serialize them; raising
+  this with upstream (echo the request id in responses) is the real fix.
+- *Trigger: a cached-client registry (zooming-kittens)* → fresh local
+  connection tokens per connection plus caller-chosen revalidation before
+  reuse (see recommendation 6); registry policy stays with the consumer.
+- *Trigger: interleaved concurrent exchanges on one socket* → not supportable
+  by the current protocol semantics (no response correlation); if upstream
+  ever adds it, re-read tmax's receipts/observer split and bounded lanes
+  before inventing a correlation layer.
 
 **Richer (only under strong evidence).** Persistent subscriptions/events
 (only if kitty grows a push channel over this socket or a sidecar protocol is
@@ -369,8 +388,8 @@ cleanly onto tmax's *internal* seams, with the engine mostly deleted:
 
 | kitty-rc crate/module | tmax precedent | content |
 |---|---|---|
-| discovery (pure) | `endpoint` socket resolution | enumerate kitty sockets, pid extraction, env resolution; no I/O |
-| credentials (pure) | — (tmax has none) | pubkey lookup (`kitty-pubkey-db`), password sources |
+| discovery | `endpoint` socket resolution | **pure core**: socket-name parsing, pid extraction from `kitty-<pid>.sock`, selection rules, env-var *names*; **I/O edge** (kept separate): enumerating runtime dirs/sockets, reading environment, liveness checks. The pure selection logic is isolatable and table-testable; the enumeration itself is I/O and should not be laundered into "pure" |
+| credentials | — (tmax has none) | same split: pure key/password *parsing and validation*; I/O edge performs pubkey-db queries, env reads, file reads |
 | envelope (pure) | — | encrypt/decrypt one payload; no transport |
 | wire/codec (pure) | `operation::invocation` + framing constants | frame encode/decode, incremental scanner, typed command/response types |
 | transport/execution | `protocol::native/command.rs` discipline | connect, one-exchange executor, deadlines, error mapping |
@@ -389,32 +408,51 @@ mistake `Prepared` prevents.
    per execution, opaque preparation binding encode+decode) — it is the
    single highest-value pattern tmax offers and it fits the accepted design
    direction verbatim.
-2. Adopt the direct-path discipline wholesale: validate before connect; one
+2. Adopt the direct-path discipline, with a preflight scope caveat: validate
+   everything *checkable without consuming the input* before connecting
+   (socket path, config, static payload shape, frame-size bounds); one
    absolute deadline spanning the whole exchange; connect-stage errors retain
    the socket path and are never conflated with later I/O loss; server-side
-   `ok:false` is a `Remote` error, never `Ok`.
+   `ok:false` is a `Remote` error, never `Ok`. For incrementally produced
+   input (streamed `send-text` from a reader), full pre-validation is
+   impossible without buffering the stream: preflight the framing envelope,
+   let later source errors surface mid-exchange, and classify them as
+   `UnknownOutcome{after: Send}` — the command may be partially delivered.
 3. Write the no-retry/unknown-outcome contract into the crate docs from day
    one (tmax's phrasing is a good model: "timeout, cancellation, loss, or
    disconnect does not mean a mutation did not execute").
-4. Strict decoders: missing/extra response data is an error (tmax:
-   `ReplyCardinality`, malformed-row-fails-all). This directly retires the
-   `ls`-empty-success class.
+4. Schema-aware decoders: **required** response data missing (or malformed)
+   is an error — this retires the `ls`-empty-success class (tmax:
+   `ReplyCardinality`, malformed-row-fails-all). Unknown *additive* fields are
+   tolerated per command/version schema: kitty grows response payloads across
+   releases, and rejecting unrecognized fields would break the client against
+   newer servers. Strictness is about absence and shape of promised data, not
+   about novelty.
 5. Do not build threads, mailboxes, fences, subscriptions, or attestation
    tables. None of tmax's drivers for them exist in the kitty protocol as
    currently understood. If upstream evolution contradicts this (the parallel
    upstream review owns that question), revisit with the middle-tier triggers.
-6. For the registry hazard, prefer *revalidation over replay*: on any
-   ambiguous outcome or reconnect, re-read state and reconcile rather than
-   re-applying effects; treat a reconnect as a new instance identity.
+6. For the registry hazard, offer **explicit caller-directed revalidation,
+   not automatic reconciliation**: unsolicited auto-reconcile is forbidden by
+   the project's own change discipline, and no generic remedy exists. Where
+   observable state exists (window/tab listings), the library should make
+   re-reading cheap and let the *caller* compare and decide after an ambiguous
+   outcome or reconnect. Where no observable state exists (e.g. relative
+   font-size increments), the outcome is simply unknown; the honest options
+   are caller-chosen (accept ambiguity, re-read via a queryable equivalent,
+   or escalate to the user) — the library must not paper over this.
 7. Keep an execution-modes table (one screen, like
    `doc/library/execution-modes.md`) contrasting one-shot vs any future
    persistent mode, rather than optional-field conflation.
 
 ## Open questions for the parent discussion
 
-- Does the kitty RC socket ever interleave responses for multiple outstanding
-  commands (beyond `async_id` completions), i.e. is one-exchange-at-a-time
-  merely safe or actually required? (Upstream review should settle this.)
+- Baseline source settles that responses carry no request identifier
+  (`remote_control.py:260-264, 472-484`), so one outstanding exchange is the
+  only sound default. Remaining upstream question: is FIFO ordering of
+  pipelined *sync* responses on one socket ever guaranteed (event-loop
+  serialization), and could upstream be asked to echo a request id so async
+  completions become attributable? (Upstream review owns this.)
 - What are the exact response frames for streamed/chunked payloads (e.g.
   `send-text`, images) — is there a documented terminator/ack per chunk? The
   current generic chunking is broken in four ways (see Situation); the fix
@@ -424,9 +462,51 @@ mistake `Prepared` prevents.
 - Is a "raw escape hatch" response ever encrypted? If encryption is
    all-or-nothing per connection, the pipeline can encrypt exactly once at a
    single choke point (fixing the double-encrypt class permanently).
-- Do we want a cheap instance token exposed for consumers like
+- Do we want a cheap local connection token exposed for consumers like
   zooming-kittens, or leave identity to the consumer? (tmax's
-  `ConnectionId`-is-equality-only discipline is the right scope if yes.)
+  `ConnectionId`-is-equality-only, connection-not-instance discipline is the
+  right scope if yes.)
+
+## Correction addendum (2026-10-14, after parent review)
+
+The initial version (jj `wsloqquworzs`) was checkpointed; these corrections
+are grounded in the kitty baseline read after review. Deltas:
+
+1. **Async correlation removed.** The claim that `async_id` "tags late
+   responses" and enables "a small pending-map" was unsupported: responses
+   never echo any request identifier
+   (`~/archive/kovidgoyal/kitty/kitty/remote_control.py:472-484`; sync shape at
+   `:260-264`; wire field is `async`, `:227,468`). One outstanding exchange is
+   justified by the *absence* of general response correlation, and the pending
+   map / one-outstanding-async-limit middle-tier trigger was replaced by
+   serialization plus an upstream protocol-change ask.
+2. **Ownership prescription removed.** The `Arc`-split / "not borrowed across awaits"
+   prescription was unjustified and conflicted with the minimal exclusive-owner
+   model; borrowing `&mut client` across awaits is fine. The real constraint
+   is cancellation hygiene: a cancelled read leaves unknown stream state that
+   cannot be resynchronized without request ids, so cancellation marks the
+   connection unusable or discards buffered input.
+3. **Purity boundaries split.** "discovery (pure, no I/O)" and "credentials
+   (pure pubkey lookup)" were contradictory; both now carry a pure
+   parsing/selection core and a separate I/O edge (enumeration, env/file/db
+   access).
+4. **Decoder strictness scoped.** "missing/extra data is an error" is now
+   "required data missing is an error; unknown additive fields are tolerated
+   per command/version schema" — strict about promised-data absence, tolerant
+   of upstream additions.
+5. **Connection vs instance identity disentangled.** Earlier text correctly
+   described tmax's token as connection-not-instance identity; later text
+   ("reconnect = new instance identity") conflated them. A reconnect yields a
+   fresh *local connection token*; server-instance identity remains unproven.
+6. **No automatic reconciliation.** The "revalidation over replay" remedy now
+   respects the project rule against unsolicited auto-reconciliation and is
+   scoped to explicit, caller-directed revalidation where observable state
+   exists; effects without observable state (font increments) honestly remain
+   unknown-outcome, caller decides.
+7. **Preflight scope limited.** "Validate everything before the first byte"
+   now applies to what is checkable without consuming the input; incrementally
+   produced input gets envelope preflight plus mid-exchange source errors
+   classified as `UnknownOutcome{after: Send}`.
 
 ## Reading pointers (tmax)
 
