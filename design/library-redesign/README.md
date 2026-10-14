@@ -20,6 +20,8 @@ sources:
     title: Verified kubeless mechanisms and kitty-native exchange design, read for discussion
   - resource: /design/library-redesign/tmax-lifecycle0.glm53m.md
     title: Lifecycle comparison and reviewed corrections to correlation and cancellation recommendations
+  - resource: /design/library-redesign/kubeless-adaptation1.gpt6a.md
+    title: Human-corrected registry-first concurrency design and constructive generic kubeless adaptations
 ---
 
 # Library redesign
@@ -49,6 +51,7 @@ not acceptance of a replacement architecture.
 | [Upstream kitty evolution](../upstream-kitty/evolution0.gpt6a.md) | Astra medium | Build baseline, stable/HEAD behavior, schemas and server fixes |
 | [Kubeless reconnaissance](kubeless-assessment0.glm53fx.md) | FX | Initial lifecycle/streaming opportunity map; read with Astra's corrections |
 | [Kubeless research and design](kubeless-design0.gpt6a.md) | Astra medium, after FX | Verified evidence/ownership patterns, reuse decisions and concrete exchange/crate proposal |
+| [Kubeless adaptation and registry design](kubeless-adaptation1.gpt6a.md) | Astra medium, after human correction | Constructive control-framework reuse, concurrent pooled execution, retained outcomes and optional reconciliation |
 | [Tmax lifecycle comparison](tmax-lifecycle0.glm53m.md) | G | Typed-operation and deadline precedents, protocol-specific machinery, corrected correlation/cancellation guidance |
 
 ### Available upstream evidence
@@ -64,10 +67,12 @@ not acceptance of a replacement architecture.
 
 - **Common direction:** typed request/output binding, explicit outcome evidence,
   absolute deadlines, one exchange owner, and concern-specific components.
-- **Kubeless reuse:** Astra recommends independent kitty machinery initially;
-  HTTP retry and Kubernetes channel framing do not directly supply kitty's
-  lifecycle. An optional settlement helper is a later possibility with a
-  concrete application predicate.
+- **Kubeless reuse, revised:** the first Astra study evaluated the low-level
+  exchange too narrowly. The adaptation follow-on studies kubeless's generic
+  ready-work/executor, custody, retained host, checks, observations and capability
+  descriptions as serious managed-registry building blocks. Its strongest proposed
+  framework extension is a fair native work-lane entrance into the retained host.
+  HTTP retry and Kubernetes framing remain separate from kitty's native exchange.
 - **Tmax boundary:** borrow its execution discipline and typed preparation
   pattern; its tmux-specific correlation engine and sync-first task structure
   are not a starting template for this Tokio client.
@@ -76,9 +81,15 @@ not acceptance of a replacement architecture.
   per-command upload accumulator that can cause interference across connections.
   The parent checked the accumulator and Go handshake source; live kitty
   verification is still outstanding.
-- **Decisions for discussion:** default connection lifetime, ordinary result
-  versus evidence-bearing API, extent of public exchange extension, concrete
-  crate boundaries, and supported upstream/runtime versions.
+- **Registry motivation, clarified by the human:** multiple independent commands
+  should progress across multiple bounded connection leases. Long waits and large
+  reads must not block quick operations globally. One exchange per connection
+  is not one exchange per registry; upload exclusion is a specialty constraint.
+- **Decisions for discussion:** thin coordination with direct custody versus a
+  retained control host, operation-versus-waiter cancellation, endpoint/class
+  capacity policy, public extension boundaries, concern crates, and upstream/runtime
+  support. Desired-state reconciliation is a selectable higher-level capability,
+  not a prerequisite for concurrent command execution.
 
 The parent draft remains independent of this wave. Discuss these tradeoffs with
 the human **before writing the next architecture draft**. No library
