@@ -11,7 +11,7 @@ sources:
   - resource: "opencode://ses_ec71e81e3ffercjuzWSBbKFI5w"
     title: Preserved teardown foundation and preceding overview
   - resource: "opencode://ses_ec7004672ffeAbyzuSmd4Cov2i"
-    title: Typed execution, bounded registry, scripted and isolated live conformance, and usage revision
+    title: Typed execution and bounded registry, then parent-review corrections for pooling, fresh first-send protection, remote IDs, error causes and lifecycle races
   - resource: /design/library-redesign/implementation0.sol61m.md
     title: Implementation decisions, actual verification and remaining limits
 ---
@@ -52,17 +52,20 @@ password, environment, subprocess lookup, automatic retry or pruning occurs.
 | [`access/key-store`](access/key-store) | The persisted pubkey record format (TSV): parsing with malformed-line reporting, rendering, newest-per-PID selection |
 | [`apps/cli`](apps/cli) | The `kitty-pubkey-db` binary (`init`/`add`/`get`/`cleanup`) over the shared store library |
 | [`access/endpoint`](access/endpoint) | Explicit Unix/TCP addresses and plain or key/password protection; secret-redacted setup diagnostics |
-| [`execution/exchange`](execution/exchange) | Prepared finite bytes, progress and native/typed outcome distinctions |
-| [`execution/tokio`](execution/tokio) | Exclusively owned socket driving and absolute deadlines; every connection retired in this slice |
+| [`execution/exchange`](execution/exchange) | Immutable bounded plaintext, reserved protection expansion, fresh first-send encryption and structured causes/progress |
+| [`execution/tokio`](execution/tokio) | Reusable single-owner sessions, persistent framing state and absolute deadlines; interrupted/ambiguous/submission-only transports retire |
 | [`control/registry`](control/registry) | Caller-known reserve/commit IDs, bounded fair endpoint/class selection, native result custody, cancel, driver replacement and shutdown |
 | [`client`](client) | Direct/managed re-exports and public examples |
 
 Discovery, credential-source resolution, uploads, continuing observations/goals,
 the full command catalog, and CLI command adoption remain later work. The
-registry reuses immutable endpoint setup, **not sockets**. Short, observation and
-long-wait capacity is strictly partitioned: no borrowing of another class's
-reserved service opportunity. Input bytes, retained native output bytes, record
-counts and connecting/live socket slots have global and per-endpoint limits.
+registry reuses immutable setup **and clean audited reply-bearing sessions**.
+Short, observation and long-wait active/connecting capacity is strictly
+partitioned; compatible idle sessions can serve any class. Idle, active and
+connecting sockets all count against global/per-endpoint connection limits.
+Unused incompatible idle routes can be retired on demand to serve eligible
+work at another endpoint; there is no TTL pruning. Input/protection reservations,
+retained native output bytes and record counts also have explicit limits.
 
 ## Explicit managed usage
 
@@ -86,6 +89,21 @@ decoded output and its memory. `release` removes a completed record deliberately
 Custody is in-process only. Keep the explicit `Driver` alive; use `stop().await`
 before replacement. No driver replacement replays a sent input.
 
+Prefer `Session::execute_with_options(command, SessionOptions { ... })` for the
+direct entrance. Only audited listing/text/focus/deferred-launch profiles opt into
+reuse; raw/custom profiles default to retirement. An observed stale idle peer
+returns a pre-write failure, not an automatic reconnect/replay. Each accepted
+input is protected once at first send, so queue time does not age an already
+encrypted password envelope. `RefusalReason`, `PrepareError`, `ExecutionError`
+and `DecodeError` preserve matchable stages and original causes; native reply
+bytes remain available. Drain interrupted by driver loss returns a typed
+`ShutdownError` containing retained inventory instead of hanging.
+
+Remote async IDs use independent CSPRNG randomness, never local operation or
+connection tokens. Kitty's server-global table retains only **32 active async
+registrations**, evicting older entries beyond that limit. Other clients and
+unresolved remote work can consume it; local quotas cannot prevent their eviction.
+
 ## Building and testing
 
 ```sh
@@ -98,8 +116,8 @@ python3 scripts/verify-isolated-kitty.py  # optional: installed kitty + headless
 
 Rust **1.88** is the tested floor for the current lockfile; 1.85 fails its
 dependencies' declared minima. Scripted tests verify concurrency and lifecycle;
-an isolated real **kitty 0.48.2** passed encrypted direct listing and concurrent
-launch-wait/text/focus. The wire version remains `[0,43,1]`; this is not a tested
+an isolated real **kitty 0.48.2** passed repeated encrypted direct/managed commands
+on unchanged connection tokens and concurrent launch-wait/text/focus. The wire version remains `[0,43,1]`; this is not a tested
 kitty-minimum or full support matrix. See the [implementation report](design/library-redesign/implementation0.sol61m.md).
 
 The `kitty-pubkey-db` store stays at `$XDG_STATE_HOME/kitty/pubkey.tsv`

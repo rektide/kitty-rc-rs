@@ -9,7 +9,7 @@ generated:
   at: 2026-10-14
 sources:
   - resource: "opencode://ses_ec7004672ffeAbyzuSmd4Cov2i"
-    title: Commissioned post-G implementation, foundation corrections, concrete custody comparison, scripted and isolated live verification, and handoff
+    title: Post-G implementation and custody comparison, then parent-review corrections for pooling, random remote IDs, structured causes, fresh first-send authentication and shutdown races
   - resource: /design/library-redesign/teardown0.glm53m.md
     title: Inspected G foundation, recovery coordinate and owned teardown evidence
   - resource: /design/library-redesign/draft1.gpt6a.md
@@ -22,6 +22,8 @@ sources:
     title: Directly inspected finite text payload and result
   - resource: https://github.com/kovidgoyal/kitty/blob/5bf3c2dc676efd5c4b4526eb135c922701565707/kitty/rc/focus_window.py
     title: Directly inspected match payload and acknowledgment
+  - resource: https://github.com/kovidgoyal/kitty/blob/5bf3c2dc676efd5c4b4526eb135c922701565707/kitty/remote_control.py
+    title: Review correction inspected server-global async registration, 32-entry eviction and response-discard behavior
   - resource: file:///home/rektide/src/kubeless/work/custody/src/owner.rs
     title: Reviewed custody take/return/history ownership at local revision 3526b490b7875717a10f8c6f8eae371e68789fbb
   - resource: file:///home/rektide/src/kubeless/control/retained-actions/src/host.rs
@@ -29,10 +31,20 @@ sources:
 verification:
   scope: First finite direct/managed slice, not full command catalog, upload conformance, reconciliation or supported-version matrix
   evidence: Workspace gates, executable native/direct-custody/host comparison, and private headless kitty 0.48.2 encrypted conformance recorded below
-  limits: In-process custody only; no socket reuse; no real-kitty minimum or latest-version claim; generic framework probes are not a production kitty adapter
+  limits: In-process custody only; reuse limited to audited clean reply-bearing profiles; no real-kitty minimum or latest-version claim; generic framework probes are not a production kitty adapter
 ---
 
 # First concurrent typed execution slice
+
+## Current correction standing
+
+Earlier sections preserve the initial checkpoint's rationale and verification.
+**Their no-reuse policy and fixed admission timestamp are superseded by the
+[review-driven corrections](#review-driven-corrections).** The parent correctly
+identified reuse as already authorized scope, not an unselected optimization.
+Six affected tickets were reopened because their earlier closure overstated
+reusable session/lease completion. This remains implementation evidence, not
+human acceptance of the unstable API.
 
 ## Outcome and ownership
 
@@ -246,3 +258,98 @@ finite custody and deliberately non-reused sockets. [The teardown](teardown0.glm
 is predecessor evidence, not the current public API. [The ticket roadmap](tickets0.sol61m.md)
 explains later scope without making it implementation authorization. The parent
 owns the shared [design index](README.md); this session does not rewrite it.
+
+## Review-driven corrections
+
+### Separate identity and lifecycle fixes
+
+- **`854cebc8`: remote async identity.** Deferred requests use fresh 256-bit
+  CSPRNG IDs, independent of local operation/connection tokens, counters and
+  timestamps. Two subprocess clients have disjoint sequences; two independent
+  registries receive simultaneous deferred responses from a fixture modeling
+  server-global registration. Upstream `remote_control.py` retains only 32 active
+  registrations and evicts the oldest beyond that count. Other clients and
+  unresolved remote work remain outside local quota control.
+- **`39d69701`: drain/stop race.** Shutdown registers a lifecycle wake before
+  inspecting unfinished work and rechecks driver attachment after every wake.
+  Driver loss and completion wake that loop. A regression starts drain while a
+  deferred exchange occupies its lane and another input queues, then stops the
+  driver. Drain returns instead of hanging; queued input stays retained. The
+  final API returns `ShutdownError::DriverStopped { inventory }`.
+
+### Reusable session and pool correction
+
+**`a8077646`** composes the coupled preparation/session/pool interfaces. `Session`
+now owns a connection and persistent decoder, not just endpoint config. The
+borrowed future takes its connection out before I/O. Only an audited profile's
+complete valid terminal reply at an empty decoder boundary can return it.
+Canceled, timed-out, malformed, surplus-ambiguous and submission-only exchanges
+retire. Raw/custom profiles default to retirement; listing, text, focus and
+deferred launch opt into reuse. Typed data failure after a valid terminal reply
+does not itself make the wire boundary ambiguous.
+
+Idle reuse first checks nonblocking EOF or unsolicited bytes. Observed EOF yields
+`IdleClosed` with `NotWritten` and removes the socket, without reconnect/replay.
+A racing closure after write starts retains its I/O cause and uncertainty; no
+retry exists. Audited server behavior is still required: the protocol cannot
+identify arbitrary delayed extra replies from a contract-violating peer.
+
+Registry state owns idle sessions independently of the driver. Idle, active and
+connecting transports all count toward global/per-endpoint quotas. Strict class
+quotas reserve active/connecting opportunity; compatible idle sessions can serve
+any class without borrowing another class's active quota. At global capacity,
+eligible work at an incompatible endpoint transfers an unused idle slot by
+retiring that idle transport before connecting. This is demand-driven resource
+accounting, not TTL cleanup or operation pruning. Successful explicit shutdown
+closes idle sockets. Driver replacement retains idle ownership but synchronously
+drops interrupted leased sessions. `PoolStats` exposes counts and local transport
+tokens, not server identities.
+
+Scripted accept counts remain one for repeated direct listings and one for
+managed listing/focus pairs; managed reuse survives driver replacement. A
+three-socket idle-inclusive budget test reuses observation-created sessions for
+long/observation/short work, then transfers incompatible idle capacity to a fourth
+endpoint while long/read stay blocked. Direct and managed stale-idle tests prove
+there is no new accept until the caller deliberately submits new input.
+
+### Fresh first-send authentication and original causes
+
+Admission freezes private immutable plaintext with bounded serialization, without
+first building an oversized serialized copy. It reserves worst JSON password
+escaping/base85/envelope expansion before acceptance, frozen-buffer capacity and
+explicit scratch allowance (plain ×3, encrypted ×8). These are conservative
+configured reservations, not an allocator/RSS ceiling or arbitrary custom-command
+CPU preemption guarantee. Final frame size is checked against reserved expansion.
+Queued input has no injected password, timestamp or ciphertext. After connect or
+idle validation, its single first-send protection call injects the current
+timestamp and fresh ephemeral key/IV; there is no refresh retry. A held encrypted
+observation lane test verifies queued listing's decrypted timestamp is later than
+lane release and that the listing reuses the same connection.
+
+`RefusalReason` preserves matchable `PrepareError`; execution retains endpoint,
+phase and original `std::io::Error`. Deadline, cancel, driver stop, framing, EOF,
+surplus and prepare causes are distinct. Atomic phase evidence survives driver
+loss/cancellation. `DecodeError` preserves serde or boxed `Error + Send + Sync`
+causes, and malformed replies preserve `SchemaError`. `Failure::source` exposes
+the chain while native bytes remain intact. Default diagnostics are UTF-8-safe,
+bounded to 256 bytes and category-labeled, without truncating native evidence or
+causes. Tests exercise custom trait-object causes, bounded display and actual
+`Connect`/`NotWritten`/`NotFound` I/O source evidence.
+
+`SessionOptions` and `execute_with_options` supplement the positional wrapper.
+The isolated real conformance example repeats encrypted direct and managed
+commands on unchanged local connection tokens, then concurrent launch/text/focus.
+It passed under private headless Weston on kitty 0.48.2 without selecting human
+terminals. This does not close the full supported-version/upload matrix.
+
+### Corrected verification and ticket boundary
+
+Final workspace nextest passed **82/82**, including the bounded-display and
+subprocess regressions. Rust 1.88 strict all-target clippy, locked all-target
+check and formatting passed; enhanced isolated real reuse conformance passed.
+`79e98a97` completes typed configuration/address errors, preserves poisoning
+across decoder reconfiguration, removes the obsolete implicit-plain drive
+entrance, and closes pooled transports outside owner locks before replacement
+connects. Final closure evidence belongs to the reopened tickets. Kubeless
+selection is unchanged; no new broad research,
+issue, subagent, push or shared-index rewrite occurred.
