@@ -20,7 +20,7 @@ sources:
     title: Superseded Python conformance guide (deleted with its directory; paths in historical reports are evidence of what ran then)
 verification:
   scope: New kitty-rc-verify crate (35 lifecycle/unit tests), converted examples, retained-boundary oracle, real finite/uploads/matrix/source runs and converged workspace gates
-  evidence: 220/220 workspace nextest, locked workspace all-target build, strict all-target clippy, fmt, doctests; live 0.48.2 finite+uploads; full 3-release encrypted+plain matrix with uploads and CLI smoke; pinned-source oracle parity
+  evidence: 220/220 workspace nextest, locked workspace all-target build, strict all-target clippy, fmt, doctests; live 0.48.2 finite+uploads; 3-release matrix with finite+CLI smoke in both modes and uploads in encrypted mode; pinned-source oracle parity
   limits: No oldest-supported guarantee, no whole-catalog/all-options claim, no HEAD promotion; plain uploads still not claimed (plain runs omit the upload harness by design)
 ---
 
@@ -111,9 +111,12 @@ All with the user's `mise` selection (`rustc 1.101.0-nightly`).
   7 nested parsers, and the upload image/run chunk contracts (512-byte image
   chunks, one final empty frame, 4096-byte run chunks). This is the same
   coverage the two retired design scripts asserted, now from one entrance.
-- **`kitty-rc-verify matrix --cli-smoke`**: **full matrix on all three
-  releases × encrypted+plain**, extending the previous preparation
-  checkpoint (which was finite-only) with the previously-unfinished pieces:
+- **`kitty-rc-verify matrix --cli-smoke`**: **all three releases ×
+  encrypted+plain**, extending the previous preparation checkpoint (which
+  was finite-only) with the previously-unfinished pieces. Finite journeys
+  and the CLI smoke ran in **both modes**; the upload harness ran in
+  **encrypted mode only** (plain profiles deliberately run only
+  `supported_matrix`, so plain uploads remain unclaimed):
 
 | Server | Encrypted | Plain | CLI smoke |
 |---|---|---|---|
@@ -141,6 +144,34 @@ live0's tables) remain intact as pre-conversion evidence; the new
 `matrix.json` is the first post-conversion full-matrix witness. The
 preparation checkpoint's 68-pass/10-skip observation and this run agree on
 every overlapping profile.
+
+## Review corrections (2026-10-14, same session)
+
+Parent review found four usability gaps in the runner; all corrected with
+tests, without rerunning or reinterpreting any recorded evidence:
+
+1. **`default-run`**: the package hosts fixture/test binaries besides the
+   CLI, so the documented `cargo run -p kitty-rc-verify -- …` failed binary
+   selection. The manifest now sets `default-run = "kitty-rc-verify"`; the
+   documented `--help` command was executed and works.
+2. **Cold-start fixture child**: example-only target selection never builds
+   the sibling `kitty-rc-verify-child`, which previously existed only via
+   incidental all-target builds and was resolved from the runner's own
+   location. Both the matrix and the single-fixture runners now build the
+   child as an explicit `--bin` selection through tested build plans and
+   resolve it from the actual cargo target directory. Verified against an
+   isolated cold `CARGO_TARGET_DIR`: the child was built into the scratch
+   target and resolved from there before any server start.
+3. **`--no-build`** is now honored: no implicit compile happens; every
+   required artifact (selected examples, the CLI binary with `--cli-smoke`,
+   and the fixture child) is checked first and **all** missing artifacts are
+   reported as one actionable blocker before any server starts. Covered by
+   lifecycle tests asserting the blocker fires with no fixture directory
+   created, and that present artifacts proceed without building.
+4. **Evidence wording**: the matrix summary now states precisely that finite
+   journeys and CLI smoke ran in both protection modes while uploads ran in
+   encrypted mode only; plain uploads remain unclaimed. No evidence was
+   rerun or altered for this clarification.
 
 ## Checks not rerun / not claimed
 

@@ -85,6 +85,8 @@ Python runners).
 
 ## Evidence and gates
 
+Finite journeys and CLI smoke run in both protection modes; the upload
+harness runs in encrypted mode only, so plain uploads are never claimed.
 The matrix report keeps the retired runner's JSON shape for witness
 comparability: exact reported versions, executable/archive SHA-256, published
 source revisions, selected `rustc --verbose`, example digests, per-profile

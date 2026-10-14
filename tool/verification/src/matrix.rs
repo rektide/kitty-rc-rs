@@ -52,6 +52,10 @@ pub struct MatrixOptions {
     /// Parent directory for transient private fixtures (default: the
     /// approved `/tmp/opencode`, keeping socket paths short).
     pub fixture_parent: PathBuf,
+    /// Override for the cargo target directory (normally discovered via
+    /// `cargo metadata`; injectable so tests exercise artifact resolution
+    /// without a compiler).
+    pub target_dir: Option<PathBuf>,
     pub base_env: Option<BTreeMap<String, String>>,
     pub binaries: Option<Binaries>,
     pub child: Option<PathBuf>,
@@ -72,6 +76,7 @@ impl Default for MatrixOptions {
             password: "upload-test-secret".into(),
             weston: PathBuf::from("weston"),
             fixture_parent: PathBuf::from("/tmp/opencode"),
+            target_dir: None,
             base_env: None,
             binaries: None,
             child: None,
@@ -96,6 +101,16 @@ pub enum MatrixError {
     Report {
         #[from]
         source: std::io::Error,
+    },
+    #[error(
+        "required prebuilt artifacts are missing{}; no implicit build was performed and no server was started. \
+         Build them deliberately (rerun without --no-build, or build the listed targets) and try again:\n{}",
+        if *no_build { " (--no-build)" } else { " after the build step" },
+        missing.iter().map(|path| format!("  {}", path.display())).collect::<Vec<_>>().join("\n")
+    )]
+    MissingArtifacts {
+        missing: Vec<PathBuf>,
+        no_build: bool,
     },
     #[error("interrupted; partial report written to {path}")]
     Interrupted { path: PathBuf },
@@ -134,26 +149,52 @@ pub async fn run(options: MatrixOptions) -> Result<i32, MatrixError> {
         .base_env
         .clone()
         .unwrap_or_else(crate::env::sanitized_ambient);
+    let mut child = options
+        .child
+        .clone()
+        .or_else(|| std::env::var_os("KITTY_RC_VERIFY_CHILD").map(PathBuf::from));
     let (binaries, rustc) = match &options.binaries {
         Some(injected) => (injected.clone(), "injected test binaries".to_owned()),
         None => {
             let rustc = cargo.rustc_report().await?;
-            let target = cargo.target_directory(&options.root).await?;
-            let binaries = build_binaries(&cargo, &options.root, &target, &options).await?;
+            let target = match &options.target_dir {
+                Some(directory) => directory.clone(),
+                None => cargo.target_directory(&options.root).await?,
+            };
+            let paths = crate::examples::artifact_paths(&target);
+            let binaries = if options.no_build {
+                // Honor the deliberate converged build: no implicit compile.
+                resolve_prebuilt(&paths, &options)?
+            } else {
+                for plan in
+                    crate::examples::matrix_build_plans(options.finite_only, options.cli_smoke)
+                {
+                    let arguments: Vec<&str> = plan.iter().map(String::as_str).collect();
+                    cargo.build(&options.root, &arguments).await?;
+                }
+                // A claimed-success build that produced no artifact is a
+                // blocker, not something to paper over.
+                resolve_prebuilt(&paths, &options)?
+            };
+            if child.is_none() {
+                child = Some(paths.child());
+            }
             (binaries, rustc)
         }
     };
     let runner = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("kitty-rc-verify"));
-    let child = options
-        .child
-        .clone()
-        .or_else(|| std::env::var_os("KITTY_RC_VERIFY_CHILD").map(PathBuf::from))
-        .unwrap_or_else(|| {
-            runner
-                .parent()
-                .map(|parent| parent.join("kitty-rc-verify-child"))
-                .unwrap_or_else(|| PathBuf::from("kitty-rc-verify-child"))
+    let child = child.unwrap_or_else(|| {
+        runner
+            .parent()
+            .map(|parent| parent.join("kitty-rc-verify-child"))
+            .unwrap_or_else(|| PathBuf::from("kitty-rc-verify-child"))
+    });
+    if !child.exists() {
+        return Err(MatrixError::MissingArtifacts {
+            missing: vec![child],
+            no_build: options.no_build,
         });
+    }
 
     let mut report = MatrixReport::new(
         options.finite_only,
@@ -330,38 +371,45 @@ fn provenance_for(root: &Path, version: &str, executable: &Path) -> serde_json::
     }
 }
 
-async fn build_binaries(
-    cargo: &Cargo,
-    root: &Path,
-    target: &Path,
+/// Resolve every prebuilt artifact this run needs under `paths`, returning
+/// an actionable blocker listing all missing files at once. Called both for
+/// `--no-build` (no implicit compile) and after a deliberate build.
+fn resolve_prebuilt(
+    paths: &crate::examples::ArtifactPaths,
     options: &MatrixOptions,
-) -> Result<Binaries, ToolchainError> {
-    let mut args: Vec<&str> = vec!["-p", "kitty-rc-verify"];
+) -> Result<Binaries, MatrixError> {
+    let binaries = Binaries {
+        conformance: paths.example("conformance"),
+        supported_matrix: paths.example("supported_matrix"),
+        upload_conformance: paths.example("upload_conformance"),
+        cli: paths.cli(),
+    };
+    let mut missing = Vec::new();
     if !options.finite_only {
-        args.extend(["-p", "kitty-rc-registry"]);
+        if !binaries.conformance.exists() {
+            missing.push(binaries.conformance.clone());
+        }
+        if !binaries.upload_conformance.exists() {
+            missing.push(binaries.upload_conformance.clone());
+        }
     }
-    args.extend(["-p", "kitty-rc", "--example", "supported_matrix"]);
-    if !options.finite_only {
-        args.extend([
-            "--example",
-            "conformance",
-            "--example",
-            "upload_conformance",
-        ]);
+    if !binaries.supported_matrix.exists() {
+        missing.push(binaries.supported_matrix.clone());
     }
-    cargo.build(root, &args).await?;
-    if options.cli_smoke {
-        cargo
-            .build(root, &["-p", "kitty-rc-cli", "--bin", "kitty-rc"])
-            .await?;
+    if options.cli_smoke && !binaries.cli.exists() {
+        missing.push(binaries.cli.clone());
     }
-    let examples = target.join("debug").join("examples");
-    Ok(Binaries {
-        conformance: examples.join("conformance"),
-        supported_matrix: examples.join("supported_matrix"),
-        upload_conformance: examples.join("upload_conformance"),
-        cli: target.join("debug").join("kitty-rc"),
-    })
+    if !paths.child().exists() {
+        missing.push(paths.child());
+    }
+    if missing.is_empty() {
+        Ok(binaries)
+    } else {
+        Err(MatrixError::MissingArtifacts {
+            missing,
+            no_build: options.no_build,
+        })
+    }
 }
 
 /// One fixture, its examples and smoke journeys, inside one bounded deadline.

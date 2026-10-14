@@ -109,6 +109,91 @@ impl Cargo {
     }
 }
 
+/// The cargo target-filter arguments that build the prebuilt binaries one
+/// matrix run needs. `--bin kitty-rc-verify-child` is always requested:
+/// example selection alone excludes the fixture-child binary, and a cold
+/// target must produce it before any server starts.
+pub fn matrix_build_plans(finite_only: bool, cli_smoke: bool) -> Vec<Vec<String>> {
+    let mut plan = vec![
+        "-p".to_owned(),
+        "kitty-rc-verify".to_owned(),
+        "--bin".to_owned(),
+        "kitty-rc-verify-child".to_owned(),
+    ];
+    if !finite_only {
+        plan.extend(["-p".to_owned(), "kitty-rc-registry".to_owned()]);
+    }
+    plan.extend([
+        "-p".to_owned(),
+        "kitty-rc".to_owned(),
+        "--example".to_owned(),
+        "supported_matrix".to_owned(),
+    ]);
+    if !finite_only {
+        plan.extend([
+            "--example".to_owned(),
+            "conformance".to_owned(),
+            "--example".to_owned(),
+            "upload_conformance".to_owned(),
+        ]);
+    }
+    let mut plans = vec![plan];
+    if cli_smoke {
+        plans.push(vec![
+            "-p".into(),
+            "kitty-rc-cli".into(),
+            "--bin".into(),
+            "kitty-rc".into(),
+        ]);
+    }
+    plans
+}
+
+/// The cargo target-filter arguments building one single-fixture example
+/// plus the fixture-child binary it launches. The child is an explicit
+/// `--bin` selection for the same cold-target reason.
+pub fn single_example_build_plan(package: &str, example: &str) -> Vec<String> {
+    vec![
+        "-p".into(),
+        "kitty-rc-verify".into(),
+        "--bin".into(),
+        "kitty-rc-verify-child".into(),
+        "-p".into(),
+        package.into(),
+        "--example".into(),
+        example.into(),
+    ]
+}
+
+/// Resolved locations of prebuilt binaries under a cargo target directory.
+pub struct ArtifactPaths {
+    pub examples: PathBuf,
+    pub debug: PathBuf,
+}
+
+/// Where a built artifact lives under a cargo target directory.
+pub fn artifact_paths(target: &Path) -> ArtifactPaths {
+    let debug = target.join("debug");
+    ArtifactPaths {
+        examples: debug.join("examples"),
+        debug,
+    }
+}
+
+impl ArtifactPaths {
+    pub fn example(&self, name: &str) -> PathBuf {
+        self.examples.join(name)
+    }
+
+    pub fn child(&self) -> PathBuf {
+        self.debug.join("kitty-rc-verify-child")
+    }
+
+    pub fn cli(&self) -> PathBuf {
+        self.debug.join("kitty-rc")
+    }
+}
+
 fn which(program: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path)

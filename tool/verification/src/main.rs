@@ -91,7 +91,10 @@ struct MatrixArgs {
     /// Protection mode (repeatable); defaults to both.
     #[arg(long = "mode")]
     modes: Vec<Protection>,
-    /// Use prebuilt examples after a deliberate converged build.
+    /// Use prebuilt artifacts only; every required example, the CLI binary
+    /// (with --cli-smoke) and the fixture child must already exist. Missing
+    /// artifacts are reported as a blocker before any server starts; no
+    /// implicit build is performed.
     #[arg(long)]
     no_build: bool,
     /// Preparation/finite profiles only; omit core and upload journeys.
@@ -246,10 +249,36 @@ fn matrix_options(args: &MatrixArgs, root: &std::path::Path) -> matrix::MatrixOp
         password: args.password.clone(),
         weston: PathBuf::from("weston"),
         fixture_parent: PathBuf::from("/tmp/opencode"),
+        target_dir: None,
         base_env: None,
         binaries: None,
         child: None,
     }
+}
+
+/// The single-example build invocation as static strings (the two callers
+/// are fixed, so the mapping is total). Kept in lockstep with
+/// [`kitty_rc_verify::examples::single_example_build_plan`], which tests
+/// assert against.
+fn single_example_build_arguments(package: &str, example: &str) -> Vec<&'static str> {
+    let package = match package {
+        "kitty-rc" => "kitty-rc",
+        _ => "kitty-rc-registry",
+    };
+    let example = match example {
+        "conformance" => "conformance",
+        _ => "upload_conformance",
+    };
+    vec![
+        "-p",
+        "kitty-rc-verify",
+        "--bin",
+        "kitty-rc-verify-child",
+        "-p",
+        package,
+        "--example",
+        example,
+    ]
 }
 
 /// One private fixture, one example, streaming output live.
@@ -287,20 +316,28 @@ async fn run_single_example(
     if let Err(error) = cargo
         .build(
             std::path::Path::new("."),
-            &["-p", package, "--example", example, "-p", "kitty-rc-verify"],
+            &single_example_build_arguments(package, example),
         )
         .await
     {
         eprintln!("{error}");
         return 2;
     }
-    let runner = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("kitty-rc-verify"));
-    let child = runner
-        .parent()
-        .map(|parent| parent.join("kitty-rc-verify-child"))
-        .filter(|path| path.exists())
-        .unwrap_or_else(|| PathBuf::from("kitty-rc-verify-child"));
-    let binary = target.join("debug/examples").join(example);
+    // Resolve the fixture child from the actual cargo target directory so a
+    // cold target (or a redirected CARGO_TARGET_DIR) works; the plan built
+    // it explicitly as a --bin selection.
+    let artifacts = kitty_rc_verify::examples::artifact_paths(&target);
+    let child = std::env::var_os("KITTY_RC_VERIFY_CHILD")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| artifacts.child());
+    if !child.exists() {
+        eprintln!(
+            "fixture child {} is missing after the build step; refusing to start a server",
+            child.display()
+        );
+        return 2;
+    }
+    let binary = artifacts.example(example);
 
     let fixture_args = fixture::FixtureOptions {
         kitty: args.kitty(),
@@ -424,5 +461,26 @@ async fn cli_smoke(args: &CliSmokeArgs, root: &std::path::Path) -> i32 {
         0
     } else {
         1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_example_arguments_match_the_lib_build_plan() {
+        for (package, example) in [
+            ("kitty-rc", "conformance"),
+            ("kitty-rc-registry", "upload_conformance"),
+        ] {
+            let arguments = single_example_build_arguments(package, example);
+            let plan = kitty_rc_verify::examples::single_example_build_plan(package, example);
+            assert_eq!(
+                arguments,
+                plan.iter().map(String::as_str).collect::<Vec<_>>(),
+                "main.rs build invocation drifted from the tested plan"
+            );
+        }
     }
 }

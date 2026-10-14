@@ -177,6 +177,7 @@ fn matrix_options(root: &Path, report: &Path, base: BTreeMap<String, String>) ->
         password: "fixture-test-secret".into(),
         weston: bin("weston"),
         fixture_parent: PathBuf::from("/tmp/opencode"),
+        target_dir: None,
         base_env: Some(base),
         binaries: Some(Binaries {
             conformance: bin("example"),
@@ -372,4 +373,116 @@ async fn fixture_child_sentinel_writes_then_exits_with_code() {
     assert_eq!(output.status.code(), Some(7));
     assert_eq!(std::fs::read_to_string(&sentinel).unwrap(), "started");
     assert!(started.elapsed() >= Duration::from_millis(120));
+}
+
+/// A cold-target run must explicitly request the fixture-child binary:
+/// example selection alone never builds sibling verification bins.
+#[test]
+fn build_plans_always_request_the_fixture_child_binary() {
+    for (finite_only, cli_smoke) in [(false, false), (true, false), (false, true), (true, true)] {
+        let plans = kitty_rc_verify::examples::matrix_build_plans(finite_only, cli_smoke);
+        assert!(
+            plans[0]
+                .windows(2)
+                .any(|window| window == ["--bin", "kitty-rc-verify-child"]),
+            "matrix plan missing child bin: {plans:?}"
+        );
+        assert_eq!(plans.len(), 1 + usize::from(cli_smoke));
+        if cli_smoke {
+            assert!(plans[1].contains(&"kitty-rc-cli".to_owned()));
+        }
+        if finite_only {
+            assert!(!plans[0].contains(&"conformance".to_owned()));
+            assert!(!plans[0].contains(&"upload_conformance".to_owned()));
+        } else {
+            assert!(plans[0].contains(&"upload_conformance".to_owned()));
+        }
+    }
+    for (package, example) in [
+        ("kitty-rc", "conformance"),
+        ("kitty-rc-registry", "upload_conformance"),
+    ] {
+        let plan = kitty_rc_verify::examples::single_example_build_plan(package, example);
+        assert!(
+            plan.windows(2)
+                .any(|window| window == ["--bin", "kitty-rc-verify-child"])
+        );
+        assert!(plan.contains(&package.to_owned()) && plan.contains(&example.to_owned()));
+    }
+}
+
+#[tokio::test]
+async fn no_build_reports_missing_artifacts_before_any_server() {
+    let root = tempfile::tempdir().unwrap();
+    let fixtures = tempfile::tempdir().unwrap();
+    let cold_target = tempfile::tempdir().unwrap(); // no artifacts inside
+    let mut options = matrix_options(
+        root.path(),
+        &root.path().join("matrix.json"),
+        poisoned_base(),
+    );
+    options.no_build = true;
+    options.finite_only = false; // expect the full artifact set to be required
+    options.binaries = None;
+    options.child = None;
+    options.target_dir = Some(cold_target.path().to_owned());
+    options.fixture_parent = fixtures.path().to_owned();
+    let error = matrix::run(options).await.unwrap_err();
+    let missing = match &error {
+        matrix::MatrixError::MissingArtifacts { missing, no_build } => {
+            assert!(no_build);
+            missing.clone()
+        }
+        other => panic!("expected MissingArtifacts, saw {other:?}"),
+    };
+    // Every artifact the run needs is named at once, child included.
+    for name in ["supported_matrix", "conformance", "upload_conformance"] {
+        assert!(
+            missing
+                .iter()
+                .any(|path| path.file_name().is_some_and(|file| file == name)),
+            "missing-artifact list lacks {name}: {missing:?}"
+        );
+    }
+    assert!(
+        missing.iter().any(|path| path
+            .file_name()
+            .is_some_and(|file| file == "kitty-rc-verify-child")),
+        "missing-artifact list lacks the fixture child: {missing:?}"
+    );
+    assert!(error.to_string().contains("no server was started"));
+    // No fixture directory was created: the blocker fired first.
+    assert_eq!(std::fs::read_dir(fixtures.path()).unwrap().count(), 0);
+    assert!(!root.path().join("matrix.json").exists());
+}
+
+#[tokio::test]
+async fn no_build_with_present_artifacts_runs_without_building() {
+    let root = tempfile::tempdir().unwrap();
+    let fixtures = tempfile::tempdir().unwrap();
+    let target = tempfile::tempdir().unwrap();
+    let examples = target.path().join("debug/examples");
+    std::fs::create_dir_all(&examples).unwrap();
+    for name in ["supported_matrix", "conformance", "upload_conformance"] {
+        std::fs::copy(bin("example"), examples.join(name)).unwrap();
+    }
+    std::fs::copy(
+        bin("child"),
+        target.path().join("debug/kitty-rc-verify-child"),
+    )
+    .unwrap();
+    let report = root.path().join("matrix.json");
+    let mut options = matrix_options(root.path(), &report, poisoned_base());
+    options.no_build = true;
+    options.binaries = None;
+    options.child = None;
+    options.target_dir = Some(target.path().to_owned());
+    options.fixture_parent = fixtures.path().to_owned();
+    // The fake kitty serves the fixture and the copied fake-example passes,
+    // proving artifact resolution succeeded through the no-build path.
+    let code = matrix::run(options).await.unwrap();
+    assert_eq!(code, 0);
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(report["servers"][0]["profiles"][0]["status"], "pass");
 }
