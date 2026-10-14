@@ -4,8 +4,8 @@
 //! terms: a command binds its typed payload construction to a
 //! [`PlainRequest`](kitty_rc_schema::PlainRequest) and its typed output
 //! decoding runs only after the remote outcome has been validated. It
-//! deliberately starts with one verified exemplar — `ls` — rather than a
-//! migrated pile of drifted legacy builders. New commands follow this
+//! implements the finite first slice rather than a migrated pile of drifted
+//! legacy builders. New commands follow this
 //! pattern against upstream-derived fixtures, never by treating an old
 //! serializer as an oracle.
 //!
@@ -266,6 +266,33 @@ pub fn ls_from_response(envelope: &ResponseEnvelope) -> Result<Vec<OsWindow>, Ls
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn first_slice_profiles_match_inspected_handlers() {
+        let text = GetText::default().request();
+        assert_eq!(text.cmd, "get-text");
+        assert_eq!(text.payload.unwrap()["extent"], "screen");
+        let focus = FocusWindow {
+            match_spec: "id:7".into(),
+        }
+        .request();
+        assert_eq!(focus.payload, Some(json!({"match": "id:7"})));
+        let wait = LaunchWait {
+            args: vec!["sh".into(), "-c".into(), "exit 7".into()],
+        };
+        assert_eq!(wait.mode(), Mode::Deferred);
+        assert_eq!(
+            wait.request().payload,
+            Some(
+                json!({"args": ["sh", "-c", "exit 7"], "wait_for_child_to_exit": true, "type": "window"})
+            )
+        );
+        assert_eq!(
+            LaunchWait::decode(Some(json!("SIGTERM"))).unwrap(),
+            "SIGTERM"
+        );
+        assert!(GetText::decode(None).is_err());
+    }
 
     /// Payload field names follow the upstream ls protocol spec.
     #[test]

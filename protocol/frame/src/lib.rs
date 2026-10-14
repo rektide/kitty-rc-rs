@@ -150,8 +150,12 @@ impl FrameDecoder {
                 if self.buf.len() == self.buf.capacity() {
                     let capacity = self.buf.capacity();
                     let desired = capacity.max(64).saturating_mul(2).min(self.max_payload);
-                    let additional = desired.saturating_sub(capacity).min(self.max_retained.saturating_sub(self.retained_capacity));
-                    if additional == 0 { return self.poison(FrameError::RetentionFull); }
+                    let additional = desired
+                        .saturating_sub(capacity)
+                        .min(self.max_retained.saturating_sub(self.retained_capacity));
+                    if additional == 0 {
+                        return self.poison(FrameError::RetentionFull);
+                    }
                     self.buf.reserve_exact(additional);
                     self.retained_capacity += self.buf.capacity() - capacity;
                 }

@@ -64,6 +64,9 @@ pub async fn drive(
     evidence: Evidence,
 ) -> Outcome {
     let work = async {
+        if Instant::now() >= deadline {
+            return Err("deadline elapsed before connect".into());
+        }
         let mut stream: Box<dyn Socket> = match address {
             Address::Unix(path) => Box::new(
                 tokio::net::UnixStream::connect(path)
@@ -77,6 +80,9 @@ pub async fn drive(
             ),
         };
         // Arm uncertainty before the first cancelable write poll.
+        if Instant::now() >= deadline {
+            return Err("deadline elapsed before write".into());
+        }
         evidence.write_started();
         stream
             .write_all(&prepared.bytes)

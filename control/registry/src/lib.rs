@@ -5,6 +5,7 @@
 //! Native wire outcomes are retained, not arbitrary custom decoded allocations.
 //! `Operation::take` is the sole consuming typed decode, outside the lock. Typed
 //! output memory then belongs to the caller. Release is explicit, never pruning.
+use futures_util::{StreamExt, stream::FuturesUnordered};
 use kitty_rc_commands::{Class, Command};
 use kitty_rc_endpoint::Endpoint;
 use kitty_rc_exchange::{Completion, Evidence, Failure, Outcome, Prepared, Progress, prepare};
@@ -16,11 +17,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
-use tokio::{
-    sync::Notify,
-    task::{JoinHandle, JoinSet},
-    time::Instant,
-};
+use tokio::{sync::Notify, task::JoinHandle, time::Instant};
 
 static NEXT_OWNER: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -31,8 +28,15 @@ pub struct Token {
 
 /// Caller-owned submission occurrence. Its committed bit survives release of
 /// the registry record, preventing a saved token from authorizing replay.
-pub struct Reservation { token: Token, committed: AtomicBool }
-impl Reservation { pub fn token(&self) -> Token { self.token } }
+pub struct Reservation {
+    token: Token,
+    committed: AtomicBool,
+}
+impl Reservation {
+    pub fn token(&self) -> Token {
+        self.token
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EndpointId {
     owner: u64,
@@ -176,8 +180,43 @@ impl Registry {
         }
     }
 
-    pub fn reserve(&self) -> Reservation { Reservation { token: self.mint(), committed: AtomicBool::new(false) } }
-    pub fn register(&self, endpoint: Endpoint) -> Result<EndpointId, String> {
+    pub fn reserve(&self) -> Reservation {
+        Reservation {
+            token: self.mint(),
+            committed: AtomicBool::new(false),
+        }
+    }
+    pub fn register(&self, mut endpoint: Endpoint) -> Result<EndpointId, String> {
+        let address_bytes = match &endpoint.address {
+            kitty_rc_endpoint::Address::Unix(path) => path.as_os_str().as_encoded_bytes().len(),
+            kitty_rc_endpoint::Address::Tcp(_) => 32,
+        };
+        let access_bytes = match &endpoint.protection {
+            kitty_rc_endpoint::Protection::Plain => 0,
+            kitty_rc_endpoint::Protection::Encrypted {
+                password,
+                key_origin,
+                ..
+            } => password
+                .len()
+                .saturating_add(key_origin.len())
+                .saturating_add(32),
+        };
+        if address_bytes.saturating_add(access_bytes) > self.shared.limits.max_request {
+            return Err("endpoint setup byte limit exceeded".into());
+        }
+        if let kitty_rc_endpoint::Address::Unix(path) = &mut endpoint.address {
+            path.shrink_to_fit();
+        }
+        if let kitty_rc_endpoint::Protection::Encrypted {
+            password,
+            key_origin,
+            ..
+        } = &mut endpoint.protection
+        {
+            password.shrink_to_fit();
+            key_origin.shrink_to_fit();
+        }
         let mut state = self.shared.state.lock().unwrap();
         if state.closed || state.endpoints.len() == self.shared.limits.endpoints {
             return Err("endpoint intake closed or full".into());
@@ -269,7 +308,12 @@ impl Registry {
                 reason: reason.into(),
             });
         }
-        if reservation.committed.swap(true, Ordering::SeqCst) { return Err(Refused { command, reason: "submission occurrence already committed".into() }); }
+        if reservation.committed.swap(true, Ordering::SeqCst) {
+            return Err(Refused {
+                command,
+                reason: "submission occurrence already committed".into(),
+            });
+        }
         let done = Arc::new(Notify::new());
         let input_bytes = input.bytes.len();
         state.records.insert(
@@ -534,7 +578,9 @@ fn class_index(c: Class) -> usize {
 fn complete(r: &mut Record, mut outcome: Outcome) {
     if let Outcome::Interrupted { reason, .. } = &mut outcome {
         let mut end = reason.len().min(256);
-        while !reason.is_char_boundary(end) { end -= 1; }
+        while !reason.is_char_boundary(end) {
+            end -= 1;
+        }
         reason.truncate(end);
         reason.shrink_to_fit();
     }
@@ -629,13 +675,15 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
     None
 }
 async fn driver_loop(shared: Arc<Shared>, generation: u64) {
-    let mut tasks = JoinSet::new();
+    // Futures are owned directly, not detached child tasks: driver destruction
+    // synchronously drops every socket before DriverGuard releases slots.
+    let mut tasks = FuturesUnordered::new();
     loop {
         let wake = shared.wake.notified();
         tokio::pin!(wake);
         wake.as_mut().enable();
         while let Some(work) = select(&shared, generation) {
-            tasks.spawn(async move {
+            tasks.push(async move {
                 let evidence = work.evidence.clone();
                 let outcome = tokio::select! {
                     biased;
@@ -657,16 +705,76 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
         tokio::select! {
             _ = &mut wake => {},
             _ = async { match next_deadline { Some(d) => tokio::time::sleep_until(d).await, None => std::future::pending().await } } => {},
-            returned = tasks.join_next(), if !tasks.is_empty() => {
-                match returned {
-                    Some(Ok((token, outcome))) => {
+            returned = tasks.next(), if !tasks.is_empty() => {
+                if let Some((token, outcome)) = returned {
                         let mut s = shared.state.lock().unwrap();
                         if let Some(r) = s.records.get_mut(&token) { if r.status == Status::Running && r.generation == generation { complete(r, outcome); } }
-                    },
-                    // Panic/abort is driver loss, not an invented native result.
-                    Some(Err(_)) => return,
-                    None => {},
                 }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kitty_rc_commands::{FocusWindow, GetText, LaunchWait};
+    use kitty_rc_endpoint::{Address, Protection};
+    #[test]
+    fn connecting_reservations_are_exclusive_fair_and_class_partitioned() {
+        let registry = Registry::new(Limits::default()).unwrap();
+        let endpoint = || Endpoint {
+            address: Address::Unix("/explicit/nonexistent".into()),
+            protection: Protection::Plain,
+        };
+        let a = registry.register(endpoint()).unwrap();
+        let b = registry.register(endpoint()).unwrap();
+        let opts = Options {
+            deadline: Instant::now() + std::time::Duration::from_secs(5),
+            max_response: 256,
+        };
+        for ep in [a, b] {
+            for _ in 0..2 {
+                registry
+                    .submit(
+                        &registry.reserve(),
+                        ep,
+                        FocusWindow {
+                            match_spec: "id:1".into(),
+                        },
+                        opts,
+                    )
+                    .unwrap();
+                registry
+                    .submit(&registry.reserve(), ep, GetText::default(), opts)
+                    .unwrap();
+                registry
+                    .submit(&registry.reserve(), ep, LaunchWait { args: vec![] }, opts)
+                    .unwrap();
+            }
+        }
+        // Select without ever polling connect: connecting resources already
+        // own their slots. No executor slot waits inside a lease semaphore.
+        let mut selected = Vec::new();
+        while let Some(work) = select(&registry.shared, 1) {
+            selected.push(work);
+        }
+        assert_eq!(selected.len(), 6);
+        assert_eq!(registry.summary(selected[0].token).unwrap().endpoint, a);
+        assert_eq!(registry.summary(selected[1].token).unwrap().endpoint, b);
+        let state = registry.shared.state.lock().unwrap();
+        for ep in [a, b] {
+            for class in 0..3 {
+                assert_eq!(
+                    state
+                        .records
+                        .values()
+                        .filter(|r| r.endpoint == ep
+                            && r.class == class
+                            && r.status == Status::Running)
+                        .count(),
+                    1
+                );
             }
         }
     }

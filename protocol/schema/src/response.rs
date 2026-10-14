@@ -37,6 +37,22 @@ pub enum ResponseKind {
 }
 
 impl ResponseEnvelope {
+    /// Ownership-taking classification: large response data is not cloned.
+    pub fn into_kind(self) -> Result<ResponseKind, SchemaError> {
+        if self.stream == Some(true) {
+            if !self.ok || self.data.is_some() || self.error.is_some() {
+                return Err(SchemaError::InvalidEnvelope(
+                    "stream acknowledgment carries extra terminal fields".into(),
+                ));
+            }
+            return Ok(ResponseKind::StreamAcknowledged);
+        }
+        if self.ok {
+            Ok(ResponseKind::Success { data: self.data })
+        } else {
+            Ok(ResponseKind::Failure { error: self.error })
+        }
+    }
     pub fn from_json_bytes(bytes: &[u8]) -> Result<Self, SchemaError> {
         Ok(serde_json::from_slice(bytes)?)
     }

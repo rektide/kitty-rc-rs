@@ -40,6 +40,24 @@ pub enum Outcome {
 }
 impl Outcome {
     pub fn unresolved(&self) -> bool {
+        if let Self::Reply(bytes) = self {
+            // Structural validation without allocating success data before
+            // custody/shutdown. Typed data is interpreted by the sole taker.
+            #[derive(serde::Deserialize)]
+            struct Header {
+                ok: bool,
+                stream: Option<bool>,
+                data: Option<serde::de::IgnoredAny>,
+                error: Option<String>,
+            }
+            return match serde_json::from_slice::<Header>(bytes) {
+                Ok(h) => {
+                    let _ = (h.ok, h.data, h.error);
+                    h.stream == Some(true)
+                }
+                Err(_) => true,
+            };
+        }
         matches!(
             self,
             Self::Interrupted {
@@ -62,19 +80,33 @@ impl Outcome {
                 Err(Failure::Interrupted { progress, reason })
             }
             Self::Reply(bytes) => {
-                let envelope: ResponseEnvelope = serde_json::from_slice(&bytes)
-                    .map_err(|e| Failure::InvalidReply(e.to_string()))?;
-                match envelope
-                    .classify()
-                    .map_err(|e| Failure::InvalidReply(e.to_string()))?
-                {
+                let envelope: ResponseEnvelope = match serde_json::from_slice(&bytes) {
+                    Ok(envelope) => envelope,
+                    Err(e) => {
+                        return Err(Failure::MalformedReply {
+                            error: e.to_string(),
+                            native: bytes,
+                        });
+                    }
+                };
+                let kind = match envelope.into_kind() {
+                    Ok(kind) => kind,
+                    Err(e) => {
+                        return Err(Failure::MalformedReply {
+                            error: e.to_string(),
+                            native: bytes,
+                        });
+                    }
+                };
+                match kind {
                     ResponseKind::Failure { error } => Err(Failure::Remote {
                         error: error.unwrap_or_default(),
                         native: bytes,
                     }),
-                    ResponseKind::StreamAcknowledged => Err(Failure::InvalidReply(
-                        "unexpected stream acknowledgment".into(),
-                    )),
+                    ResponseKind::StreamAcknowledged => Err(Failure::MalformedReply {
+                        error: "unexpected stream acknowledgment".into(),
+                        native: bytes,
+                    }),
                     ResponseKind::Success { data } => C::decode(data)
                         .map(Completion::Reply)
                         .map_err(|error| Failure::TypedDecode {
@@ -95,6 +127,7 @@ pub enum Completion<T> {
 pub enum Failure {
     Remote { error: String, native: Vec<u8> },
     TypedDecode { error: String, native: Vec<u8> },
+    MalformedReply { error: String, native: Vec<u8> },
     InvalidReply(String),
     Interrupted { progress: Progress, reason: String },
 }

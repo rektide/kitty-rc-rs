@@ -169,4 +169,22 @@ mod tests {
         );
         assert!(parse_ls_data(&data).is_ok());
     }
+
+    #[test]
+    fn layout_specific_options_do_not_assume_integer_bias() {
+        let listing = json!([{"id": 1, "tabs": [
+            {"layout": "tall", "layout_opts": {"bias": 50.5, "full_size": 1, "mirrored": "n"}},
+            {"layout": "grid", "layout_opts": {"bias": [1.0, 2.0]}},
+            {"layout": "splits", "layout_opts": {"minimal_borders": true}}
+        ]}]);
+        let parsed = parse_ls_data(&listing).unwrap();
+        assert_eq!(
+            parsed[0].tabs[0].layout_opts.as_ref().unwrap().values["bias"],
+            json!(50.5)
+        );
+        assert_eq!(
+            parsed[0].tabs[1].layout_opts.as_ref().unwrap().values["bias"],
+            json!([1.0, 2.0])
+        );
+    }
 }
