@@ -1,6 +1,6 @@
 [package]
 name = "kitty-rc-cli"
-description = "kitty remote-control command-line utilities, currently the kitty-pubkey-db key store manager"
+description = "Explicit kitty remote-control CLI and shared public-key store utility"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -8,8 +8,28 @@ repository.workspace = true
 
 [[bin]]
 name = "kitty-pubkey-db"
-path = "src/main.rs"
+path = "src/bin/pubkey_db.rs"
+
+[[bin]]
+name = "kitty-rc"
+path = "src/bin/kitty_rc.rs"
 
 [dependencies]
 clap = { workspace = true }
 kitty-rc-key-store = { workspace = true }
+kitty-rc-commands = { workspace = true }
+kitty-rc-credentials = { workspace = true }
+kitty-rc-discovery = { workspace = true }
+kitty-rc-endpoint = { workspace = true }
+kitty-rc-exchange = { workspace = true }
+kitty-rc-registry = { workspace = true }
+kitty-rc-listing = { path = "../../observation/listing" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["signal"] }
+
+[dev-dependencies]
+kitty-rc-crypto = { workspace = true }
+kitty-rc-schema = { workspace = true }
+base85 = { workspace = true }
+x25519-dalek = { workspace = true }

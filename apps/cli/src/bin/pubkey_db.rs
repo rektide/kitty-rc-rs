@@ -1,4 +1,4 @@
-//! `kitty-pubkey-db`: manage the persisted store of kitty server public keys
+//! `kitty-pubkey-db`: explicit management of persisted kitty server public keys
 //! used for password-authenticated remote control.
 //!
 //! Behavior preserved from the legacy self-contained binary, with two
