@@ -359,9 +359,12 @@ mod tests {
         assert!(!base85::decode(&envelope.encrypted).unwrap().is_empty());
         assert_eq!(envelope.enc_proto, None);
         // The envelope must not carry the password or plaintext command.
-        let encoded = serde_json::to_string(&envelope).unwrap();
-        assert!(!encoded.contains("pw"), "{encoded}");
-        assert!(!encoded.contains("\"cmd\""), "{encoded}");
+        // Random base85 may coincidentally contain any short substring,
+        // including "pw". Check envelope fields, not ciphertext coincidences.
+        let encoded = serde_json::to_value(&envelope).unwrap();
+        assert!(encoded.get("password").is_none());
+        assert!(encoded.get("timestamp").is_none());
+        assert!(encoded.get("cmd").is_none());
 
         // The sender pubkey in the envelope is the ephemeral key, not the
         // server's, and the server can still open it (checked above).

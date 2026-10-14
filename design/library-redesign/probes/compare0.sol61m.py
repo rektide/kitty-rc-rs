@@ -16,11 +16,10 @@ dependencies = {
     "kubeless-control-plan": "control/plan",
     "kubeless-work-custody": "work/custody",
 }
-manifest = '[workspace]\n[package]\nname="kitty-kubeless-comparison"\nversion="0.0.0"\nedition="2024"\n[features]\ndefault=["host"]\nhost=[]\n[lib]\npath="host.rs"\n[dependencies]\nfutures="0.3"\ntokio={version="1",features=["full","test-util"]}\n'
+manifest = '[workspace]\n[package]\nname="kitty-kubeless-comparison"\nversion="0.0.0"\nedition="2024"\n[features]\ndefault=["host"]\nhost=[]\ntimed=[]\n[[test]]\nname="host"\npath="host.rs"\n[dependencies]\nfutures="0.3"\ntokio={version="1",features=["full","test-util"]}\n'
 for name, path in dependencies.items():
     features = ', features=["host"]' if name.endswith("retained-actions") else ''
     manifest += f'{name}={{path="{upstream / path}"{features}}}\n'
-(scratch / "Cargo.toml").write_text(manifest)
 (scratch / "Cargo.toml").write_text(manifest + '\n[[test]]\nname="direct"\npath="direct.rs"\n')
 (scratch / "direct.rs").write_text((root / "design/library-redesign/probes/direct-journeys0.sol61m.rs").read_text())
 host = (upstream / "control/retained-actions/tests/host.rs").read_text()
