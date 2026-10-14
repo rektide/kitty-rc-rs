@@ -1,0 +1,15 @@
+[package]
+name = "kitty-rc-schema"
+description = "Kitty remote-control wire envelope types: plain requests, protected envelopes, responses, and version vocabulary"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
