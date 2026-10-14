@@ -27,4 +27,4 @@ probe = (root / "design/library-redesign/probes/host-journeys0.sol61m.rs").read_
 (scratch / "host.rs").write_text(host + "\n" + probe)
 subprocess.run(["cargo", "test", "--manifest-path", str(scratch / "Cargo.toml")], check=True)
 subprocess.run(["cargo", "test", "-p", "kubeless-work-custody", "--test", "attached"], cwd=upstream, check=True)
-subprocess.run(["cargo", "+1.88.0", "test", "-p", "kitty-rc-registry", "--test", "journeys"], cwd=root, check=True)
+subprocess.run(["cargo", "test", "-p", "kitty-rc-registry", "--test", "journeys"], cwd=root, check=True)

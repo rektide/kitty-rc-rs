@@ -3,7 +3,6 @@ name = "kitty-rc-crypto"
 description = "One-envelope request protection for kitty remote control: exact X25519 key parsing and AES-256-GCM sealing with explicit inputs"
 version = "0.1.0"
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

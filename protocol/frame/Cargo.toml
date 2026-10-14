@@ -3,7 +3,6 @@ name = "kitty-rc-frame"
 description = "Incremental DCS framing for the kitty remote-control protocol: exact frame boundaries, surplus retention, and bounded buffers"
 version = "0.1.0"
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

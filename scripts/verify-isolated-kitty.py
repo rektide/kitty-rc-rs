@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="kitty-rc-live-", dir="/tmp/opencode") a
             if keyfile.exists() and socket.exists(): break
             if kitty.poll() is not None: raise RuntimeError("kitty failed")
             time.sleep(.05)
-        subprocess.run(["cargo", "+1.88.0", "run", "-p", "kitty-rc", "--example", "conformance", "--", str(socket), keyfile.read_text(), "test-secret"], cwd=root, check=True)
+        subprocess.run(["cargo", "run", "-p", "kitty-rc", "--example", "conformance", "--", str(socket), keyfile.read_text(), "test-secret"], cwd=root, check=True)
     except Exception:
         log.flush(); log.seek(0); print(log.read()); raise
     finally:

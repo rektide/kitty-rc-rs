@@ -3,7 +3,6 @@ name = "kitty-rc-cli"
 description = "kitty remote-control command-line utilities, currently the kitty-pubkey-db key store manager"
 version = "0.1.0"
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

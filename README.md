@@ -5,7 +5,7 @@ description: Independently usable protocol, explicit access, finite execution an
 resource: /README.md
 status: active
 generated:
-  by: "model:openai/gpt-6.1-sol#medium"
+  by: "model:openai/gpt-6-astra#medium"
   at: 2026-10-14
 sources:
   - resource: "opencode://ses_ec71e81e3ffercjuzWSBbKFI5w"
@@ -14,6 +14,8 @@ sources:
     title: Typed execution and bounded registry, then parent-review corrections for pooling, fresh first-send protection, remote IDs, error causes and lifecycle races
   - resource: /design/library-redesign/implementation0.sol61m.md
     title: Implementation decisions, actual verification and remaining limits
+  - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
+    title: Human direction to use the user's mise-selected Rust without repository version pinning or a maintained minimum-version commitment
 ---
 
 # kitty-rc (unstable first slice)
@@ -114,8 +116,15 @@ cargo fmt --check
 python3 scripts/verify-isolated-kitty.py  # optional: installed kitty + headless Weston
 ```
 
-Rust **1.88** is the tested floor for the current lockfile; 1.85 fails its
-dependencies' declared minima. Scripted tests verify concurrency and lifecycle;
+Use the user's current Rust toolchain, selected through mise in this workspace.
+The repository does not pin a toolchain or maintain a fixed Rust minimum-version
+commitment. If your shell has not activated mise, prefix commands with
+`mise exec --`, including `mise exec -- python3 scripts/verify-isolated-kitty.py`
+so its Cargo subprocess uses the same environment. `mise current rust` and
+`mise exec -- rustc --version` show the actual selection. Earlier reports retain
+their historical Rust 1.88 verification results.
+
+Scripted tests verify concurrency and lifecycle;
 an isolated real **kitty 0.48.2** passed repeated encrypted direct/managed commands
 on unchanged connection tokens and concurrent launch-wait/text/focus. The wire version remains `[0,43,1]`; this is not a tested
 kitty-minimum or full support matrix. See the [implementation report](design/library-redesign/implementation0.sol61m.md).
