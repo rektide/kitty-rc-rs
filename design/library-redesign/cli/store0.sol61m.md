@@ -14,6 +14,9 @@ sources:
     title: Inspected bounded read and append preservation boundary
   - resource: /apps/cli/src/main.rs
     title: Original CLI malformed-data loss and read-truncate cleanup
+    revision: "jj-commit:6690b62a"
+  - resource: /apps/cli/src/store.rs
+    title: Current modular store CLI, explicit path selection and coordinated maintenance
 verification:
   scope: CLI store commands using isolated subprocess HOME/XDG paths
   evidence: Three nextest subprocess journeys and strict targeted all-target clippy passed on mise-selected Rust
@@ -37,12 +40,14 @@ require deliberate inspection/removal. Shared library append is not itself a
 transactional writer and does not participate in this CLI-only lock.
 
 Cleanup refuses malformed/non-UTF-8 input before creating any replacement. It
-preserves exact surviving record bytes, writes a create-new sibling temporary
+preserves exact surviving record bytes and file permissions, writes a create-new sibling temporary
 file, syncs it, checks that source bytes remain unchanged and atomically renames.
 An observed concurrent change aborts replacement. This check does **not** remove
 the final race with a noncooperating writer; the explicit quiescence assertion
 is the safety boundary. It is not a new database protocol. No cleanup runs on
 add/read/init/reconnect. Crash leftovers are not automatically pruned.
+Linux procfs inspection is checked explicitly; unsupported platforms or procfs
+errors do not become evidence that every stored PID is dead.
 
 ## Verified journeys
 
@@ -52,8 +57,16 @@ add/read/init/reconnect. Crash leftovers are not automatically pruned.
   and inserts only the needed separator before the new publication.
 - Cleanup without `--quiescent` fails; a competing lock blocks add/cleanup;
   successful cleanup preserves a running PID's original three-field CRLF line.
+- The utility's explicit `--store` bypasses ambient path lookup; malformed
+  selected PID/window environment fails while explicit flags bypass those inputs.
 
 This completes the CLI acceptance gap of `kitty-rc-proto-rs-redesign-access-store`,
 on top of the library verification recorded in the
 [access report](../implementation/access0.sol61xh.md). Parent owns shared index,
 root overview and tracker export updates.
+
+The [current CLI reference](/apps/cli/README.md#shared-public-key-utility) owns
+usage; [the historical publication plan](/doc/PLAN-pubkey-db.md#cleanup-logic)
+explains the original hook problem but its cleanup-on-add/epoch design is
+deliberately not restored. [CLI implementation](implementation0.sol61m.md)
+connects this boundary to actual encrypted standalone listing.
