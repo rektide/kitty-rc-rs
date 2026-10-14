@@ -48,12 +48,10 @@ pub struct WindowInfo {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LayoutOpts {
-    #[serde(default)]
-    pub bias: i32,
-    #[serde(default)]
-    pub full_size: i32,
-    #[serde(default)]
-    pub mirrored: String,
+    /// Layout-specific keys and value types; e.g. tall's bias is fractional,
+    /// grid's bias is a list, and splits has a different option vocabulary.
+    #[serde(flatten)]
+    pub values: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -110,7 +108,7 @@ pub struct TabInfo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct OsInstance {
+pub struct OsWindow {
     #[serde(default)]
     pub tabs: Vec<TabInfo>,
     pub background_opacity: Option<f32>,
@@ -126,7 +124,7 @@ pub struct OsInstance {
 /// Parse the `data` field of an `ls` response: upstream encodes the listing
 /// as a JSON **string**; some transports/tests may hand over the decoded
 /// value directly. Both are accepted.
-pub fn parse_ls_data(data: &Value) -> Result<Vec<OsInstance>, serde_json::Error> {
+pub fn parse_ls_data(data: &Value) -> Result<Vec<OsWindow>, serde_json::Error> {
     let listing = if let Some(encoded) = data.as_str() {
         serde_json::from_str::<Value>(encoded)?
     } else {

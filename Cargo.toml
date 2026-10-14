@@ -7,11 +7,16 @@ members = [
   "access/crypto",
   "access/key-store",
   "apps/cli",
+  "access/endpoint",
+  "execution/exchange",
+  "execution/tokio",
+  "control/registry",
+  "client",
 ]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/rektide/kitty-rc-rs"
 
@@ -21,6 +26,14 @@ base85 = "2.0"
 bon = "3.5"
 clap = { version = "4.0", features = ["derive"] }
 kitty-rc-schema = { path = "protocol/schema" }
+kitty-rc-commands = { path = "protocol/commands" }
+kitty-rc-crypto = { path = "access/crypto" }
+kitty-rc-frame = { path = "protocol/frame" }
+kitty-rc-endpoint = { path = "access/endpoint" }
+kitty-rc-exchange = { path = "execution/exchange" }
+kitty-rc-tokio = { path = "execution/tokio" }
+kitty-rc-registry = { path = "control/registry" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
 kitty-rc-key-store = { path = "access/key-store" }
 rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { version = "1.0", features = ["derive"] }

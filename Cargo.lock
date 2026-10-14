@@ -129,6 +129,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytes"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -360,6 +366,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "kitty-rc"
+version = "0.1.0"
+dependencies = [
+ "kitty-rc-commands",
+ "kitty-rc-endpoint",
+ "kitty-rc-exchange",
+ "kitty-rc-registry",
+ "kitty-rc-tokio",
+ "tokio",
+]
+
+[[package]]
 name = "kitty-rc-cli"
 version = "0.1.0"
 dependencies = [
@@ -393,6 +411,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "kitty-rc-endpoint"
+version = "0.1.0"
+dependencies = [
+ "kitty-rc-crypto",
+]
+
+[[package]]
+name = "kitty-rc-exchange"
+version = "0.1.0"
+dependencies = [
+ "kitty-rc-commands",
+ "kitty-rc-crypto",
+ "kitty-rc-endpoint",
+ "kitty-rc-frame",
+ "kitty-rc-schema",
+ "rand_core",
+ "serde_json",
+]
+
+[[package]]
 name = "kitty-rc-frame"
 version = "0.1.0"
 dependencies = [
@@ -407,12 +445,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "kitty-rc-registry"
+version = "0.1.0"
+dependencies = [
+ "base85",
+ "kitty-rc-commands",
+ "kitty-rc-crypto",
+ "kitty-rc-endpoint",
+ "kitty-rc-exchange",
+ "kitty-rc-frame",
+ "kitty-rc-schema",
+ "kitty-rc-tokio",
+ "serde_json",
+ "tokio",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "kitty-rc-schema"
 version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "kitty-rc-tokio"
+version = "0.1.0"
+dependencies = [
+ "kitty-rc-commands",
+ "kitty-rc-endpoint",
+ "kitty-rc-exchange",
+ "kitty-rc-frame",
+ "tokio",
 ]
 
 [[package]]
@@ -428,6 +494,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "mio"
+version = "1.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
+dependencies = [
+ "libc",
+ "wasi",
+ "windows-sys",
+]
+
+[[package]]
 name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -438,6 +515,12 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
+name = "pin-project-lite"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "polyval"
@@ -558,6 +641,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket2"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
+dependencies = [
+ "libc",
+ "windows-sys",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -625,6 +718,32 @@ name = "thiserror-impl"
 version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
+name = "tokio"
+version = "1.53.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e"
+dependencies = [
+ "bytes",
+ "libc",
+ "mio",
+ "pin-project-lite",
+ "socket2",
+ "tokio-macros",
+ "windows-sys",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
 dependencies = [
  "proc-macro2",
  "quote",

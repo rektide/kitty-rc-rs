@@ -16,7 +16,162 @@
 pub mod outputs;
 
 use kitty_rc_schema::{PlainRequest, ResponseEnvelope, ResponseKind};
-use outputs::OsInstance;
+use outputs::OsWindow;
+
+/// Scheduling class, not a claim about parallel server CPU execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Class {
+    Short,
+    Observation,
+    LongWait,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Reply,
+    Deferred,
+    SubmissionOnly,
+}
+
+/// Commands bind their output decoder and finite wire conversation.
+/// Decoders receive only a classified success's data, never a remote error.
+pub trait Command: Send + 'static {
+    type Output: Send + 'static;
+    fn request(&self) -> PlainRequest;
+    fn class(&self) -> Class;
+    fn mode(&self) -> Mode {
+        Mode::Reply
+    }
+    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, String>;
+}
+
+impl Command for Ls {
+    type Output = Vec<OsWindow>;
+    fn request(&self) -> PlainRequest {
+        self.to_request()
+    }
+    fn class(&self) -> Class {
+        Class::Observation
+    }
+    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, String> {
+        outputs::parse_ls_data(&data.ok_or("ls reply carried no data")?).map_err(|e| e.to_string())
+    }
+}
+
+/// A finite screen snapshot. Only baseline screen/all/selection extents are
+/// exposed; HEAD-only alternates are not silently asserted as supported.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum TextExtent {
+    #[default]
+    Screen,
+    All,
+    Selection,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GetText {
+    pub match_spec: Option<String>,
+    pub extent: TextExtent,
+}
+impl Command for GetText {
+    type Output = String;
+    fn request(&self) -> PlainRequest {
+        let mut r = PlainRequest::new("get-text");
+        r.payload = Some(
+            serde_json::json!({"match": self.match_spec, "extent": match self.extent { TextExtent::Screen => "screen", TextExtent::All => "all", TextExtent::Selection => "selection" }, "ansi": false, "cursor": false, "wrap_markers": false, "clear_selection": false, "self": false}),
+        );
+        r
+    }
+    fn class(&self) -> Class {
+        Class::Observation
+    }
+    fn decode(data: Option<serde_json::Value>) -> Result<String, String> {
+        decode_string(data)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FocusWindow {
+    pub match_spec: String,
+}
+impl Command for FocusWindow {
+    type Output = ();
+    fn request(&self) -> PlainRequest {
+        let mut r = PlainRequest::new("focus-window");
+        r.payload = Some(serde_json::json!({"match": self.match_spec}));
+        r
+    }
+    fn class(&self) -> Class {
+        Class::Short
+    }
+    fn decode(_: Option<serde_json::Value>) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// Wait for a launched child's exit. The output is upstream's exit-code or
+/// signal-name string, not a window ID. Cancel is local, not child rollback.
+#[derive(Debug, Clone)]
+pub struct LaunchWait {
+    pub args: Vec<String>,
+}
+impl Command for LaunchWait {
+    type Output = String;
+    fn request(&self) -> PlainRequest {
+        let mut r = PlainRequest::new("launch");
+        r.payload = Some(
+            serde_json::json!({"args": self.args, "wait_for_child_to_exit": true, "type": "window"}),
+        );
+        r
+    }
+    fn class(&self) -> Class {
+        Class::LongWait
+    }
+    fn mode(&self) -> Mode {
+        Mode::Deferred
+    }
+    fn decode(data: Option<serde_json::Value>) -> Result<String, String> {
+        decode_string(data)
+    }
+}
+
+fn decode_string(data: Option<serde_json::Value>) -> Result<String, String> {
+    match data {
+        Some(serde_json::Value::String(s)) => Ok(s),
+        _ => Err("required string data missing or invalid".into()),
+    }
+}
+
+/// Explicit finite escape hatch. Stream/async/no_response envelope flags are
+/// controlled by execution, not arbitrary raw input. No replay is inferred.
+#[derive(Debug, Clone)]
+pub struct RawFinite {
+    pub name: String,
+    pub payload: serde_json::Value,
+    pub class: Class,
+    pub submission_only: bool,
+}
+impl Command for RawFinite {
+    type Output = Option<serde_json::Value>;
+    fn request(&self) -> PlainRequest {
+        let mut r = PlainRequest::new(&self.name);
+        r.payload = Some(self.payload.clone());
+        r
+    }
+    fn class(&self) -> Class {
+        self.class
+    }
+    fn mode(&self) -> Mode {
+        if self.submission_only {
+            Mode::SubmissionOnly
+        } else {
+            Mode::Reply
+        }
+    }
+    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, String> {
+        Ok(data)
+    }
+}
 
 /// Errors from decoding an `ls` outcome.
 #[derive(Debug, thiserror::Error)]
@@ -94,7 +249,7 @@ impl Ls {
 }
 
 /// Decode the typed listing from a classified terminal response.
-pub fn ls_from_response(envelope: &ResponseEnvelope) -> Result<Vec<OsInstance>, LsError> {
+pub fn ls_from_response(envelope: &ResponseEnvelope) -> Result<Vec<OsWindow>, LsError> {
     match envelope.classify() {
         Ok(ResponseKind::Failure { error }) => Err(LsError::RemoteFailure {
             error: error.unwrap_or_default(),

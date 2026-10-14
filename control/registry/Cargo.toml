@@ -1,0 +1,21 @@
+[package]
+name = "kitty-rc-registry"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+kitty-rc-commands.workspace = true
+kitty-rc-endpoint.workspace = true
+kitty-rc-exchange.workspace = true
+kitty-rc-tokio.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+kitty-rc-frame.workspace = true
+kitty-rc-schema.workspace = true
+kitty-rc-crypto.workspace = true
+x25519-dalek.workspace = true
+base85.workspace = true

@@ -31,7 +31,7 @@ use aes_gcm::{
     Aes256Gcm,
     aead::{Aead, KeyInit, generic_array::GenericArray},
 };
-use kitty_rc_schema::ProtectedEnvelope;
+use kitty_rc_schema::{PlainRequest, ProtectedEnvelope};
 use rand_core::CryptoRngCore;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -62,6 +62,9 @@ pub enum CryptoError {
 
     #[error("authenticated decryption failed (wrong key or tampered envelope)")]
     AuthenticationFailed,
+
+    #[error("non-contributory X25519 public key")]
+    NonContributoryKey,
 
     #[error("decrypted plaintext was not a JSON object")]
     PlaintextNotAnObject,
@@ -118,7 +121,7 @@ impl ServerPublicKey {
 /// before sealing, matching kitty's `CommandEncrypter`. `timestamp` is
 /// nanoseconds since the Unix epoch. Fresh ephemeral key material and a fresh
 /// IV are drawn from `rng` for every call.
-pub fn encrypt_request(
+pub fn encrypt_raw_request(
     plain: serde_json::Value,
     password: &str,
     timestamp_ns: u64,
@@ -143,6 +146,9 @@ pub fn encrypt_request(
     let ephemeral = StaticSecret::random_from_rng(&mut *rng);
     let sender_public = PublicKey::from(&ephemeral);
     let shared = ephemeral.diffie_hellman(&server_key.0);
+    if !shared.was_contributory() {
+        return Err(CryptoError::NonContributoryKey);
+    }
     let encryption_key = Sha256::digest(shared.as_bytes());
 
     let cipher =
@@ -169,6 +175,23 @@ pub fn encrypt_request(
         encrypted: base85::encode(encrypted),
         enc_proto: None,
     })
+}
+
+/// Typed protection entrance: a protected envelope cannot be passed here.
+pub fn encrypt_request(
+    plain: &PlainRequest,
+    password: &str,
+    timestamp_ns: u64,
+    server_key: &ServerPublicKey,
+    rng: &mut impl CryptoRngCore,
+) -> Result<ProtectedEnvelope, CryptoError> {
+    encrypt_raw_request(
+        serde_json::to_value(plain)?,
+        password,
+        timestamp_ns,
+        server_key,
+        rng,
+    )
 }
 
 /// Decrypt a protected envelope using the **recipient's** private key,
@@ -202,6 +225,9 @@ pub fn decrypt_envelope(
     let encrypted = decode_field("encrypted", &envelope.encrypted)?;
 
     let shared = recipient_secret.diffie_hellman(&PublicKey::from(sender_public));
+    if !shared.was_contributory() {
+        return Err(CryptoError::NonContributoryKey);
+    }
     let encryption_key = Sha256::digest(shared.as_bytes());
     let cipher =
         Aes256Gcm::new_from_slice(&encryption_key).expect("SHA-256 digest is a valid AES-256 key");
@@ -298,7 +324,7 @@ mod tests {
         let (server_secret, server_key) = server_pair();
         let request = sample_request();
         let envelope = encrypt_request(
-            serde_json::to_value(&request).unwrap(),
+            &request,
             "pw",
             1_700_000_000_000_000_000,
             &server_key,
@@ -323,14 +349,8 @@ mod tests {
     #[test]
     fn envelope_field_lengths_and_version() {
         let (server_secret, server_key) = server_pair();
-        let envelope = encrypt_request(
-            serde_json::to_value(sample_request()).unwrap(),
-            "pw",
-            42,
-            &server_key,
-            &mut OsRng,
-        )
-        .unwrap();
+        let envelope =
+            encrypt_request(&sample_request(), "pw", 42, &server_key, &mut OsRng).unwrap();
 
         assert_eq!(envelope.version, SUPPORTED);
         assert_eq!(base85::decode(&envelope.iv).unwrap().len(), IV_LEN);
@@ -355,9 +375,9 @@ mod tests {
     #[test]
     fn fresh_material_per_call() {
         let (_, server_key) = server_pair();
-        let value = serde_json::to_value(sample_request()).unwrap();
-        let first = encrypt_request(value.clone(), "pw", 1, &server_key, &mut OsRng).unwrap();
-        let second = encrypt_request(value, "pw", 1, &server_key, &mut OsRng).unwrap();
+        let value = sample_request();
+        let first = encrypt_request(&value, "pw", 1, &server_key, &mut OsRng).unwrap();
+        let second = encrypt_request(&value, "pw", 1, &server_key, &mut OsRng).unwrap();
         assert_ne!(first.iv, second.iv);
         assert_ne!(first.pubkey, second.pubkey);
         assert_ne!(first.encrypted, second.encrypted);
@@ -366,14 +386,8 @@ mod tests {
     #[test]
     fn tampered_ciphertext_fails_authentication() {
         let (server_secret, server_key) = server_pair();
-        let mut envelope = encrypt_request(
-            serde_json::to_value(sample_request()).unwrap(),
-            "pw",
-            1,
-            &server_key,
-            &mut OsRng,
-        )
-        .unwrap();
+        let mut envelope =
+            encrypt_request(&sample_request(), "pw", 1, &server_key, &mut OsRng).unwrap();
 
         let mut encrypted = base85::decode(&envelope.encrypted).unwrap();
         encrypted[0] ^= 0xff;
@@ -386,14 +400,8 @@ mod tests {
     #[test]
     fn wrong_recipient_fails_authentication() {
         let (_, server_key) = server_pair();
-        let envelope = encrypt_request(
-            serde_json::to_value(sample_request()).unwrap(),
-            "pw",
-            1,
-            &server_key,
-            &mut OsRng,
-        )
-        .unwrap();
+        let envelope =
+            encrypt_request(&sample_request(), "pw", 1, &server_key, &mut OsRng).unwrap();
 
         let other_party = StaticSecret::random_from_rng(OsRng);
         assert!(matches!(
@@ -405,7 +413,7 @@ mod tests {
     #[test]
     fn non_object_payload_is_rejected_before_encryption() {
         let (_, server_key) = server_pair();
-        let error = encrypt_request(
+        let error = encrypt_raw_request(
             serde_json::json!([1, 2, 3]),
             "pw",
             1,
@@ -414,5 +422,14 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(error, CryptoError::PayloadNotAnObject));
+    }
+
+    #[test]
+    fn rejects_non_contributory_recipient() {
+        let key = ServerPublicKey::parse(&format!("1:{}", base85::encode(&[0; 32]))).unwrap();
+        assert!(matches!(
+            encrypt_request(&sample_request(), "pw", 1, &key, &mut OsRng),
+            Err(CryptoError::NonContributoryKey)
+        ));
     }
 }

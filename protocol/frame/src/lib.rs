@@ -77,6 +77,7 @@ pub struct FrameDecoder {
     pending_escape: bool,
     ready: std::collections::VecDeque<Vec<u8>>,
     retained: usize,
+    retained_capacity: usize,
     max_retained: usize,
     max_frames: usize,
     poisoned: Option<FrameError>,
@@ -99,6 +100,7 @@ impl FrameDecoder {
             pending_escape: false,
             ready: std::collections::VecDeque::new(),
             retained: 0,
+            retained_capacity: 0,
             max_retained,
             max_frames,
             poisoned: None,
@@ -123,7 +125,9 @@ impl FrameDecoder {
                 }
             } else if self.pending_escape {
                 if byte != b'\\' {
-                    return self.poison(FrameError::UnexpectedBytes { found: vec![0x1b, byte] });
+                    return self.poison(FrameError::UnexpectedBytes {
+                        found: vec![0x1b, byte],
+                    });
                 }
                 if self.ready.len() == self.max_frames {
                     return self.poison(FrameError::RetentionFull);
@@ -135,10 +139,21 @@ impl FrameDecoder {
                 self.pending_escape = true;
             } else {
                 if self.buf.len() == self.max_payload {
-                    return self.poison(FrameError::PayloadTooLarge { limit: self.max_payload, actual: self.buf.len() + 1 });
+                    return self.poison(FrameError::PayloadTooLarge {
+                        limit: self.max_payload,
+                        actual: self.buf.len() + 1,
+                    });
                 }
                 if self.retained == self.max_retained {
                     return self.poison(FrameError::RetentionFull);
+                }
+                if self.buf.len() == self.buf.capacity() {
+                    let capacity = self.buf.capacity();
+                    let desired = capacity.max(64).saturating_mul(2).min(self.max_payload);
+                    let additional = desired.saturating_sub(capacity).min(self.max_retained.saturating_sub(self.retained_capacity));
+                    if additional == 0 { return self.poison(FrameError::RetentionFull); }
+                    self.buf.reserve_exact(additional);
+                    self.retained_capacity += self.buf.capacity() - capacity;
                 }
                 self.buf.push(byte);
                 self.retained += 1;
@@ -154,7 +169,10 @@ impl FrameDecoder {
             return Err(error.clone());
         }
         let result = self.ready.pop_front();
-        if let Some(payload) = &result { self.retained -= payload.len(); }
+        if let Some(payload) = &result {
+            self.retained -= payload.len();
+            self.retained_capacity -= payload.capacity();
+        }
         Ok(result)
     }
 
@@ -331,7 +349,10 @@ mod tests {
         let error = decoder.extend(&bytes).unwrap_err();
         assert!(matches!(
             error,
-            FrameError::PayloadTooLarge { limit: 8, actual: 9 }
+            FrameError::PayloadTooLarge {
+                limit: 8,
+                actual: 9
+            }
         ));
         assert!(decoder.next_frame().is_err());
     }
