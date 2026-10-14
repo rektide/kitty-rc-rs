@@ -38,6 +38,8 @@ sources:
     title: Support-policy and runnable independent entrance verification
   - resource: /design/library-redesign/cli/implementation0.sol61m.md
     title: Completed CLI/store adoption and verified no-focus watch and maximum-response corrections
+  - resource: /design/library-redesign/uploads/implementation0.sol61xh.md
+    title: Completed image/logo/run exchanges and exact alias-aware managed lanes
 ---
 
 # Library redesign
@@ -94,6 +96,12 @@ and separated discovery/authentication steps.
   sampled watch, explicit configuration/authentication, preserved TSV maintenance,
   and 28 targeted executable journeys after parent-review corrections.
   [CLI guide](../../apps/cli/README.md).
+- [Command-specific uploads and run](uploads/implementation0.sol61xh.md):
+  bounded source consumption, handshake/EOF/terminal modes, binary run results,
+  explicit alias groups and exact interruption/supersession lane accounting.
+  Core gates passed 185 workspace tests plus private encrypted kitty 0.48.2
+  upload conformance. Python verification runners are migration inputs being
+  replaced by G's human-commissioned Rust tooling.
 
 The first slice and its review-driven corrections are committed. Audited
 reply-bearing sessions now reuse sockets; idle/active/connecting resources count
@@ -110,9 +118,9 @@ pool selection and error/evidence code. A full supported-version/live matrix,
 full upload conversations and CLI adoption remain tracked work. Discovery and
 finite catalog breadth are now implemented by the subsequent slices above.
 
-Active follow-on work is command-specific uploads/run and final isolated
-multi-version verification. Registry ownership transferred from access to upload
-after its checked handoff. User-directed Rust policy follows the user's mise selection without
+Active follow-on work is Rust verification-tooling conversion and final isolated
+multi-version verification. The core upload, access, CLI and observation agents
+have completed their handoffs. User-directed Rust policy follows the user's mise selection without
 repository pinning; historical toolchain results remain historical evidence.
 
 ## Research contributions

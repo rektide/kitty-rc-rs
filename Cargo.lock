@@ -536,6 +536,7 @@ dependencies = [
 name = "kitty-rc-exchange"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "base85",
  "kitty-rc-commands",
  "kitty-rc-crypto",
@@ -546,6 +547,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "x25519-dalek",
 ]
 
 [[package]]
@@ -610,10 +612,12 @@ dependencies = [
 name = "kitty-rc-tokio"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "kitty-rc-commands",
  "kitty-rc-endpoint",
  "kitty-rc-exchange",
  "kitty-rc-frame",
+ "serde_json",
  "tokio",
 ]
 

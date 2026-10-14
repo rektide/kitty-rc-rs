@@ -11,10 +11,15 @@ pub use kitty_rc_registry::{
     SetupTicket, SetupVersion,
 };
 pub use kitty_rc_registry::{
+    CoordinationGroupId, LaneClaim, LaneError, LanePolicy, RefusedUpload, RejectedUpload,
+    UploadOptions as RegistryUploadOptions,
+};
+pub use kitty_rc_registry::{
     CustodyError, Driver, EndpointId, Limits, Operation, Options, PoolStats, RefusalReason,
     Registry, RegistryError, Reservation, Shutdown, ShutdownError, Status, Token,
 };
 pub use kitty_rc_tokio::{ConnectionToken, Session, SessionOptions};
+pub use kitty_rc_tokio::{UploadOptions as SessionUploadOptions, UploadSource};
 pub fn parse_server_public_key(
     published: &str,
 ) -> Result<ServerPublicKey, kitty_rc_crypto::CryptoError> {

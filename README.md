@@ -26,6 +26,8 @@ sources:
     title: Provisional source and live evidence policy
   - resource: /design/library-redesign/cli/implementation0.sol61m.md
     title: Completed CLI and shared-store adoption, including watch absence and response-budget corrections
+  - resource: /design/library-redesign/uploads/implementation0.sol61xh.md
+    title: Bounded image/logo/run conversations, exact managed lanes and verified upload evidence
 ---
 
 # kitty-rc (unstable redesign)
@@ -79,8 +81,15 @@ from the exact server versions and profiles exercised live.
 | [`observation/check`](observation/check) | Explicit fresh listing checks after uncertainty, with matching/satisfaction separate from original native outcomes |
 | [`client`](client) | Direct/managed re-exports and public examples |
 
-Command-specific uploads are the active follow-on stage; continuous desired-state
-goals remain separately selectable. The registry reuses
+Bounded PNG background/logo uploads and buffered asynchronous `run` are implemented.
+The facade exposes `UploadSource`, `SessionUploadOptions` and
+`RegistryUploadOptions`; command profiles live in `commands::upload`.
+Managed uploads use explicit alias groups and same-command lanes. Interrupted or
+suppressed exchanges retain their lane until an explicit caller supersession
+decision; ordinary unrelated operations remain eligible. See the
+[upload contract and evidence](design/library-redesign/uploads/implementation0.sol61xh.md).
+
+Continuous desired-state goals remain separately selectable. The registry reuses
 resolved setup **and clean audited reply-bearing sessions**. Setup invalidation
 rejects queued stale preparation with recoverable input; already leased work
 keeps its accepted basis and cannot populate a newer setup pool.
