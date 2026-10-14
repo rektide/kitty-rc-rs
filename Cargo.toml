@@ -12,6 +12,7 @@ members = [
   "execution/tokio",
   "control/registry",
   "client",
+  "observation/listing",
 ]
 
 [workspace.package]
