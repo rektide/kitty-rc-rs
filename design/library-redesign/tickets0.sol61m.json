@@ -1,0 +1,265 @@
+{
+  "format": "kitty-redesign-ticket-plan/v1",
+  "standing": "prepared-not-applied; blocked on approved legacy SQLite to Dolt recovery",
+  "session": "opencode://ses_ec71b1985ffepI33XRmG1tf0Z9",
+  "prefix": "kitty-rc-proto-rs",
+  "source": "design/library-redesign/draft1.gpt6a.md",
+  "application": {
+    "precondition": "Operator approves recovery and bd opens the verified canonical store with all 29 legacy issues and their history accounted for. Do not initialize over the existing SQLite database or overwrite its export.",
+    "create": "For each create record, bd create --id ID --title TITLE --type TYPE --priority PRIORITY --description DESCRIPTION --acceptance ACCEPTANCE; preserve ID and add explicit parent-child edge afterward.",
+    "update": "For each update record, inspect current issue, bd update ID --acceptance ACCEPTANCE --append-notes APPEND_NOTES. Preserve previous descriptions and notes; do not rename or close legacy tickets automatically.",
+    "edges": "bd dep add DEPENDENT PREREQUISITE --type TYPE. Both parent-child and blocks use dependent/child first.",
+    "notes": "Append current pointers to each affected issue: roadmap and the specified current design sections; include this plan session. Do not claim another agent or assume its work completed.",
+    "verify": "Inspect created IDs, bd children for each epic, bd dep cycles, and bd show for cross-epic blockers. Export only after reconciliation with existing store, never overwrite recovery evidence first.",
+    "warning": "This is a custom planning schema, NOT a bd create --graph or bd import input. Convert fields explicitly to inspected CLI commands; do not feed it to either command. Reconcile existing IDs before any writes."
+  },
+  "create": [
+    {
+      "id": "kitty-rc-proto-rs-redesign", "title": "Build registry-first typed kitty control", "type": "epic", "priority": 1,
+      "description": "Replace unstable local APIs with independently usable concern crates, correct typed exchanges and registry-owned concurrent operations. No consumer compatibility facade is required. Protocol support and persisted data obligations remain explicit. Owns accepted build work; experimental framework changes and continuing reconciliation require separate selection.",
+      "acceptance": "Concurrent first vertical slice, access/setup, audited capabilities, observation primitives and CLI adoption have evidence-bearing completion; legacy backlog remains linked rather than duplicated; optional reconciliation is not a release prerequisite.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#12-coherent-landing-proposal-and-remaining-choices", "design/library-redesign/tickets0.sol61m.md"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-core", "title": "Establish exact typed protocol and exchange boundaries", "type": "epic", "priority": 1,
+      "description": "Pure wire/frame/command responsibilities compose into a cancellation-safe single-owner session. Bound outputs and progress evidence prevent wire ambiguity from becoming false success. This is part of the concurrent first slice, not a standalone registry deferral.",
+      "acceptance": "Independent crate entrances, one-envelope protection and scripted exchange tests exist; typed success, remote failure, invalid output and uncertainty remain distinct.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#5-typed-command-and-exchange-core", "design/library-redesign/kubeless-design0.gpt6a.md#3-exchange-lifecycle-precise-evidence-simple-ownership"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-core-reset", "title": "Replace the old library with concern-domain workspace foundations", "type": "chore", "priority": 1,
+      "description": "Track G's already-started teardown/workspace reset, session opencode://ses_ec71e81e3ffercjuzWSBbKFI5w. Do not duplicate or assign its work. Preserve design, VCS history and tracker evidence. Establish the accepted broad concern layout and independent entrances without a legacy compatibility obligation.",
+      "acceptance": "G reports the owned teardown checkpoint and workspace boundary; maintained design/tracker files survive; workspace manifests identify the initial concerns and follow-on implementation owner receives a clean handoff. Do not infer completion from this ticket plan.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#8-concern-crate-workspace", "design/library-redesign/README.md#current-design"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-core-wire", "title": "Implement bounded wire schema and incremental DCS framing", "type": "feature", "priority": 1,
+      "description": "Pure request/response schema, version vocabulary and persistent bounded decoder. Frame types are explicit; fragmented and coalesced responses stay with their exchange. Plain request, protected envelope and framed bytes are distinct entrances.",
+      "acceptance": "Source-backed fixtures cover fragmented prefixes/suffixes, coalesced frames, malformed/oversized JSON and unexplained surplus. No transport or ambient I/O in pure schema/frame crates; no leftover reply can silently satisfy the next command.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#5-typed-command-and-exchange-core", "design/library-redesign/kubeless-design0.gpt6a.md#4-proposed-api-and-commandexchange-seam"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-core-typed", "title": "Bind first-slice commands to typed outputs and finite profiles", "type": "feature", "priority": 1,
+      "description": "Command trait associates output and profile; implement listing, text acquisition, focus/action and a deferred long-wait representative used by the concurrent fixture. Provide a bounded finite raw entrance and ergonomic builders. Do not turn async IDs into socket multiplexing correlation.",
+      "acceptance": "Compile-time examples bind each command to output; missing required reply data is an error, permitted additive fields survive; single-response and submission-only contracts are explicit. Initial commands are sufficient for three-connection testing, not the whole catalog.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#5-typed-command-and-exchange-core", "design/library-redesign/draft1.gpt6a.md#6-commands-include-the-larger-surface-inside-action"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-core-session", "title": "Drive exchanges with cancellation-safe transport ownership and outcomes", "type": "feature", "priority": 1,
+      "description": "Runtime-independent finite exchange transitions plus Tokio session driver. Arm invalidation before cancelable I/O; track write progress, complete native reply and decode result; select absolute queue/execution or explicitly separate budgets. Return sockets only at proven reuse boundaries.",
+      "acceptance": "Fault scripts cancel before/through partial write, read, deferred reply and decode; transport retires after interrupted, surplus-ambiguous and submission-only exchanges. Remote failure, invalid typed success data and unknown completion differ. Deadlines do not reset per read/chunk; connection can be reused only after a complete valid boundary.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#5-typed-command-and-exchange-core", "design/library-redesign/kubeless-design0.gpt6a.md#3-exchange-lifecycle-precise-evidence-simple-ownership"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-registry", "title": "Own accepted operations with bounded concurrent connection leases", "type": "epic", "priority": 1,
+      "description": "Registry exposes concurrent &self submissions, separate global/endpoint/class budgets, reused setup and exact operation custody. Long waits, large reads and short actions progress independently; upload exclusions are specialized, not the main architecture.",
+      "acceptance": "First slice proves isolation and accepted-work ownership; admission race, result bounds, explicit cancellation, driver replacement and shutdown inventory have tested contracts. No global lock spans I/O.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#3-concurrency-is-the-first-registry-payoff", "design/library-redesign/draft1.gpt6a.md#4-accepted-operations-and-retained-results"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-registry-admission", "title": "Make admission atomic and accepted work discoverable after caller cancellation", "type": "feature", "priority": 1,
+      "description": "Select caller-known token or reserve/non-awaiting-commit through a concrete prototype. Atomically install owned input and operation record before eligibility. Bound accepted/queued work and return refused owned input where practical; separate waiter detachment from operation cancellation.",
+      "acceptance": "Deterministic races drop submission before acceptance and after commit before handle delivery; every accepted occurrence remains discoverable by a caller-known identity. Refusal preserves non-Clone input, duplicate local token behavior is explicit and does not claim remote deduplication. Concurrent &self callers cannot create invisible work.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#the-acceptance-boundary", "design/library-redesign/kubeless-adaptation1.gpt6a.md#public-concurrency-and-ownership"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-registry-leases", "title": "Schedule eligible endpoint work fairly across bounded leases", "type": "feature", "priority": 1,
+      "description": "Native fair endpoint/class selector reserves endpoint and connecting capacity before execution slots. Use multiple exclusive connection leases per endpoint, short-work service opportunity, setup reuse and exact lease generations. Explicit ordering is separate from concurrent submission.",
+      "acceptance": "Saturated endpoint cannot consume every global execution slot waiting for a lease; connecting sockets count against quota; long waits cannot exhaust reserved short/observation opportunity. Tests cover round-robin/class fairness, deadline expiry in queues, setup reuse and no mutex over connect/credentials/source reads/socket I/O. Same endpoint is not a universal executor key.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#3-concurrency-is-the-first-registry-payoff", "design/library-redesign/kubeless-adaptation1.gpt6a.md#bounded-scheduling-not-universal-endpoint-serialization"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-registry-custody", "title": "Retain outcomes and unresolved operations across waiter and driver loss", "type": "feature", "priority": 1,
+      "description": "Native owner stores return before notification; choose non-Clone result ownership (one taker or immutable shared ownership), byte/history budgets and explicit take/release. Queued cancel withdraws exact occurrence; started cancel retires transport and retains uncertainty. Shutdown closes admission and applies explicit drain/cancel policy with unresolved inventory.",
+      "acceptance": "Dropped waiter/notification cannot lose only result; driver replacement enumerates untaken and unresolved work without replaying taken/sent input. Tests exercise stale completion, full retention budget, release/take behavior, queued/started cancel and shutdown with unknown remote effects. Volatile owner loss and process-crash limits are documented.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#4-accepted-operations-and-retained-results", "design/library-redesign/kubeless-adaptation1.gpt6a.md#ownership-of-responsibilities-not-just-pooled-sockets"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-registry-kubeless", "title": "Select custody integration using native registry journeys", "type": "decision", "priority": 1,
+      "description": "Experiment compares native coordination, direct ReadyWork/Executor plus custody, and retained-actions host. Scripted transports suffice initially. Fair native work-lane seam and generalized claims remain evidence-led upstream options, not automatically mandatory local implementation.",
+      "acceptance": "Record executable comparison for concurrent long wait/read/short action, lost launch reply/waiter/driver plus check-only listing, and newer desired generation vs stale result. Compare duplicate bookkeeping, ownership guarantees, fairness/slot use and dependency fetchability. Select minimal proven components or justified native fallback; any needed kubeless change has an owner-qualified upstream prerequisite and published/fetchable revision before local dependency pinning.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#9-kubeless-a-constructive-integration-decision", "design/library-redesign/kubeless-adaptation1.gpt6a.md#4-native-admission-and-a-useful-framework-adaptation"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-registry-slice", "title": "Prove the concurrent typed first vertical slice", "type": "task", "priority": 1,
+      "description": "Integrate initial wire/types/explicit setup/session/admission/custody/leases through direct and managed client entrances. This is the first build acceptance checkpoint, not a later pool retrofit.",
+      "acceptance": "Script one endpoint with connection A in long wait, B in a fragmented large finite read and C completing a short command before A/B release. Accepted IDs/outcomes survive waiter drop; per-connection reader ownership, bounded quotas and cancellation retirement are asserted. Independently usable concern entrances and facade examples compile; no fake throughput or remote-parallelism claim.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#12-coherent-landing-proposal-and-remaining-choices", "design/library-redesign/draft1.gpt6a.md#3-concurrency-is-the-first-registry-payoff"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-access", "title": "Compose explicit endpoint discovery credentials and key storage", "type": "epic", "priority": 2,
+      "description": "Separate testable access leaves from execution; crypto consumes prepared inputs only. Endpoint/setup reuse honors generations and provenance. Existing TSV records are a data obligation distinct from unstable Rust APIs.",
+      "acceptance": "Explicit setup works in first slice, discovery/auth/store compose later without hidden crypto I/O; configured generation changes cannot install stale preparation; existing records have a tested preservation/import decision.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#7-discovery-credentials-and-setup-remain-separate", "design/library-redesign/draft1.gpt6a.md#8-concern-crate-workspace"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-access-explicit", "title": "Prepare explicit endpoints and protect each envelope exactly once", "type": "feature", "priority": 1,
+      "description": "Native Unix/TCP endpoint/address/provenance and caller-supplied plain/password/key setup needed by first slice. Pure crypto validates explicit keys and protects plaintext once; transports accept framed bytes, never re-encrypt commands. Local connection token and PID hint are not server identity.",
+      "acceptance": "Pure parser/key validation tests plus independent crypto vectors/oracle establish exact envelope/version/framing. Explicit endpoint bypasses discovery; no filesystem/env/subprocess access in crypto. Plain and encrypted scripted exchanges share one protection boundary and secret-safe diagnostics.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#7-discovery-credentials-and-setup-remain-separate", "design/library-redesign/kubeless-design0.gpt6a.md#typed-outputs-exact-envelopes-and-encryption-once"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-access-resolve", "title": "Resolve discovery and credential policy with generation-safe setup reuse", "type": "feature", "priority": 2,
+      "description": "Capture selected ambient inputs explicitly; discovery enumerates candidates with origins; credentials resolve password/key sources for selected binding. Keep parsing/selection pure and acquisition adapters separate. Cache only under selected policy and captured binding/credential generation.",
+      "acceptance": "Discovery, policy selection and credential acquisition independently testable with injected sources. Delayed setup cannot install after credential/binding changes; one ls success never marks all commands authorized; endpoint aliases/coordination groups and identity evidence stay distinct. No subprocess key lookup is hidden in crypto or transport.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#7-discovery-credentials-and-setup-remain-separate", "design/library-redesign/kubeless-adaptation1.gpt6a.md#identity-and-generations-must-stay-independent"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-access-store", "title": "Share a key-store boundary and preserve existing records deliberately", "type": "feature", "priority": 2,
+      "description": "Library and key-store utility share parser/storage I/O. Decide existing PID/window/public-key/timestamp TSV handling, provenance and import before format change. Cleanup remains explicitly requested, never automatic pruning.",
+      "acceptance": "Legacy fixture reads/imports without silent data loss, malformed records produce useful errors, update behavior is tested and CLI/library use same boundary. No invocation of kitty-pubkey-db from crypto; deliberate cleanup is separate from normal lookup/setup.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#7-discovery-credentials-and-setup-remain-separate", "doc/PLAN-pubkey-db.md"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-capabilities", "title": "Audit typed commands nested actions and upload conversations", "type": "epic", "priority": 2,
+      "description": "Complete modern typed capability surface from pinned upstream schemas and server behavior, not old serializers. Keep latest-stable audit separate from chosen support floor and provisional HEAD additions. Reuse existing open Action ticket.",
+      "acceptance": "Audited catalog records outer RC plus nested action/kitten/config scope; typed outputs and negotiated uploads are source-backed and conformance-tested. Provisional features and support choices remain visible.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#6-commands-include-the-larger-surface-inside-action", "design/upstream-kitty/evolution0.gpt6a.md"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-capabilities-audit", "title": "Catalog stable wire and nested capability contracts", "type": "task", "priority": 2,
+      "description": "Audit latest stable 0.49.2 command payloads/outputs and nested mappable actions, kitten returns/install contracts, load-config expansion and invalidation. Include deprecated/replaced commands and per-capability minimum evidence. HEAD 0.50 findings are provisional; audit does not set global version/support floor.",
+      "acceptance": "Revision-pinned coverage table maps commands, outputs, options, completion/no-response/upload constraints and nested contracts; unresolved entries are explicit. Fixtures come from upstream source/client specimens. Action ticket receives current pointer/scope, not a replacement.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#6-commands-include-the-larger-surface-inside-action", "design/upstream-kitty/evolution0.gpt6a.md"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-capabilities-typed", "title": "Implement audited typed command and output families", "type": "feature", "priority": 2,
+      "description": "Extend first-slice commands coherently across listing/text, process/launch/run/screenshot, window/tab/layout, appearance, configuration and kitten entrances. Catalog marks implemented, intentionally raw and unsupported contracts. Existing Action work remains its own ticket.",
+      "acceptance": "Associated outputs cover listing, text, launch results, screenshots and buffered run stdout/stderr; required missing data fails and additive fields follow schema policy. Builders and minimum capability metadata match pinned fixtures, no false completion/retry claims from generic outer commands, raw finite extension is documented.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#6-commands-include-the-larger-surface-inside-action", "design/library-redesign/tickets0.sol61m.md#capability-and-support-boundaries"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-capabilities-upload", "title": "Implement exact command-specific uploads and shared accumulator exclusion", "type": "feature", "priority": 2,
+      "description": "Audited image/logo/run upload profiles own handshake, chunks, command-specific EOF and terminal result. Shared same-server same-command accumulator exclusion uses explicit coordination groups and known aliases without globally serializing unrelated commands.",
+      "acceptance": "Tests cover empty/small/exact-boundary/large input, first nonempty handshake only, no_response retaining required handshake, async suppression rejection where unsupported, exact bytes/options/one terminator and bounded producer demand. Rejected handshake stops reads; producer failure after transmission does not finalize truncated input. Alias conflicts/exact stale release and interrupted-upload unresolved lane policy are tested; unrelated actions/endpoints still progress.",
+      "pointers": ["design/library-redesign/kubeless-design0.gpt6a.md#2-what-kittys-streaming-protocol-actually-requires", "design/library-redesign/draft1.gpt6a.md#specialty-constraints"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-observation", "title": "Provide scoped observation primitives without implicit reconciliation", "type": "epic", "priority": 2,
+      "description": "Finite acquisitions and sampled changes underpin CLI watch and optional control. Keep original effect evidence separate from later condition satisfaction. Terminal/custom extension routes and continuous reconciliation remain separately selectable.",
+      "acceptance": "Listing snapshots have scope/time/coverage and failed/partial/stale handling; explicit unknown-effect checks do not replay mutations. Optional later routes/controllers are not prerequisites for ordinary execution.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#10-observation-and-optional-reconciliation", "design/library-redesign/kubeless-adaptation1.gpt6a.md#5-three-plausible-architectures-and-concrete-workflows"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-observation-snapshots", "title": "Acquire scoped listing snapshots and sampled changes", "type": "feature", "priority": 2,
+      "description": "Observation/listing leaf depends on public managed execution, never creates registry/listing cycle. Record subject/route/acquisition interval/coverage/interpretation basis and sampled focus/window changes.",
+      "acceptance": "Failed acquisition is not empty listing; partial/unsupported/missing facts differ; overlapping acquisitions cannot overwrite fresher state just by later arrival. Sampling and missed polls are explicit, no invented event subscription or resume cursor. Foundation supports existing watch ticket without maintaining desired state.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#10-observation-and-optional-reconciliation", "design/library-redesign/draft1.gpt6a.md#8-concern-crate-workspace"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-observation-check", "title": "Offer explicit check-only follow-up for uncertain effects", "type": "feature", "priority": 2,
+      "description": "Caller-selected fresh listing check after uncertain launch or mutation reports condition evidence independently of retained native outcome. Bound target matching/freshness and no hidden retry input.",
+      "acceptance": "Lost launch reply followed by listing never relaunches, ambiguous target matching remains visible, and observed satisfaction does not rewrite original Unknown into remote acknowledgment. Tests include failed check, stale result basis and no mutation body inside continuation. No permanent controller starts by default.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#10-observation-and-optional-reconciliation", "design/library-redesign/kubeless-adaptation1.gpt6a.md#strongest-concrete-precedent-unknown-result--check-only-continuation"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-verification", "title": "Verify supported kitty journeys and adoption entrances", "type": "epic", "priority": 2,
+      "description": "Evidence-led Rust/kitty support decision, isolated live conformance and usable direct/managed examples. Integrates existing CLI epic rather than recreating active/goto/watch/list/config tickets.",
+      "acceptance": "Support matrix and source-backed/scripted/live evidence are documented honestly; examples and existing CLI backlog target new facade; missing live environment is a stated blocker, never represented as passing.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#11-upstream-support-and-verification", "design/library-redesign/README.md#available-upstream-evidence"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-verification-support", "title": "Choose Rust and kitty support floors independently of schema audit", "type": "decision", "priority": 1,
+      "description": "Select tested minimum kitty/Rust/Tokio policy using actual requirements; latest stable audit is not permission to bump every envelope version. Distinguish old 0.43.1 declared target, stable 0.49.2 and unreleased inspected 0.50 HEAD.",
+      "acceptance": "Record tested support floor, wire version strategy, per-command capability gates and provisional HEAD policy; fetchable dependency/MSRV evidence checked. Real persisted formats remain separate obligations. Can begin in parallel with first slice; final live matrix follows decision.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#11-upstream-support-and-verification", "design/upstream-kitty/evolution0.gpt6a.md#2-protocol-encryption-and-sockets"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-verification-live", "title": "Run isolated supported-version protocol and concurrency conformance", "type": "task", "priority": 2,
+      "description": "Extend first-slice scripted harness into isolated real kitty instances for chosen versions. Cover plain/encrypted setup, concurrent leases, long waits, reuse, uploads/no-response, errors and finite observations; distinguish conformance from performance claims.",
+      "acceptance": "Reproducible opt-in harness records versions/revisions and pass/skip/blocker evidence. Tests prove short operation independence from long waits, sequential reusable boundary, upload handshake/empty/EOF behavior and crypto correctness. Measure setup reuse/progress without promising server parallel CPU or claiming older 159 tests verify new architecture.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#11-upstream-support-and-verification", "design/library-redesign/kubeless-design0.gpt6a.md#7-failure-focused-conformance-and-minimal-landing-sequence"]
+    },
+    {
+      "id": "kitty-rc-proto-rs-redesign-verification-examples", "title": "Document independent concern entrances and lifecycle-aware facade usage", "type": "task", "priority": 2,
+      "description": "Runnable examples for pure protocol, direct session, managed concurrent submit/wait/take/cancel and explicit setup; describe observation samples and CLI adoption. No zooming-kittens compatibility requirement or hidden automatic cleanup/retry.",
+      "acceptance": "Examples compile/run under selected toolchain; docs distinguish direct future-drop cancellation from registry waiter detachment, explicit operation cancel, volatile custody limits, ordering and result release. Domain dependency graph is acyclic and leaf entrances work without client facade.",
+      "pointers": ["design/library-redesign/draft1.gpt6a.md#2-working-vocabulary-and-ownership", "design/library-redesign/draft1.gpt6a.md#8-concern-crate-workspace"]
+    }
+  ],
+  "update": [
+    {"id":"kitty-rc-proto-rs-slb", "acceptance":"Existing list-windows, active/a, goto/g, watch/w and global endpoint/encryption configuration work lands against new facade and scoped observations; history and original IDs survive. Direct/managed lifecycle and config precedence are explicit; key utility uses shared store, not hidden transport lookup.", "append_notes":"Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9: adopt registry-first draft without creating a replacement CLI epic. Current pointers: design/library-redesign/tickets0.sol61m.md (landing/backlog mapping); design/library-redesign/draft1.gpt6a.md#8-concern-crate-workspace (apps and facade)."},
+    {"id":"kitty-rc-proto-rs-goy", "acceptance":"list-windows is a subcommand using typed listing through new facade; output formatting and failures tested; missing/failed listing is not an empty successful result.", "append_notes":"Keep this as list-subcommand owner. Related b9t owns migration of old standalone binary/output behavior, not a duplicate subcommand. Pointers: design/library-redesign/tickets0.sol61m.md#existing-backlog; design/library-redesign/draft1.gpt6a.md#6-commands-include-the-larger-surface-inside-action. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."},
+    {"id":"kitty-rc-proto-rs-b9t", "acceptance":"Inventory old list_windows binary behavior and preserve useful output/UX as CLI fixture and deliberate standalone/migration decision; share goy's implementation, no second list engine. Removed API compatibility is not an obligation to keep the binary.", "append_notes":"Narrow adoption scope to avoid duplicate goy work. Pointers: design/library-redesign/tickets0.sol61m.md#existing-backlog; design/library-redesign/draft1.gpt6a.md#12-coherent-landing-proposal-and-remaining-choices. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."},
+    {"id":"kitty-rc-proto-rs-e6p", "acceptance":"active-window with active/a aliases resolves active target from scoped typed listing; absent/ambiguous target and acquisition failure distinct; tests exercise target/output behavior through new facade.", "append_notes":"Reuse existing active ticket. Pointers: design/library-redesign/tickets0.sol61m.md#existing-backlog; design/library-redesign/draft1.gpt6a.md#10-observation-and-optional-reconciliation. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."},
+    {"id":"kitty-rc-proto-rs-g4x", "acceptance":"goto/g selects explicit window and awaits typed focus operation with evidence-bearing failure; any focus-then-action sequence explicitly ordered; uncertainty never blindly retries mutation.", "append_notes":"Reuse existing goto ticket. Pointers: design/library-redesign/tickets0.sol61m.md#existing-backlog; design/library-redesign/draft1.gpt6a.md#3-concurrency-is-the-first-registry-payoff. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."},
+    {"id":"kitty-rc-proto-rs-wbs", "acceptance":"watch/w prints sampled active window name/id from finite observations; polling interval/bounds, failed and stale reads, cancellation and missed-poll semantics tested. No invented lossless RC watch and no continuous desired-state controller.", "append_notes":"Observation consumer, not reconciliation owner. Pointers: design/library-redesign/tickets0.sol61m.md#existing-backlog; design/library-redesign/draft1.gpt6a.md#10-observation-and-optional-reconciliation. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."},
+    {"id":"kitty-rc-proto-rs-aqh", "acceptance":"CLI endpoint config respects explicit CLI > selected environment > file/default precedence with pure selection tests; selected explicit endpoint bypasses enumeration; provenance is passed to new setup facade.", "append_notes":"Reuse existing socket-config ticket, with endpoint/address expansion rather than hidden transport config. Pointers: design/library-redesign/tickets0.sol61m.md#existing-backlog; design/library-redesign/draft1.gpt6a.md#7-discovery-credentials-and-setup-remain-separate. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."},
+    {"id":"kitty-rc-proto-rs-74i", "acceptance":"CLI encryption/auth settings resolve explicit password/key-source policy, safe diagnostics and precedence; pure crypto receives prepared inputs only; no subprocess/env/filesystem lookup hidden in crypto or transport; integration tests use shared key-store parser.", "append_notes":"Reuse existing encryption-config ticket. Pointers: design/library-redesign/tickets0.sol61m.md#existing-backlog; design/library-redesign/draft1.gpt6a.md#7-discovery-credentials-and-setup-remain-separate. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."},
+    {"id":"kitty-rc-proto-rs-vid", "acceptance":"Outer Action uses upstream-correct action payload (not send_key), scoped match/self and associated result contract. Audited typed nested action profiles cover argument grammar and ordering/effect evidence; arbitrary action escape hatch makes no inferred completion/retry guarantee. Source-backed fixtures and config/kitten catalog cross-links exist.", "append_notes":"Keep existing Action owner/history; link under capability epic rather than create duplicate. Pointers: design/library-redesign/tickets0.sol61m.md#capability-and-support-boundaries; design/library-redesign/draft1.gpt6a.md#6-commands-include-the-larger-surface-inside-action; design/library-redesign/kubeless-adaptation1.gpt6a.md#capability-descriptions-include-nested-rc-surfaces. Planning session opencode://ses_ec71b1985ffepI33XRmG1tf0Z9."}
+  ],
+  "parent_child": [
+    ["kitty-rc-proto-rs-redesign-core", "kitty-rc-proto-rs-redesign"],
+    ["kitty-rc-proto-rs-redesign-registry", "kitty-rc-proto-rs-redesign"],
+    ["kitty-rc-proto-rs-redesign-access", "kitty-rc-proto-rs-redesign"],
+    ["kitty-rc-proto-rs-redesign-capabilities", "kitty-rc-proto-rs-redesign"],
+    ["kitty-rc-proto-rs-redesign-observation", "kitty-rc-proto-rs-redesign"],
+    ["kitty-rc-proto-rs-redesign-verification", "kitty-rc-proto-rs-redesign"],
+    ["kitty-rc-proto-rs-slb", "kitty-rc-proto-rs-redesign"],
+    ["kitty-rc-proto-rs-redesign-core-reset", "kitty-rc-proto-rs-redesign-core"],
+    ["kitty-rc-proto-rs-redesign-core-wire", "kitty-rc-proto-rs-redesign-core"],
+    ["kitty-rc-proto-rs-redesign-core-typed", "kitty-rc-proto-rs-redesign-core"],
+    ["kitty-rc-proto-rs-redesign-core-session", "kitty-rc-proto-rs-redesign-core"],
+    ["kitty-rc-proto-rs-redesign-registry-admission", "kitty-rc-proto-rs-redesign-registry"],
+    ["kitty-rc-proto-rs-redesign-registry-leases", "kitty-rc-proto-rs-redesign-registry"],
+    ["kitty-rc-proto-rs-redesign-registry-custody", "kitty-rc-proto-rs-redesign-registry"],
+    ["kitty-rc-proto-rs-redesign-registry-kubeless", "kitty-rc-proto-rs-redesign-registry"],
+    ["kitty-rc-proto-rs-redesign-registry-slice", "kitty-rc-proto-rs-redesign-registry"],
+    ["kitty-rc-proto-rs-redesign-access-explicit", "kitty-rc-proto-rs-redesign-access"],
+    ["kitty-rc-proto-rs-redesign-access-resolve", "kitty-rc-proto-rs-redesign-access"],
+    ["kitty-rc-proto-rs-redesign-access-store", "kitty-rc-proto-rs-redesign-access"],
+    ["kitty-rc-proto-rs-redesign-capabilities-audit", "kitty-rc-proto-rs-redesign-capabilities"],
+    ["kitty-rc-proto-rs-redesign-capabilities-typed", "kitty-rc-proto-rs-redesign-capabilities"],
+    ["kitty-rc-proto-rs-redesign-capabilities-upload", "kitty-rc-proto-rs-redesign-capabilities"],
+    ["kitty-rc-proto-rs-vid", "kitty-rc-proto-rs-redesign-capabilities"],
+    ["kitty-rc-proto-rs-redesign-observation-snapshots", "kitty-rc-proto-rs-redesign-observation"],
+    ["kitty-rc-proto-rs-redesign-observation-check", "kitty-rc-proto-rs-redesign-observation"],
+    ["kitty-rc-proto-rs-redesign-verification-support", "kitty-rc-proto-rs-redesign-verification"],
+    ["kitty-rc-proto-rs-redesign-verification-live", "kitty-rc-proto-rs-redesign-verification"],
+    ["kitty-rc-proto-rs-redesign-verification-examples", "kitty-rc-proto-rs-redesign-verification"]
+  ],
+  "blocks": [
+    ["kitty-rc-proto-rs-redesign-core-wire", "kitty-rc-proto-rs-redesign-core-reset"],
+    ["kitty-rc-proto-rs-redesign-core-typed", "kitty-rc-proto-rs-redesign-core-wire"],
+    ["kitty-rc-proto-rs-redesign-access-explicit", "kitty-rc-proto-rs-redesign-core-wire"],
+    ["kitty-rc-proto-rs-redesign-core-session", "kitty-rc-proto-rs-redesign-core-typed"],
+    ["kitty-rc-proto-rs-redesign-core-session", "kitty-rc-proto-rs-redesign-access-explicit"],
+    ["kitty-rc-proto-rs-redesign-registry-admission", "kitty-rc-proto-rs-redesign-core-reset"],
+    ["kitty-rc-proto-rs-redesign-registry-leases", "kitty-rc-proto-rs-redesign-registry-admission"],
+    ["kitty-rc-proto-rs-redesign-registry-leases", "kitty-rc-proto-rs-redesign-core-session"],
+    ["kitty-rc-proto-rs-redesign-registry-custody", "kitty-rc-proto-rs-redesign-registry-admission"],
+    ["kitty-rc-proto-rs-redesign-registry-custody", "kitty-rc-proto-rs-redesign-registry-kubeless"],
+    ["kitty-rc-proto-rs-redesign-registry-slice", "kitty-rc-proto-rs-redesign-registry-leases"],
+    ["kitty-rc-proto-rs-redesign-registry-slice", "kitty-rc-proto-rs-redesign-registry-custody"],
+    ["kitty-rc-proto-rs-redesign-access-resolve", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-redesign-access-store", "kitty-rc-proto-rs-redesign-access-explicit"],
+    ["kitty-rc-proto-rs-redesign-capabilities-typed", "kitty-rc-proto-rs-redesign-capabilities-audit"],
+    ["kitty-rc-proto-rs-redesign-capabilities-typed", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-redesign-capabilities-upload", "kitty-rc-proto-rs-redesign-capabilities-audit"],
+    ["kitty-rc-proto-rs-redesign-capabilities-upload", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-vid", "kitty-rc-proto-rs-redesign-capabilities-audit"],
+    ["kitty-rc-proto-rs-vid", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-redesign-observation-snapshots", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-redesign-observation-check", "kitty-rc-proto-rs-redesign-observation-snapshots"],
+    ["kitty-rc-proto-rs-redesign-observation-check", "kitty-rc-proto-rs-redesign-capabilities-typed"],
+    ["kitty-rc-proto-rs-redesign-verification-live", "kitty-rc-proto-rs-redesign-verification-support"],
+    ["kitty-rc-proto-rs-redesign-verification-live", "kitty-rc-proto-rs-redesign-capabilities-typed"],
+    ["kitty-rc-proto-rs-redesign-verification-live", "kitty-rc-proto-rs-redesign-capabilities-upload"],
+    ["kitty-rc-proto-rs-redesign-verification-live", "kitty-rc-proto-rs-redesign-access-resolve"],
+    ["kitty-rc-proto-rs-redesign-verification-examples", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-redesign-verification-examples", "kitty-rc-proto-rs-redesign-verification-support"],
+    ["kitty-rc-proto-rs-goy", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-b9t", "kitty-rc-proto-rs-goy"],
+    ["kitty-rc-proto-rs-e6p", "kitty-rc-proto-rs-redesign-observation-snapshots"],
+    ["kitty-rc-proto-rs-g4x", "kitty-rc-proto-rs-redesign-registry-slice"],
+    ["kitty-rc-proto-rs-wbs", "kitty-rc-proto-rs-redesign-observation-snapshots"],
+    ["kitty-rc-proto-rs-aqh", "kitty-rc-proto-rs-redesign-access-resolve"],
+    ["kitty-rc-proto-rs-74i", "kitty-rc-proto-rs-redesign-access-resolve"],
+    ["kitty-rc-proto-rs-74i", "kitty-rc-proto-rs-redesign-access-store"]
+  ],
+  "optional_not_created": [
+    {"owner":"kubeless", "scope":"Fair native ReadyWork/work-lane retained-host seam", "selection":"Only if registry-kubeless comparison selects retained host and demonstrates current entrance blocks fair eligibility; upstream-owned ticket/revision must then be linked before local adoption."},
+    {"owner":"kubeless", "scope":"Generalized atomic quota/exclusive claim-set reservations", "selection":"Only after second consumer proves shared reservation contract; no mandatory initial framework crate."},
+    {"owner":"kitty-rc-proto-rs", "scope":"Continuing authored goals/reconciliation, terminal XTGETTCAP or deployed custom no-UI observation kitten", "selection":"Separate workflow commission and access/target contract; not part of initial concurrent execution or CLI sampled watch. Preserve apply-once/observe-until/maintain-while/yield-on-divergence distinctions, no exactly-once/CAS claim."}
+  ]
+}
