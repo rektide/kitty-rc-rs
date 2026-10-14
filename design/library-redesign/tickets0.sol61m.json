@@ -1,11 +1,20 @@
 {
   "format": "kitty-redesign-ticket-plan/v1",
-  "standing": "prepared-not-applied; blocked on approved legacy SQLite to Dolt recovery",
+  "standing": "applied after operator-approved verified history-preserving SQLite to embedded Dolt recovery; all 27 new issues open at application checkpoint",
   "session": "opencode://ses_ec71b1985ffepI33XRmG1tf0Z9",
   "prefix": "kitty-rc-proto-rs",
   "source": "design/library-redesign/draft1.gpt6a.md",
+  "applied": {
+    "at": "2026-10-14",
+    "session": "opencode://ses_ec71b1985ffepI33XRmG1tf0Z9",
+    "canonical_store": ".beads/embeddeddolt/beads",
+    "legacy_backup": ".test-agent/tracker-migration/backup-20261014-ses_ec71b1985ffepI33XRmG1tf0Z9",
+    "migration_checkpoint": "dolt:tthmp7mhp15lk5bnvj2pojnu969iihrr",
+    "counts": {"legacy_issues":29,"legacy_events_transferred":46,"events_total":112,"exact_legacy_archive_rows":135,"created":27,"updated":9,"issues_total":56,"open":36,"closed":20,"parent_edges_total":36,"blocking_edges_total":39,"native_cycles":0},
+    "history_limits": "Native DATETIME(0) uses UTC whole seconds and event IDs map to deterministic UUIDs. Exact legacy fields/IDs/timestamp strings remain in native archival tables and unchanged recoverable SQLite backup; SQLite history is not fabricated as old Dolt commits."
+  },
   "application": {
-    "precondition": "Operator approves recovery and bd opens the verified canonical store with all 29 legacy issues and their history accounted for. Do not initialize over the existing SQLite database or overwrite its export.",
+    "precondition": "Satisfied 2026-10-14: operator approved backed-up history-preserving recovery; all 29 legacy issues, 10 dependencies and 46 events verified before application. For any reapplication inspect current live issues first; never duplicate or reset advanced work.",
     "create": "For each create record, bd create --id ID --title TITLE --type TYPE --priority PRIORITY --description DESCRIPTION --acceptance ACCEPTANCE; preserve ID and add explicit parent-child edge afterward.",
     "update": "For each update record, inspect current issue, bd update ID --acceptance ACCEPTANCE --append-notes APPEND_NOTES. Preserve previous descriptions and notes; do not rename or close legacy tickets automatically.",
     "edges": "bd dep add DEPENDENT PREREQUISITE --type TYPE. Both parent-child and blocks use dependent/child first.",
