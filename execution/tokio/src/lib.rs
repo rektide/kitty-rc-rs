@@ -228,18 +228,3 @@ impl Session {
         }
     }
 }
-
-pub async fn drive(
-    address: &Address,
-    prepared: Prepared,
-    deadline: Instant,
-    max_response: usize,
-    evidence: Evidence,
-) -> Outcome {
-    Session::new(Endpoint {
-        address: address.clone(),
-        protection: kitty_rc_endpoint::Protection::Plain,
-    })
-    .execute_prepared(prepared, deadline, max_response, evidence)
-    .await
-}

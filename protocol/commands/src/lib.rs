@@ -220,7 +220,7 @@ pub enum LsError {
 
     /// The reply did not match any shape the inspected server produces.
     #[error("ls reply envelope was structurally invalid: {0}")]
-    InvalidEnvelope(String),
+    InvalidEnvelope(#[source] kitty_rc_schema::SchemaError),
 
     #[error("ls data decode failed: {0}")]
     Decode(#[from] serde_json::Error),
@@ -289,7 +289,7 @@ pub fn ls_from_response(envelope: &ResponseEnvelope) -> Result<Vec<OsWindow>, Ls
             Err(LsError::MissingData)
         }
         Ok(ResponseKind::Success { data: Some(data) }) => Ok(outputs::parse_ls_data(&data)?),
-        Err(error) => Err(LsError::InvalidEnvelope(error.to_string())),
+        Err(error) => Err(LsError::InvalidEnvelope(error)),
     }
 }
 

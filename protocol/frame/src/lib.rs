@@ -92,6 +92,9 @@ impl FrameDecoder {
         max_retained: usize,
         max_frames: usize,
     ) -> Result<(), FrameError> {
+        if let Some(error) = &self.poisoned {
+            return Err(error.clone());
+        }
         if !self.is_idle() {
             return self.poison(FrameError::NotIdle);
         }
@@ -239,6 +242,10 @@ mod tests {
         decoder.reconfigure(16, 16, 1).unwrap();
         decoder.extend(&frame(b"more than eight")).unwrap();
         assert_eq!(decoder.next_frame().unwrap().unwrap(), b"more than eight");
+        let mut poisoned = FrameDecoder::new(1);
+        poisoned.extend(PREFIX).unwrap();
+        let original = poisoned.extend(b"xx").unwrap_err();
+        assert_eq!(poisoned.reconfigure(16, 16, 1), Err(original));
     }
 
     #[test]

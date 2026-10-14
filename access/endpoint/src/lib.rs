@@ -8,24 +8,30 @@ pub enum Address {
     Tcp(SocketAddr),
 }
 impl std::str::FromStr for Address {
-    type Err = String;
+    type Err = AddressError;
     /// Explicit `unix:/path` or `tcp:IP:PORT` (IPv6 uses brackets). No DNS,
     /// environment fallback, abstract-socket inference or identity claim.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if let Some(path) = value.strip_prefix("unix:") {
             if path.is_empty() {
-                return Err("empty Unix socket path".into());
+                return Err(AddressError::EmptyUnixPath);
             }
             return Ok(Self::Unix(path.into()));
         }
         if let Some(address) = value.strip_prefix("tcp:") {
-            return address
-                .parse()
-                .map(Self::Tcp)
-                .map_err(|e| format!("invalid numeric TCP address: {e}"));
+            return address.parse().map(Self::Tcp).map_err(AddressError::Tcp);
         }
-        Err("explicit unix: or tcp: scheme required".into())
+        Err(AddressError::Scheme)
     }
+}
+#[derive(Debug, thiserror::Error)]
+pub enum AddressError {
+    #[error("empty Unix socket path")]
+    EmptyUnixPath,
+    #[error("explicit unix: or tcp: scheme required")]
+    Scheme,
+    #[error("invalid numeric TCP address: {0}")]
+    Tcp(#[source] std::net::AddrParseError),
 }
 
 #[derive(Clone)]

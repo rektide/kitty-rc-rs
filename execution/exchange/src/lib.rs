@@ -191,7 +191,19 @@ impl std::fmt::Display for Failure {
             }
         }
         let mut bounded = Bounded { f, left: 256 };
-        let category = match self { Self::Remote { .. } => "remote error", Self::TypedDecode { .. } => "typed decode", Self::MalformedReply { .. } => "malformed reply", Self::Unavailable(_) => "custody unavailable", Self::Prepare(_) => "prepare", Self::Interrupted { progress, .. } => return std::fmt::write(&mut bounded, format_args!("interrupted ({progress:?}): {text}")) };
+        let category = match self {
+            Self::Remote { .. } => "remote error",
+            Self::TypedDecode { .. } => "typed decode",
+            Self::MalformedReply { .. } => "malformed reply",
+            Self::Unavailable(_) => "custody unavailable",
+            Self::Prepare(_) => "prepare",
+            Self::Interrupted { progress, .. } => {
+                return std::fmt::write(
+                    &mut bounded,
+                    format_args!("interrupted ({progress:?}): {text}"),
+                );
+            }
+        };
         std::fmt::write(&mut bounded, format_args!("{category}: {text}"))
     }
 }
@@ -262,7 +274,8 @@ pub enum PrepareError {
     TimestampOverflow,
 }
 
-/// Transport accepts only prepared bytes, never a command to encrypt again.
+/// Frozen plaintext for a consuming first-send protection boundary. Already
+/// protected envelopes cannot be constructed as Prepared values.
 pub struct Prepared {
     /// Immutable plaintext; no password/timestamp injected until first send.
     bytes: Vec<u8>,
@@ -488,8 +501,15 @@ mod tests {
     #[test]
     fn default_diagnostics_are_bounded_without_truncating_native_evidence() {
         let error = "🦀".repeat(1024);
-        let failure = super::Failure::Remote { error: error.clone(), native: error.as_bytes().to_vec() };
-        let display = failure.to_string(); assert!(display.len() <= 256); assert!(display.starts_with("remote error:"));
-        assert!(matches!(failure, super::Failure::Remote { native, error } if native.len() == 4096 && error.len() == 4096));
+        let failure = super::Failure::Remote {
+            error: error.clone(),
+            native: error.as_bytes().to_vec(),
+        };
+        let display = failure.to_string();
+        assert!(display.len() <= 256);
+        assert!(display.starts_with("remote error:"));
+        assert!(
+            matches!(failure, super::Failure::Remote { native, error } if native.len() == 4096 && error.len() == 4096)
+        );
     }
 }

@@ -156,6 +156,19 @@ pub enum ShutdownError {
     #[error("driver stopped with unfinished work; retained inventory has {} operations", inventory.len())]
     DriverStopped { inventory: Vec<Summary> },
 }
+#[derive(Debug, thiserror::Error)]
+pub enum RegistryError {
+    #[error("invalid class/connection limits")]
+    InvalidLimits,
+    #[error("endpoint setup byte limit exceeded")]
+    EndpointSetupLimit,
+    #[error("intake closed")]
+    Closed,
+    #[error("endpoint capacity full")]
+    EndpointCapacity,
+    #[error("driver already attached")]
+    DriverAttached,
+}
 
 struct Record {
     endpoint: EndpointId,
@@ -233,15 +246,20 @@ impl Registry {
             idle_tokens,
         }
     }
-    pub fn new(limits: Limits) -> Result<Self, String> {
-        if limits.class_connections.iter().sum::<usize>() > limits.connections
-            || limits.class_connections_per_endpoint.iter().sum::<usize>()
-                > limits.connections_per_endpoint
+    pub fn new(limits: Limits) -> Result<Self, RegistryError> {
+        let total = |classes: &[usize; 3]| {
+            classes
+                .iter()
+                .try_fold(0usize, |sum, value| sum.checked_add(*value))
+        };
+        if total(&limits.class_connections).is_none_or(|sum| sum > limits.connections)
+            || total(&limits.class_connections_per_endpoint)
+                .is_none_or(|sum| sum > limits.connections_per_endpoint)
             || limits.connections == 0
             || limits.connections_per_endpoint == 0
             || limits.max_request == 0
         {
-            return Err("invalid class/connection limits".into());
+            return Err(RegistryError::InvalidLimits);
         }
         let owner = NEXT_OWNER.fetch_add(1, Ordering::Relaxed);
         assert!(owner != u64::MAX, "owner identity exhausted");
@@ -279,7 +297,7 @@ impl Registry {
             committed: AtomicBool::new(false),
         }
     }
-    pub fn register(&self, mut endpoint: Endpoint) -> Result<EndpointId, String> {
+    pub fn register(&self, mut endpoint: Endpoint) -> Result<EndpointId, RegistryError> {
         let address_bytes = match &endpoint.address {
             kitty_rc_endpoint::Address::Unix(path) => path.as_os_str().as_encoded_bytes().len(),
             kitty_rc_endpoint::Address::Tcp(_) => 32,
@@ -296,7 +314,7 @@ impl Registry {
                 .saturating_add(32),
         };
         if address_bytes.saturating_add(access_bytes) > self.shared.limits.max_request {
-            return Err("endpoint setup byte limit exceeded".into());
+            return Err(RegistryError::EndpointSetupLimit);
         }
         if let kitty_rc_endpoint::Address::Unix(path) = &mut endpoint.address {
             path.shrink_to_fit();
@@ -311,8 +329,11 @@ impl Registry {
             key_origin.shrink_to_fit();
         }
         let mut state = self.shared.state.lock().unwrap();
-        if state.closed || state.endpoints.len() == self.shared.limits.endpoints {
-            return Err("endpoint intake closed or full".into());
+        if state.closed {
+            return Err(RegistryError::Closed);
+        }
+        if state.endpoints.len() == self.shared.limits.endpoints {
+            return Err(RegistryError::EndpointCapacity);
         }
         let t = self.mint();
         let id = EndpointId {
@@ -530,10 +551,10 @@ impl Registry {
     }
     /// Driver is an explicitly owned task; dropping Driver aborts it. The owner
     /// retains unfinished queued work and uncertain running outcomes.
-    pub fn start(&self) -> Result<Driver, String> {
+    pub fn start(&self) -> Result<Driver, RegistryError> {
         let mut s = self.shared.state.lock().unwrap();
         if s.driver {
-            return Err("driver already attached".into());
+            return Err(RegistryError::DriverAttached);
         }
         s.driver = true;
         s.generation += 1;
@@ -578,7 +599,8 @@ impl Registry {
                 )
             };
             if !unfinished {
-                self.shared.state.lock().unwrap().idle.clear();
+                let idle = std::mem::take(&mut self.shared.state.lock().unwrap().idle);
+                drop(idle); // Close transports outside the owner lock.
                 return Ok(self
                     .inventory()
                     .into_iter()
@@ -694,6 +716,7 @@ struct Work {
     token: Token,
     endpoint_id: EndpointId,
     session: Session,
+    retired: Option<Session>,
     prepared: Prepared,
     deadline: Instant,
     max_response: usize,
@@ -756,6 +779,7 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                 .map(|(token, _)| *token);
             if let Some(token) = token {
                 let setup = s.endpoints[&endpoint].clone();
+                let mut retired = None;
                 let session =
                     if let Some(session) = s.idle.get_mut(&endpoint).and_then(|idle| idle.pop()) {
                         session
@@ -769,7 +793,7 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                                 .find(|(_, sockets)| !sockets.is_empty())
                                 .map(|(id, _)| *id);
                             if let Some(victim) = victim {
-                                s.idle.get_mut(&victim).unwrap().pop();
+                                retired = s.idle.get_mut(&victim).unwrap().pop();
                             } else {
                                 continue;
                             }
@@ -786,6 +810,7 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                     token,
                     endpoint_id: endpoint,
                     session,
+                    retired,
                     prepared,
                     deadline: r.deadline,
                     max_response: r.max_response,
@@ -806,6 +831,9 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
         tokio::pin!(wake);
         wake.as_mut().enable();
         while let Some(mut work) = select(&shared, generation) {
+            // The transferred lease still owns its old idle transport until
+            // this close; no new connection starts before it is retired.
+            drop(work.retired.take());
             tasks.push(async move {
                 let evidence = work.evidence.clone();
                 let outcome = tokio::select! {

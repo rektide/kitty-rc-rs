@@ -452,6 +452,7 @@ name = "kitty-rc-endpoint"
 version = "0.1.0"
 dependencies = [
  "kitty-rc-crypto",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
