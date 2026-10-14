@@ -423,6 +423,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "kitty-rc-check"
+version = "0.1.0"
+dependencies = [
+ "kitty-rc-commands",
+ "kitty-rc-endpoint",
+ "kitty-rc-exchange",
+ "kitty-rc-frame",
+ "kitty-rc-listing",
+ "kitty-rc-registry",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "kitty-rc-cli"
 version = "0.1.0"
 dependencies = [
