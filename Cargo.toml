@@ -16,6 +16,7 @@ members = [
   "client",
   "observation/listing",
   "observation/check",
+  "tool/verification",
 ]
 
 [workspace.package]

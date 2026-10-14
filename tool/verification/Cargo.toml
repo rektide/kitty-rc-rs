@@ -1,0 +1,60 @@
+[package]
+name = "kitty-rc-verify"
+description = "Private Rust verification orchestration: isolated fixtures, version matrix, release acquisition, CLI smoke and pinned source oracles"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "kitty-rc-verify"
+path = "src/main.rs"
+
+# Launched inside private kitty fixtures: publishes the child key, provides
+# sentinel/stream/sleep children for the conformance examples. See src/child.rs.
+[[bin]]
+name = "kitty-rc-verify-child"
+path = "src/child.rs"
+
+# Rust test fixtures (see tests/lifecycle.rs): real processes standing in for
+# kitty, weston, the examples and the CLI, so lifecycle tests exercise genuine
+# supervision with zero Python.
+[[bin]]
+name = "fake-kitty"
+path = "tests/fixtures/fake_kitty.rs"
+test = false
+
+[[bin]]
+name = "fake-weston"
+path = "tests/fixtures/fake_weston.rs"
+test = false
+
+[[bin]]
+name = "fake-example"
+path = "tests/fixtures/fake_example.rs"
+test = false
+
+[[bin]]
+name = "fake-cli"
+path = "tests/fixtures/fake_cli.rs"
+test = false
+
+[lib]
+name = "kitty_rc_verify"
+path = "src/lib.rs"
+
+[dependencies]
+base64.workspace = true
+clap = { workspace = true }
+libc = "0.2"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tar = "0.4"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["process", "signal"] }
+ureq = "2"
+xz2 = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
