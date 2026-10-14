@@ -51,7 +51,7 @@ stable tree, not a different revision. HEAD stays
 `5bf3c2dc676efd5c4b4526eb135c922701565707` (0.50dev).
 
 `kitty-rc-proto-rs-redesign-capabilities-audit` is closed for the inventory.
-The existing `kitty-rc-proto-rs-vid` Action ticket can close for this implemented,
+The existing `kitty-rc-proto-rs-vid` Action ticket is closed for this implemented,
 verified source-backed grammar and raw entrance. **The broad typed ticket stays
 open:** its buffered run execution acceptance is not complete until the upload
 wave provides accumulator exclusion and its conversation. A source/output
