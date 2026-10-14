@@ -16,7 +16,7 @@ import sys
 from types import SimpleNamespace
 
 HOME = Path(__file__).resolve().parent
-REVISION = "e300597364aabb4890ebdd3a5491397f858fd714"
+REVISION = "b2cb871254fbdac19a085188813c8dfb258b95cd"
 
 # Explicit options/argv and independent golden values, not extracted strings
 # copied from this library's serialization. Native constructors are the oracle.

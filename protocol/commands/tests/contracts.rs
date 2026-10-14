@@ -1,5 +1,5 @@
 //! Golden payloads are independently specified from stable v0.49.2
-//! e300597364aabb4890ebdd3a5491397f858fd714 `message_to_kitty` constructors and
+//! b2cb871254fbdac19a085188813c8dfb258b95cd `message_to_kitty` constructors and
 //! `response_from_kitty` handlers, not request -> response mirror round trips.
 use kitty_rc_commands::actions::*;
 use kitty_rc_commands::appearance::*;
@@ -521,6 +521,15 @@ fn buffered_run_result_is_binary_and_nonzero_exit_is_not_rc_failure() {
 
 #[test]
 fn screenshot_data_and_server_save_are_distinct_deferred_profiles() {
+    assert!(ServerPath::new("").is_err());
+    assert!(ServerPath::new("bad\0path").is_err());
+    let save = SaveScreenshot::builder()
+        .server_path(ServerPath::new("~/capture.png").unwrap())
+        .build();
+    assert_eq!(
+        payload(&save),
+        json!({"match":null,"match_tab":null,"output_path":"~/capture.png"})
+    );
     let shot = Screenshot::builder()
         .target(ScreenshotTarget::Window("id:8".into()))
         .build();

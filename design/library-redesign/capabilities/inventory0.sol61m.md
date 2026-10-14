@@ -16,21 +16,21 @@ sources:
     title: Corrected audited reuse and mode interface
   - resource: /design/library-redesign/teardown0.glm53m.md#5-restoration-inventory-for-the-command-catalog
     title: Restoration inventory, corrected against stable handlers here
-  - resource: https://github.com/kovidgoyal/kitty/tree/e300597364aabb4890ebdd3a5491397f858fd714/kitty/rc
+  - resource: https://github.com/kovidgoyal/kitty/tree/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/rc
     title: All 41 stable v0.49.2 command specs, client payloads and handlers directly inspected
-  - resource: https://github.com/kovidgoyal/kitty/blob/e300597364aabb4890ebdd3a5491397f858fd714/kitty/options/utils.py
+  - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/options/utils.py
     title: Directly inspected nested action argument parsers
-  - resource: https://github.com/kovidgoyal/kitty/blob/e300597364aabb4890ebdd3a5491397f858fd714/kitty/remote_control.py
+  - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/remote_control.py
     title: Native terminal responses, async registration and stream handshake
   - resource: https://github.com/kovidgoyal/kitty/blob/5bf3c2dc676efd5c4b4526eb135c922701565707/kitty/rc/base.py
     title: StreamInFlight replacement/abort and empty-terminator behavior
-  - resource: https://github.com/kovidgoyal/kitty/blob/e300597364aabb4890ebdd3a5491397f858fd714/kitty/boss.py
+  - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/boss.py
     title: Nested combine dispatch, interactive create_marker and resize return behavior
   - resource: https://github.com/kovidgoyal/kitty/blob/5bf3c2dc676efd5c4b4526eb135c922701565707/kitty/conf/utils.py
     title: ToCmdline splits then expands tilde and server environment even for quoted tokens
 verification:
   scope: Source audit, not live server or minimum-version conformance
-  evidence: Stable tag peeled to e300597364aabb4890ebdd3a5491397f858fd714; HEAD 5bf3c2dc676efd5c4b4526eb135c922701565707; git diff of kitty/rc and direct handler/parser reads
+  evidence: Stable source commit b2cb871254fbdac19a085188813c8dfb258b95cd (annotated tag object e300597364aabb4890ebdd3a5491397f858fd714); HEAD 5bf3c2dc676efd5c4b4526eb135c922701565707; git diff of kitty/rc and direct handler/parser reads
   limits: Presence at a revision is not the earliest release or a selected support floor; custom nested extensions remain unknown
 ---
 
@@ -44,7 +44,9 @@ will record actual coverage and tests; parent owns the shared design index.
 
 ## Revision and outcome law
 
-Stable **v0.49.2** = `e300597364aabb4890ebdd3a5491397f858fd714`.
+Stable **v0.49.2 source commit** = `b2cb871254fbdac19a085188813c8dfb258b95cd`.
+Its annotated tag object is `e300597364aabb4890ebdd3a5491397f858fd714`;
+the initial audit checkpoint confused the tag object with its peeled commit.
 Inspected **0.50dev HEAD** = `5bf3c2dc676efd5c4b4526eb135c922701565707`.
 The command below names its stable `kitty/rc/<name_with_underscores>.py` source.
 Every row was inspected in both its protocol spec and handler/client constructor;

@@ -3,7 +3,7 @@
 //! `earliest_documented` is release evidence for that capability, not a tested
 //! global floor. Unknown earliest releases stay unknown; no command rewrites
 //! the envelope version merely because it was observed on a newer server.
-pub const STABLE_REVISION: &str = "e300597364aabb4890ebdd3a5491397f858fd714";
+pub const STABLE_REVISION: &str = "b2cb871254fbdac19a085188813c8dfb258b95cd";
 pub const HEAD_REVISION: &str = "5bf3c2dc676efd5c4b4526eb135c922701565707";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
