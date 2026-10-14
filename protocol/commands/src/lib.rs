@@ -10,8 +10,9 @@
 //! serializer as an oracle.
 //!
 //! Decoding law used throughout: **missing required data is an error, never
-//! an empty success.** A remote `ok: false` reaches the caller as
-//! [`LsError::RemoteFailure`] instead of becoming an empty listing.
+//! an empty success.** Execution classifies native errors before invoking
+//! [`Command::decode`]. The optional pure [`ls_from_response`] helper likewise
+//! reports [`LsError::RemoteFailure`] instead of fabricating an empty listing.
 
 pub mod outputs;
 

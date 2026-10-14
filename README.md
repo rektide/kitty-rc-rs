@@ -1,8 +1,26 @@
-# kitty-rc (redesign in progress)
+---
+type: ProjectOverview
+title: Kitty remote-control typed execution and managed registry
+description: Independently usable protocol, explicit access, finite execution and bounded concurrent operation custody.
+resource: /README.md
+status: active
+generated:
+  by: "model:openai/gpt-6.1-sol#medium"
+  at: 2026-10-14
+sources:
+  - resource: "opencode://ses_ec71e81e3ffercjuzWSBbKFI5w"
+    title: Preserved teardown foundation and preceding overview
+  - resource: "opencode://ses_ec7004672ffeAbyzuSmd4Cov2i"
+    title: Typed execution, bounded registry, scripted and isolated live conformance, and usage revision
+  - resource: /design/library-redesign/implementation0.sol61m.md
+    title: Implementation decisions, actual verification and remaining limits
+---
+
+# kitty-rc (unstable first slice)
 
 > Rust crates for the kitty terminal emulator's remote-control (RC) protocol,
 > rebuilt around typed exchanges and a concurrent registry. Under active
-> redesign; nothing here is a finished client yet.
+> redesign; the first direct and managed execution slice is usable, not a full catalog.
 
 ## Current standing
 
@@ -18,9 +36,10 @@ restoration inventory live in
 [`design/library-redesign/teardown0.glm53m.md`](design/library-redesign/teardown0.glm53m.md);
 the previous implementation is recoverable from jj commit `e78489cb`.
 
-What exists today is the **verified protocol foundation** the rebuilt
-execution and registry layers will sit on. There is not yet a session,
-client facade, or connection pool — those are the next commissioned stage.
+The first slice includes typed `ls`, `get-text`, `focus-window`, deferred
+launch-and-wait, and an explicit finite raw entrance; direct sessions and a
+concurrent managed registry share one protection boundary. No hidden endpoint,
+password, environment, subprocess lookup, automatic retry or pruning occurs.
 
 ## Workspace layout
 
@@ -28,16 +47,44 @@ client facade, or connection pool — those are the next commissioned stage.
 | --- | --- |
 | [`protocol/schema`](protocol/schema) | Wire envelope types: `PlainRequest` (with the upstream `async` wire name), `ProtectedEnvelope`, `ResponseEnvelope` classification (terminal success/failure vs streaming acknowledgment), and the declared `SUPPORTED` kitty version `[0, 43, 1]` |
 | [`protocol/frame`](protocol/frame) | Incremental DCS framing (`ESC P @kitty-cmd … ESC \`): split-frame reassembly, in-order coalesced-frame delivery with surplus retention, bounded payloads, poisoning on out-of-frame bytes, clean-EOF truncation reporting |
-| [`protocol/commands`](protocol/commands) | Typed command catalog (currently the `ls` exemplar) and the salvaged output models (`WindowInfo`, `TabInfo`, `OsInstance`) with tolerant-additive decoding |
+| [`protocol/commands`](protocol/commands) | Associated-output commands and tolerant listing models (`WindowInfo`, `TabInfo`, `OsWindow`); layout-specific options remain JSON maps |
 | [`access/crypto`](access/crypto) | The one outbound protection boundary: exact `1:<base85>` X25519 key parsing, X25519 → SHA-256 → AES-256-GCM sealing with RFC 1924 base85, explicit inputs only (no env/file/subprocess/clock), plus a decrypt oracle for conformance fixtures |
 | [`access/key-store`](access/key-store) | The persisted pubkey record format (TSV): parsing with malformed-line reporting, rendering, newest-per-PID selection |
 | [`apps/cli`](apps/cli) | The `kitty-pubkey-db` binary (`init`/`add`/`get`/`cleanup`) over the shared store library |
+| [`access/endpoint`](access/endpoint) | Explicit Unix/TCP addresses and plain or key/password protection; secret-redacted setup diagnostics |
+| [`execution/exchange`](execution/exchange) | Prepared finite bytes, progress and native/typed outcome distinctions |
+| [`execution/tokio`](execution/tokio) | Exclusively owned socket driving and absolute deadlines; every connection retired in this slice |
+| [`control/registry`](control/registry) | Caller-known reserve/commit IDs, bounded fair endpoint/class selection, native result custody, cancel, driver replacement and shutdown |
+| [`client`](client) | Direct/managed re-exports and public examples |
 
-Deliberately absent until they carry real code: `execution/{exchange,tokio}`,
-`access/{endpoint,discovery,credentials}`, `control/registry`,
-`observation/listing`, and the `client` facade. Upstream wire facts baked
-into the foundation crates were verified against the pinned kitty source
-tree (see the teardown and design documents for provenance).
+Discovery, credential-source resolution, uploads, continuing observations/goals,
+the full command catalog, and CLI command adoption remain later work. The
+registry reuses immutable endpoint setup, **not sockets**. Short, observation and
+long-wait capacity is strictly partitioned: no borrowing of another class's
+reserved service opportunity. Input bytes, retained native output bytes, record
+counts and connecting/live socket slots have global and per-endpoint limits.
+
+## Explicit managed usage
+
+```sh
+cargo run -p kitty-rc --example managed -- /explicit/kitty.sock
+```
+
+The [managed example](client/examples/managed.rs) shows `register`, `start`,
+`reserve`, synchronous `submit`, `wait`, consuming typed `take`, explicit
+`release`, and `shutdown`. `Registry` supports concurrent `&self` callers;
+dropping its waiter/handle detaches, while `cancel(token)` acts on the operation.
+Use the reservation's known token to recover native evidence after handle loss.
+A committed reservation cannot replay even after explicit record release.
+
+`Session::execute(&mut self, ...)` has the opposite drop contract: dropping its
+future drops its transport. After writing begins, interruption means unknown
+remote completion, not rollback. Dependent actions must be explicitly awaited;
+cross-connection submission order is not effect ordering. Typed results need no
+`Clone`: registry custody stores bounded native bytes, and the sole taker owns
+decoded output and its memory. `release` removes a completed record deliberately.
+Custody is in-process only. Keep the explicit `Driver` alive; use `stop().await`
+before replacement. No driver replacement replays a sent input.
 
 ## Building and testing
 
@@ -46,7 +93,14 @@ cargo build            # build all crates and the kitty-pubkey-db binary
 cargo nextest run      # test suite (or: cargo test)
 cargo clippy --workspace --all-targets
 cargo fmt --check
+python3 scripts/verify-isolated-kitty.py  # optional: installed kitty + headless Weston
 ```
+
+Rust **1.88** is the tested floor for the current lockfile; 1.85 fails its
+dependencies' declared minima. Scripted tests verify concurrency and lifecycle;
+an isolated real **kitty 0.48.2** passed encrypted direct listing and concurrent
+launch-wait/text/focus. The wire version remains `[0,43,1]`; this is not a tested
+kitty-minimum or full support matrix. See the [implementation report](design/library-redesign/implementation0.sol61m.md).
 
 The `kitty-pubkey-db` store stays at `$XDG_STATE_HOME/kitty/pubkey.tsv`
 with its existing line format (`pid\twindow_id\tpubkey\ttimestamp`);
