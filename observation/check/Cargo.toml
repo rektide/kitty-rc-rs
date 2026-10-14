@@ -7,13 +7,13 @@ repository.workspace = true
 
 [dependencies]
 kitty-rc-listing = { path = "../listing", version = "0.1.0" }
-kitty-rc-registry.workspace = true
-kitty-rc-exchange.workspace = true
+kitty-rc-registry = { path = "../../control/registry", version = "0.1.0" }
+kitty-rc-exchange = { path = "../../execution/exchange", version = "0.1.0" }
 tokio.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-kitty-rc-commands.workspace = true
-kitty-rc-endpoint.workspace = true
-kitty-rc-frame.workspace = true
+kitty-rc-commands = { path = "../../protocol/commands", version = "0.1.0" }
+kitty-rc-endpoint = { path = "../../access/endpoint", version = "0.1.0" }
+kitty-rc-frame = { path = "../../protocol/frame", version = "0.1.0" }
 serde_json.workspace = true

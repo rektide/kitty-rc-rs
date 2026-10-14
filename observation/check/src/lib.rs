@@ -146,8 +146,11 @@ pub struct OriginalEvidence {
     pub boundary: Boundary,
     pub native: Outcome,
 }
+#[derive(thiserror::Error)]
+#[error("original native evidence transfer failed: {error}")]
 pub struct TakeFailure {
     pub original: RetainedOriginal,
+    #[source]
     pub error: CustodyError,
 }
 impl std::fmt::Debug for TakeFailure {
@@ -196,6 +199,46 @@ pub struct Freshness {
 /// The only continuation input: one `ls` selection plus native check criteria
 /// and bounded evidence requirements. There is no generic Command, callback,
 /// write body, owned native outcome, registry, retry timer or mutation entrance.
+/// One finite explicitly selected journey (the original remains separately held):
+/// ```
+/// use kitty_rc_check::{CheckReport, Condition, Criterion, Freshness, Limits, Request, RetainedOriginal};
+/// use kitty_rc_listing::{Interpretation, Scope, Support};
+/// use kitty_rc_registry::{Options, Registry};
+/// use std::time::Duration;
+/// use tokio::time::Instant;
+/// async fn once(registry: &Registry, original: &RetainedOriginal)
+///     -> Result<CheckReport, Box<dyn std::error::Error>> {
+///     let input = original.check_input(Request {
+///         scope: Scope::default(),
+///         interpretation: Interpretation { basis: "caller capability evidence".into(), focus: Support::Unknown },
+///         criteria: vec![Criterion::Title("editor".into())],
+///         condition: Condition::Unique,
+///         freshness: Freshness { max_age: Duration::from_secs(5) },
+///     }, Limits::default())?;
+///     let check = input.start(registry, Options {
+///         deadline: Instant::now() + Duration::from_secs(5), max_response: 16_384,
+///     })?;
+///     // Save check.receipt().clone() before detaching a waiter.
+///     check.wait().await?;
+///     Ok(check.finish()?)
+/// }
+/// ```
+/// The continuation cannot be submitted as an arbitrary command:
+/// ```compile_fail
+/// use kitty_rc_check::CheckInput;
+/// use kitty_rc_commands::Command;
+/// fn submit<C: Command>(_: C) {}
+/// fn cannot_submit(input: CheckInput) { submit(input); }
+/// ```
+/// Its admission entrance accepts read options, not a mutation body:
+/// ```compile_fail
+/// use kitty_rc_check::CheckInput;
+/// use kitty_rc_commands::process::Launch;
+/// use kitty_rc_registry::{Registry, Options};
+/// fn cannot_replay(input: CheckInput, registry: &Registry, options: Options) {
+///     input.start(registry, Launch::default(), options);
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct CheckInput {
     boundary: Boundary,
@@ -311,7 +354,7 @@ impl CheckInput {
             Some(Insufficient::ScopeChanged)
         } else if receipt.interpretation() != &self.request.interpretation {
             Some(Insufficient::InterpretationChanged)
-        } else if receipt.started() < self.boundary.captured {
+        } else if receipt.started() <= self.boundary.captured {
             Some(Insufficient::AcquiredBeforeBoundary)
         } else if snapshot.ended() < receipt.started() || snapshot.ended() > assessed {
             Some(Insufficient::InvalidInterval)
@@ -328,9 +371,20 @@ impl CheckInput {
         let mut candidates = Vec::new();
         let mut matched = 0usize;
         let mut indeterminate = 0usize;
+        let mut evaluated = 0usize;
         for os in snapshot.listing() {
             for tab in &os.tabs {
                 for window in &tab.windows {
+                    // An independently acquired snapshot may have used a larger
+                    // projection limit than this check's selected bound.
+                    if evaluated == self.limits.max_windows {
+                        return Assessment::insufficient(
+                            Insufficient::WindowLimit,
+                            assessed,
+                            NativeSetup::NotChecked,
+                        );
+                    }
+                    evaluated += 1;
                     let mut unknown = false;
                     let mut mismatch = false;
                     for criterion in &self.request.criteria {
@@ -476,10 +530,13 @@ pub enum Insufficient {
     BindingChanged,
     ScopeChanged,
     InterpretationChanged,
+    /// Acquisition did not start strictly after the captured local boundary;
+    /// equal clock readings cannot establish temporal freshness either.
     AcquiredBeforeBoundary,
     InvalidInterval,
     Expired,
     PartialCoverage,
+    WindowLimit,
     MissingRequiredFacts,
     NativeSetupChanged,
     NativeSetupUnavailable,
@@ -530,6 +587,9 @@ impl Assessment {
 }
 #[derive(Debug)]
 pub struct CheckReport {
+    /// Bounded requirement/correlation metadata, never original mutation input
+    /// or bytes. The separate original native result remains caller-owned.
+    pub input: CheckInput,
     /// Intact read evidence; large listing trees are moved, not cloned.
     pub snapshot: Snapshot,
     pub assessment: Assessment,
@@ -557,7 +617,6 @@ impl CheckReceipt {
     /// before release. Failure preserves the receipt and native acquisition error;
     /// a premature take leaves the unfinished record available for later recovery.
     pub fn finish(self, registry: &Registry) -> Result<CheckReport, Box<CheckFailure>> {
-        let current_setup = registry.setup_version(self.input.boundary.binding.endpoint);
         let snapshot = match self.listing.clone().finish(registry) {
             Ok(snapshot) => snapshot,
             Err(failure) => {
@@ -568,6 +627,9 @@ impl CheckReceipt {
             }
         };
         let mut assessment = self.input.assess(&snapshot);
+        // Revalidate after native transfer and decoding. This local check is
+        // neither a lock/fence against subsequent rebinding nor remote CAS.
+        let current_setup = registry.setup_version(self.input.boundary.binding.endpoint);
         match (self.accepted_setup, current_setup) {
             (Some(accepted), Ok(current))
                 if accepted == self.input.boundary.setup && current == accepted =>
@@ -590,6 +652,7 @@ impl CheckReceipt {
             }
         }
         Ok(CheckReport {
+            input: self.input,
             snapshot,
             assessment,
         })

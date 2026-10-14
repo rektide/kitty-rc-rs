@@ -571,6 +571,19 @@ async fn partial_membership_and_missing_required_facts_do_not_establish_uniquene
         precise.assess(&missing).matching,
         Matching::Unique(_)
     ));
+    let bounded = original
+        .check_input(
+            request(),
+            Limits {
+                max_windows: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        reason(&bounded.assess(&missing)),
+        Some(Insufficient::WindowLimit)
+    );
     let mut asked = request();
     asked.criteria.push(Criterion::Focused(true));
     asked.interpretation.focus = Support::Unsupported;
@@ -594,6 +607,104 @@ async fn partial_membership_and_missing_required_facts_do_not_establish_uniquene
         reason(&focus.assess(&unsupported)),
         Some(Insufficient::MissingRequiredFacts)
     );
+    assert!(original.take().unwrap().native.unresolved());
+    registry.shutdown(Shutdown::Drain).await.unwrap();
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn exact_filtered_read_and_native_fact_criteria_remain_scope_local() {
+    let mut f = Fixture::new(false).await;
+    let (registry, endpoint) = registry(&f, 8);
+    let driver = registry.start().unwrap();
+    let original = unknown(&mut f, &registry, endpoint).await;
+    let mut asked = request();
+    asked.scope = Scope {
+        match_window: Some("title:trial".into()),
+        match_tab: Some("id:22".into()),
+        only_self: true,
+        all_env_vars: true,
+    };
+    asked.criteria = vec![
+        Criterion::WindowId(1),
+        Criterion::Pid(101),
+        Criterion::Cwd("/fixture".into()),
+        Criterion::UserVar {
+            key: "check".into(),
+            value: "marker".into(),
+        },
+        Criterion::Active(false),
+        Criterion::Focused(false),
+    ];
+    let input = original.check_input(asked, Limits::default()).unwrap();
+    let check = input.clone().start(&registry, options()).unwrap();
+    let (wire, reply) = f.request("ls").await;
+    assert_eq!(wire["payload"]["match"], "title:trial");
+    assert_eq!(wire["payload"]["match_tab"], "id:22");
+    assert_eq!(wire["payload"]["self"], true);
+    assert_eq!(wire["payload"]["all_env_vars"], true);
+    reply
+        .send(Reply::Value(listing(vec![json!({
+            "id":1,"pid":101,"cwd":"/fixture","user_vars":{"check":"marker"},
+            "is_active":false,"is_focused":false
+        })])))
+        .ok()
+        .unwrap();
+    check.wait().await.unwrap();
+    let report = check.finish().unwrap();
+    assert!(report.snapshot.coverage().filtered);
+    assert_eq!(report.input.request().scope, input.request().scope);
+    assert!(matches!(report.assessment.matching, Matching::Unique(_)));
+    assert_eq!(report.assessment.satisfaction, Satisfaction::Satisfied);
+    assert_eq!(report.input.boundary().token(), original.boundary().token());
+    let empty = input.start(&registry, options()).unwrap();
+    f.request("ls")
+        .await
+        .1
+        .send(Reply::Value(listing(vec![])))
+        .ok()
+        .unwrap();
+    empty.wait().await.unwrap();
+    let empty = empty.finish().unwrap();
+    assert_eq!(empty.assessment.matching, Matching::Absent);
+    assert_eq!(empty.assessment.satisfaction, Satisfaction::Unsatisfied);
+    // Absence refers only to the exact filtered selection, not global deletion.
+    assert!(empty.snapshot.coverage().filtered);
+    assert_eq!(empty.assessment.attribution, Attribution::NotEstablished);
+    assert!(original.take().unwrap().native.unresolved());
+    registry.shutdown(Shutdown::Drain).await.unwrap();
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn explicit_check_handle_cancel_interrupts_only_the_new_read() {
+    let mut f = Fixture::new(false).await;
+    let (registry, endpoint) = registry(&f, 8);
+    let driver = registry.start().unwrap();
+    let original = unknown(&mut f, &registry, endpoint).await;
+    let check = original
+        .check_input(request(), Limits::default())
+        .unwrap()
+        .start(&registry, options())
+        .unwrap();
+    let _reply = f.request("ls").await.1;
+    assert!(check.cancel());
+    check.wait().await.unwrap();
+    assert!(matches!(
+        check.finish().unwrap_err().failure.error,
+        kitty_rc_listing::AcquisitionError::Native(Failure::Interrupted {
+            reason: ExecutionError::Cancelled { .. },
+            ..
+        })
+    ));
+    assert_eq!(registry.inventory().len(), 1);
+    assert!(
+        registry
+            .summary(original.boundary().token())
+            .unwrap()
+            .unresolved
+    );
+    assert_eq!(f.launches.load(Ordering::SeqCst), 1);
     assert!(original.take().unwrap().native.unresolved());
     registry.shutdown(Shutdown::Drain).await.unwrap();
     driver.stop().await;
