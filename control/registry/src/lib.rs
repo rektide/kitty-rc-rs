@@ -136,6 +136,7 @@ struct Shared {
     limits: Limits,
     state: Mutex<State>,
     wake: Notify,
+    lifecycle: Notify,
 }
 #[derive(Clone)]
 pub struct Registry {
@@ -168,6 +169,7 @@ impl Registry {
                     cursor: None,
                 }),
                 wake: Notify::new(),
+                lifecycle: Notify::new(),
             }),
         })
     }
@@ -391,6 +393,7 @@ impl Registry {
             _ => return false,
         }
         self.shared.wake.notify_one();
+        self.shared.lifecycle.notify_waiters();
         true
     }
     /// Explicitly release completed native output and its admission slot.
@@ -471,25 +474,17 @@ impl Registry {
                 self.cancel(s.token);
             }
         }
-        let attached = self.shared.state.lock().unwrap().driver;
-        if !attached
-            && self
-                .inventory()
-                .iter()
-                .any(|s| matches!(s.status, Status::Queued | Status::Running))
-        {
-            return Err(
-                "unfinished work without attached driver; inventory remains available".into(),
-            );
+        loop {
+            let changed = self.shared.lifecycle.notified();
+            tokio::pin!(changed); changed.as_mut().enable();
+            let (attached, unfinished) = {
+                let s = self.shared.state.lock().unwrap();
+                (s.driver, s.records.values().any(|r| matches!(r.status, Status::Queued | Status::Running)))
+            };
+            if !unfinished { return Ok(self.inventory().into_iter().filter(|s| s.unresolved).collect()); }
+            if !attached { return Err("driver stopped with unfinished work; inventory remains available".into()); }
+            changed.await;
         }
-        for s in self.inventory() {
-            self.wait(s.token).await?;
-        }
-        Ok(self
-            .inventory()
-            .into_iter()
-            .filter(|s| s.unresolved)
-            .collect())
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -567,6 +562,7 @@ impl Drop for DriverGuard {
         }
         s.driver = false;
         self.shared.wake.notify_one();
+        self.shared.lifecycle.notify_waiters();
     }
 }
 fn class_index(c: Class) -> usize {
@@ -616,6 +612,7 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                 reason: "queue deadline elapsed".into(),
             },
         );
+        shared.lifecycle.notify_waiters();
     }
     let l = &shared.limits;
     let running: Vec<_> = s
@@ -710,6 +707,7 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
                 if let Some((token, outcome)) = returned {
                         let mut s = shared.state.lock().unwrap();
                         if let Some(r) = s.records.get_mut(&token) { if r.status == Status::Running && r.generation == generation { complete(r, outcome); } }
+                        shared.lifecycle.notify_waiters();
                 }
             }
         }

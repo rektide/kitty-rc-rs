@@ -681,3 +681,20 @@ async fn stopped_drain_returns_unfinished_inventory_without_discarding_input() {
     assert!(registry.shutdown(Shutdown::Drain).await.unwrap().is_empty());
     driver.stop().await;
 }
+
+#[tokio::test]
+async fn driver_stop_after_drain_started_returns_instead_of_hanging() {
+    let mut fixture = Fixture::new(None);
+    let registry = Registry::new(Limits::default()).unwrap();
+    let ep = registry.register(fixture.endpoint()).unwrap();
+    let driver = registry.start().unwrap();
+    let running = registry.submit(&registry.reserve(), ep, launch(), options()).unwrap();
+    fixture.next().await;
+    let queued = registry.submit(&registry.reserve(), ep, launch(), options()).unwrap();
+    let mut drain = Box::pin(registry.shutdown(Shutdown::Drain));
+    tokio::select! { result = &mut drain => panic!("premature {result:?}"), _ = tokio::task::yield_now() => {} }
+    driver.stop().await;
+    assert!(timeout(Duration::from_secs(1), drain).await.unwrap().is_err());
+    assert!(registry.summary(running.token()).unwrap().unresolved);
+    assert_eq!(registry.summary(queued.token()).unwrap().status, Status::Queued);
+}
