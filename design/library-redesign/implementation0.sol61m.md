@@ -353,3 +353,9 @@ entrance, and closes pooled transports outside owner locks before replacement
 connects. Final closure evidence belongs to the reopened tickets. Kubeless
 selection is unchanged; no new broad research,
 issue, subagent, push or shared-index rewrite occurred.
+
+The six reopened access-explicit/core-session/registry-admission/custody/leases/
+slice tickets are now closed again with corrected acceptance evidence, in
+dependency order and without forcing blocked closure. Their original no-reuse
+history is preserved. `verification-live` remains open for the full version and
+upload matrix, with the incremental real reuse result appended.
