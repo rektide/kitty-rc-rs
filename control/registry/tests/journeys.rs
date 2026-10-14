@@ -664,3 +664,20 @@ async fn concurrent_shared_submit_and_independent_input_retention_quotas() {
             .contains("input-byte")
     );
 }
+
+#[tokio::test]
+async fn stopped_drain_returns_unfinished_inventory_without_discarding_input() {
+    let fixture = Fixture::new(None);
+    let registry = Registry::new(Limits::default()).unwrap();
+    let ep = registry.register(fixture.endpoint()).unwrap();
+    let op = registry
+        .submit(&registry.reserve(), ep, focus(), options())
+        .unwrap();
+    assert!(registry.shutdown(Shutdown::Drain).await.is_err());
+    assert_eq!(registry.summary(op.token()).unwrap().status, Status::Queued);
+    let driver = registry.start().unwrap();
+    op.wait().await.unwrap();
+    assert!(matches!(op.take().unwrap(), Completion::Reply(())));
+    assert!(registry.shutdown(Shutdown::Drain).await.unwrap().is_empty());
+    driver.stop().await;
+}

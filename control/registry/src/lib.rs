@@ -471,7 +471,8 @@ impl Registry {
                 self.cancel(s.token);
             }
         }
-        if !self.shared.state.lock().unwrap().driver
+        let attached = self.shared.state.lock().unwrap().driver;
+        if !attached
             && self
                 .inventory()
                 .iter()
