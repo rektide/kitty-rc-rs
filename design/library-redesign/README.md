@@ -53,6 +53,13 @@ and separated discovery/authentication steps.
 
 ## Current design
 
+The selected redesign and linked CLI work are implemented; all native work items
+in this roadmap are closed. Final integrated gates passed **224 workspace tests**,
+locked all-target build, strict Clippy and formatting, with documentation tests
+also passing during the converged verification. Live evidence remains scoped to
+the exact version/profile matrix below. This is implementation completion, not
+API stability or acceptance of every future possibility in the research.
+
 - [Registry-first draft 1](draft1.gpt6a.md): post-discussion synthesis. The human
   agreed to registry-owned accepted work, concurrent connection leases, and thin
   managed coordination with retained outcomes first. Exact kubeless integration
@@ -90,7 +97,7 @@ and separated discovery/authentication steps.
   bounded projection and caller-driven polling. [Library guide](../../observation/listing/README.md).
 - [Check-only follow-up](observation/check0.sol61xh.md): fresh listing assessment
   after an unresolved native effect, with matching and satisfaction separate from
-  causal attribution. Its ticket awaits the broader typed/upload dependency.
+  causal attribution. Its ticket closed after the typed/upload dependency completed.
 - [Public entrances and support evidence](verification/entrances0.sol61m.md):
   [usage guide](../../client/README.md), compiled leaf-import examples and
   [provisional support policy](../../doc/usage/support.md).
@@ -108,8 +115,8 @@ and separated discovery/authentication steps.
   [maintained runner guide](../../tool/verification/README.md), Rust fixture children,
   and selected 0.43.1/0.48.2/0.49.2 finite/CLI profiles in both modes, with encrypted
   uploads on all three. Two small fixtures remain Python at native kitten and
-  upstream semantic-oracle boundaries. Parent review also commissioned cold-start,
-  default-binary and no-build entrance corrections before verification closure.
+  upstream semantic-oracle boundaries. Cold-start fixture-child building, Cargo's
+  default binary and no-build entrance corrections are verified in `09975234`.
 
 The first slice and its review-driven corrections are committed. Audited
 reply-bearing sessions now reuse sockets; idle/active/connecting resources count
@@ -126,8 +133,7 @@ pool selection and error/evidence code. A full supported-version/live matrix,
 full upload conversations and CLI adoption remain tracked work. Discovery and
 finite catalog breadth are now implemented by the subsequent slices above.
 
-Active follow-on work is the final Rust-runner entrance correction. The core
-upload, access, CLI and observation agents have completed their handoffs.
+The Rust-runner correction and all implementation handoffs are complete.
 User-directed Rust policy follows the user's mise selection without
 repository pinning; historical toolchain results remain historical evidence.
 

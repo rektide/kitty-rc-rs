@@ -5,11 +5,15 @@ description: Applied stable-ID work plan with concrete acceptance, dependency ed
 resource: /design/library-redesign/tickets0.sol61m.md
 status: active
 generated:
-  by: "model:openai/gpt-6.1-sol#medium"
+  by: "model:openai/gpt-6-astra#medium"
   at: 2026-10-14
 sources:
   - resource: "opencode://ses_ec71b1985ffepI33XRmG1tf0Z9"
     title: Commissioned draft-to-ticket planning, operator-approved backed-up history-preserving tracker migration, native issue application and verification, and preserved backlog mapping
+  - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
+    title: Parent-led implementation integration, exact verification scope and closure of the selected redesign and existing CLI backlog
+  - resource: /design/library-redesign/verification/rust-tooling0.glm53m.md
+    title: Final Rust-tooling verification and runner correction evidence
   - resource: /design/library-redesign/draft1.gpt6a.md
     title: Current human-corrected architecture and selected direction
   - resource: /design/library-redesign/README.md
@@ -35,8 +39,29 @@ verification:
 
 # Registry-first ticket roadmap
 
-**Applied after approved, history-preserving tracker recovery.** There are now
-**56 live issues: 36 open and 20 closed**. This session created 7 epics and 20
+## Current standing — selected work completed
+
+All **56 native issues are closed**, including the selected redesign epics,
+their implementation/decision/verification children, and the preserved CLI
+backlog. The original 20 closed records and their history remain preserved.
+The [implementation map](README.md#implementation-and-work-anchors) links actual
+interfaces, commits and checks; the final runner correction is `09975234`.
+
+Final converged checks passed **224 workspace tests**, locked all-target build,
+strict Clippy and formatting; documentation tests also passed in the verification
+sequence. The Rust runner exercised selected finite/nested and CLI profiles in
+plain/encrypted modes on kitty 0.43.1/0.48.2/0.49.2, with encrypted uploads on all
+three. Plain uploads, whole-catalog universal compatibility and continuous
+desired-state reconciliation are not implied by ticket closure.
+
+The mapping, recovery account and application-time statuses below are preserved
+history, not a claim that the implementation is still pending. Current work state
+belongs to the native tracker and its refreshed interoperability export.
+
+## Original plan application
+
+**Applied after approved, history-preserving tracker recovery.** At application
+there were **56 live issues: 36 open and 20 closed**. The planning session created 7 epics and 20
 concrete tickets, updated the 9 existing open issues append-only, and installed
 28 new parent edges and 37 blocking edges. No implementation was claimed or closed.
 The [machine-readable plan](tickets0.sol61m.json)

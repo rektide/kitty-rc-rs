@@ -30,8 +30,8 @@ sources:
 
 Work anchor: `kitty-rc-proto-rs-redesign-verification-support`. This is the selected
 **provisional evidence-based policy**, not a claim of a tested minimum kitty
-release. The selected live matrix is recorded below; runner entrance corrections
-remain part of `kitty-rc-proto-rs-redesign-verification-live` until verified.
+release. The selected live matrix and runner entrance corrections are verified;
+`kitty-rc-proto-rs-redesign-verification-live` is closed for that recorded scope.
 
 ## Rust belongs to the user
 
