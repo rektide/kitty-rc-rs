@@ -31,7 +31,7 @@ pub async fn run(cli: Cli) -> Result<(), Error> {
         result = commands(&cli, &registry, endpoint) => result,
         signal = tokio::signal::ctrl_c() => {
             match signal {
-                Ok(()) => Err("interrupted by Ctrl-C; no mutation will be replayed".into()),
+                Ok(()) => Err(crate::Interrupted.into()),
                 Err(error) => Err(error.into()),
             }
         }
@@ -45,7 +45,20 @@ pub async fn run(cli: Cli) -> Result<(), Error> {
             summary.token, summary.progress, summary.unresolved
         );
         if let Ok(native) = registry.take_native(summary.token) {
-            drop(native);
+            match native {
+                kitty_rc_exchange::Outcome::Interrupted { progress, reason } => {
+                    eprintln!("  native interruption: {progress:?}; {reason}");
+                }
+                kitty_rc_exchange::Outcome::Reply(bytes) => {
+                    eprintln!(
+                        "  completed native reply retained {} bytes before shutdown release",
+                        bytes.len()
+                    );
+                }
+                kitty_rc_exchange::Outcome::Submitted => {
+                    eprintln!("  local submission only, no remote acknowledgment");
+                }
+            }
         }
         let _ = registry.release(summary.token);
     }
@@ -108,17 +121,16 @@ async fn commands(cli: &Cli, registry: &Registry, endpoint: EndpointId) -> Resul
                 .map_err(|e| e.reason)?;
             operation.wait().await?;
             let result = operation.take();
-            if result.is_err() {
-                if let Some(summary) = registry
+            if result.is_err()
+                && let Some(summary) = registry
                     .inventory()
                     .into_iter()
                     .find(|s| s.token == reservation.token())
-                {
-                    eprintln!(
-                        "focus progress {:?}, unresolved={}; not retried",
-                        summary.progress, summary.unresolved
-                    );
-                }
+            {
+                eprintln!(
+                    "focus progress {:?}, unresolved={}; not retried",
+                    summary.progress, summary.unresolved
+                );
             }
             operation.release()?;
             match result? {

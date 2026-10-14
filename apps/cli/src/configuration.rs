@@ -55,6 +55,9 @@ pub async fn endpoint(
         .to
         .as_ref()
         .map(|raw| {
+            if raw.is_empty() {
+                return Err(kitty_rc_endpoint::AddressError::Scheme);
+            }
             if raw.as_os_str().as_bytes().contains(&b':') {
                 Address::parse_native(raw).map(Candidate::explicit)
             } else {
@@ -226,10 +229,10 @@ pub async fn access(
     } else {
         file.pid.or(candidate.binding.pid_hint)
     };
-    if let (Some(selected), Some(declared)) = (candidate.binding.pid_hint, pid) {
-        if selected != declared {
-            return Err("declared PID conflicts with selected endpoint's KITTY_PID hint".into());
-        }
+    if let (Some(selected), Some(declared)) = (candidate.binding.pid_hint, pid)
+        && selected != declared
+    {
+        return Err("declared PID conflicts with selected endpoint's KITTY_PID hint".into());
     }
     candidate.binding.pid_hint = pid;
     let key: Box<dyn KeySource> = match key_choice(cli, file, env)? {
@@ -344,11 +347,33 @@ mod tests {
         ]);
         assert_eq!(auth(&cli, &file, &env).unwrap(), Auth::Encrypted);
         assert!(
-            matches!(key_choice(&cli, &file, &env).unwrap(), KeyChoice::Store(path) if path == PathBuf::from("/cli"))
+            matches!(key_choice(&cli, &file, &env).unwrap(), KeyChoice::Store(path) if path == std::path::Path::new("/cli"))
         );
         assert!(
             matches!(password_choice(&cli, &file, &env).unwrap(), PasswordChoice::Environment(name) if name == "CLI_SECRET")
         );
         assert!(auth(&Cli::parse_from(["kitty-rc", "ls"]), &file, &env).is_err());
+        let cli = Cli::parse_from(["kitty-rc", "ls"]);
+        let env = BTreeMap::from([
+            ("KITTY_RC_AUTH".into(), OsString::from("plain")),
+            ("KITTY_RC_KEY_FILE".into(), OsString::from("/env")),
+            (
+                "KITTY_RC_PASSWORD_FILE".into(),
+                OsString::from("/env-password"),
+            ),
+        ]);
+        assert_eq!(auth(&cli, &file, &env).unwrap(), Auth::Plain);
+        assert!(
+            matches!(key_choice(&cli, &file, &env).unwrap(), KeyChoice::File(path) if path == std::path::Path::new("/env"))
+        );
+        assert!(
+            matches!(password_choice(&cli, &file, &env).unwrap(), PasswordChoice::File(path) if path == std::path::Path::new("/env-password"))
+        );
+        let empty = BTreeMap::<String, OsString>::new();
+        assert_eq!(auth(&cli, &file, &empty).unwrap(), Auth::Encrypted);
+        assert_eq!(
+            auth(&cli, &FileConfig::default(), &empty).unwrap(),
+            Auth::Plain
+        );
     }
 }

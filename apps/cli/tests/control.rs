@@ -71,6 +71,14 @@ impl Server {
         replies: Vec<Value>,
         secret: Option<x25519_dalek::StaticSecret>,
     ) -> Self {
+        Self::delayed(path, replies, secret, Duration::ZERO)
+    }
+    fn delayed(
+        path: PathBuf,
+        replies: Vec<Value>,
+        secret: Option<x25519_dalek::StaticSecret>,
+        delay: Duration,
+    ) -> Self {
         let listener = UnixListener::bind(&path).unwrap();
         listener.set_nonblocking(true).unwrap();
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -108,6 +116,7 @@ impl Server {
                     received
                 };
                 saved.lock().unwrap().push(received);
+                thread::sleep(delay);
                 let wire = format!("\x1bP@kitty-cmd{}\x1b\\", reply);
                 // Fragment framing deliberately, rather than mirroring one local write.
                 stream
@@ -546,11 +555,190 @@ fn ctrl_c_during_accepted_watch_read_reports_uncertainty_and_closes_driver() {
             .success()
     );
     let status = child.wait().unwrap();
-    assert!(!status.success());
+    assert_eq!(status.code(), Some(130));
     let out = child.wait_with_output().unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(stderr.contains("unresolved=true"), "{stderr}");
     assert!(stderr.contains("Ctrl-C"));
     assert!(out.stdout.is_empty());
     worker.join().unwrap();
+}
+
+#[test]
+fn failed_watch_does_not_publish_stale_success_or_a_fabricated_empty_sample() {
+    let scratch = Scratch::new();
+    let server = scratch.server(vec![
+        reply(listing()),
+        json!({"ok":false,"error":"poll denied"}),
+    ]);
+    let out = scratch
+        .command()
+        .args(["w", "--count", "3", "--interval-ms", "1", "--to"])
+        .arg(&server.path)
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert_eq!(String::from_utf8(out.stdout).unwrap().lines().count(), 1);
+    assert!(String::from_utf8_lossy(&out.stderr).contains("poll denied"));
+    assert_eq!(server.finish().len(), 2);
+}
+
+#[test]
+fn delayed_watch_samples_skip_missed_poll_slots_instead_of_replaying_them() {
+    let scratch = Scratch::new();
+    let server = Server::delayed(
+        scratch.0.join("rc.sock"),
+        vec![reply(listing()); 3],
+        None,
+        Duration::from_millis(30),
+    );
+    let out = scratch
+        .command()
+        .args(["w", "--count", "3", "--interval-ms", "2", "--to"])
+        .arg(&server.path)
+        .arg("--json")
+        .output()
+        .unwrap();
+    success(&out);
+    let samples: Vec<Value> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(samples.len(), 3);
+    for (index, sample) in samples.iter().enumerate() {
+        assert_eq!(sample["sequence"], index + 1);
+        assert!(sample["acquisition_ms"].as_u64().unwrap() >= 25);
+    }
+    assert_eq!(server.finish().len(), 3);
+}
+
+#[test]
+fn response_bounds_and_deadline_fail_nonzero_with_no_success_output() {
+    let scratch = Scratch::new();
+    let server = scratch.server(vec![reply(listing())]);
+    let out = scratch
+        .command()
+        .args(["ls", "--max-response", "256", "--to"])
+        .arg(&server.path)
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty());
+    assert!(!out.stderr.is_empty());
+    server.finish();
+    let path = scratch.0.join("stall.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    let worker = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        assert_eq!(request(&mut stream).unwrap()["cmd"], "ls");
+        let mut byte = [0];
+        assert_eq!(stream.read(&mut byte).unwrap(), 0);
+    });
+    let start = Instant::now();
+    let out = scratch
+        .command()
+        .args(["ls", "--timeout-ms", "100", "--to"])
+        .arg(&path)
+        .arg("--json")
+        .output()
+        .unwrap();
+    failure(&out, "deadline");
+    assert!(start.elapsed() < Duration::from_secs(3));
+    worker.join().unwrap();
+}
+
+#[test]
+fn encrypted_captured_publication_and_declared_file_sources_work_without_hidden_lookup() {
+    let scratch = Scratch::new();
+    let secret = x25519_dalek::StaticSecret::from([9u8; 32]);
+    let key = format!(
+        "1:{}",
+        base85::encode(x25519_dalek::PublicKey::from(&secret).as_bytes())
+    );
+    let server = Server::start(
+        scratch.0.join("rc.sock"),
+        vec![reply(listing())],
+        Some(secret),
+    );
+    let config = scratch.0.join("config.json");
+    fs::write(&config, r#"{"auth":"plain","endpoints":["fd:bad"]}"#).unwrap();
+    let out = scratch
+        .command()
+        .env("KITTY_LISTEN_ON", format!("unix:{}", server.path.display()))
+        .env("KITTY_PID", "7")
+        .env("KITTY_PUBLIC_KEY", &key)
+        .env("KITTY_RC_AUTH", "encrypted")
+        .env("KITTY_RC_PASSWORD", "captured-secret")
+        .arg("--config")
+        .arg(&config)
+        .args(["ls", "--json", "--verbose"])
+        .output()
+        .unwrap();
+    success(&out);
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("captured-secret"));
+    assert_eq!(server.finish()[0]["password"], "captured-secret");
+    let secret = x25519_dalek::StaticSecret::from([9u8; 32]);
+    let server = Server::start(
+        scratch.0.join("rc.sock"),
+        vec![reply(listing())],
+        Some(secret),
+    );
+    let key_file = scratch.0.join("key");
+    let password_file = scratch.0.join("password");
+    fs::write(&key_file, format!("{key}\r\n")).unwrap();
+    fs::write(&password_file, "file-secret\r\n").unwrap();
+    fs::write(&config,json!({"auth":"encrypted","endpoints":[format!("unix:{}",server.path.display())],"key_file":key_file,"password_file":password_file}).to_string()).unwrap();
+    let out = scratch
+        .command()
+        .arg("--config")
+        .arg(&config)
+        .args(["ls", "--json"])
+        .output()
+        .unwrap();
+    success(&out);
+    assert_eq!(server.finish()[0]["password"], "file-secret");
+    fs::write(&password_file, "file-secret\nextra-secret").unwrap();
+    let out = scratch
+        .command()
+        .arg("--config")
+        .arg(&config)
+        .arg("ls")
+        .output()
+        .unwrap();
+    failure(&out, "single line");
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("file-secret"));
+    fs::remove_file(&password_file).unwrap();
+    let out = scratch
+        .command()
+        .arg("--config")
+        .arg(&config)
+        .arg("ls")
+        .output()
+        .unwrap();
+    failure(&out, "password unavailable");
+}
+
+#[test]
+fn explicit_non_unicode_socket_path_is_not_lossily_converted() {
+    use std::os::unix::ffi::OsStringExt;
+    let scratch = Scratch::new();
+    let path = scratch
+        .0
+        .join(std::ffi::OsString::from_vec(b"rc-\xff.sock".to_vec()));
+    let server = Server::start(path, vec![reply(listing())], None);
+    let out = scratch
+        .command()
+        .arg("--to")
+        .arg(&server.path)
+        .args(["ls", "--json"])
+        .output()
+        .unwrap();
+    success(&out);
+    server.finish();
 }

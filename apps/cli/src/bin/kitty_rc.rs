@@ -12,7 +12,11 @@ async fn main() -> std::process::ExitCode {
                 eprintln!("  caused by: {source}");
                 cause = source.source();
             }
-            std::process::ExitCode::FAILURE
+            if error.is::<kitty_rc_cli::Interrupted>() {
+                std::process::ExitCode::from(130)
+            } else {
+                std::process::ExitCode::FAILURE
+            }
         }
     }
 }

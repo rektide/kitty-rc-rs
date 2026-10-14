@@ -89,3 +89,45 @@ fn cleanup_requires_quiescence_serializes_writers_and_preserves_surviving_line_b
     assert!(scratch.run(&["cleanup", "--quiescent"]).status.success());
     assert_eq!(fs::read(scratch.path()).unwrap(), kept.as_bytes());
 }
+
+#[test]
+fn explicit_store_and_malformed_selected_environment_are_distinct() {
+    let scratch = Scratch::new();
+    let path = scratch.0.join("declared.tsv");
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_kitty-pubkey-db"))
+            .env_clear()
+            .env("KITTY_PID", "bad-pid")
+            .env("KITTY_WINDOW_ID", "bad-window")
+            .arg("--store")
+            .arg(&path)
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    assert!(run(&["init"]).status.success());
+    let out = run(&["add", "--pubkey", "1:fixture"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("KITTY_PID must be a u32"));
+    assert!(fs::read(&path).unwrap().is_empty());
+    assert!(
+        !run(&["add", "--pid", "7", "--pubkey", "1:fixture"])
+            .status
+            .success()
+    );
+    assert!(
+        run(&[
+            "add",
+            "--pid",
+            "7",
+            "--window-id",
+            "8",
+            "--pubkey",
+            "1:fixture"
+        ])
+        .status
+        .success()
+    );
+    assert!(run(&["get", "7"]).status.success());
+    assert!(!scratch.path().exists());
+}
