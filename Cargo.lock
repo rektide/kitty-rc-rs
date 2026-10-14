@@ -421,14 +421,21 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 name = "kitty-rc"
 version = "0.1.0"
 dependencies = [
+ "clap",
+ "kitty-rc-check",
  "kitty-rc-commands",
  "kitty-rc-credentials",
  "kitty-rc-crypto",
  "kitty-rc-discovery",
  "kitty-rc-endpoint",
  "kitty-rc-exchange",
+ "kitty-rc-frame",
+ "kitty-rc-listing",
  "kitty-rc-registry",
+ "kitty-rc-schema",
  "kitty-rc-tokio",
+ "rand_core",
+ "serde_json",
  "tokio",
 ]
 
