@@ -2,7 +2,8 @@
 """Private headless image/run conformance. Never selects an ambient terminal.
 
 Run under `mise exec -- python3 scripts/verify-isolated-uploads.py` so the example
-uses the user's selected Rust. Installed kitty version is printed, not mislabeled
+uses the user's selected Rust. KITTY_RC_TEST_KITTY selects an explicit binary
+(otherwise PATH's kitty). Actual version is printed, not mislabeled
 as pinned stable/source or an entire supported-version matrix.
 """
 import os
@@ -17,7 +18,8 @@ def chunk(kind, data):
     return struct.pack(">I",len(data))+kind+data+struct.pack(">I",zlib.crc32(kind+data))
 
 def main():
-    subprocess.run(["kitty","--version"],check=True)
+    kitty_binary=os.environ.get("KITTY_RC_TEST_KITTY","kitty")
+    subprocess.run([kitty_binary,"--version"],check=True)
     root=Path(__file__).resolve().parent.parent
     with tempfile.TemporaryDirectory(prefix="kitty-private-upload-",dir="/tmp/opencode") as folder:
         temp=Path(folder)
@@ -39,7 +41,7 @@ def main():
                     if weston.poll() is not None:raise RuntimeError("private Weston failed")
                     time.sleep(.05)
                 child=f"import os,pathlib,time;pathlib.Path({str(keyfile)!r}).write_text(os.environ['KITTY_PUBLIC_KEY']);print('private upload fixture');time.sleep(120)"
-                kitty=subprocess.Popen(["kitty","--config",str(config),"--listen-on","unix:"+str(socket),"python3","-c",child],env=env,stdout=log,stderr=log)
+                kitty=subprocess.Popen([kitty_binary,"--config",str(config),"--listen-on","unix:"+str(socket),"python3","-c",child],env=env,stdout=log,stderr=log)
                 for _ in range(600):
                     if keyfile.exists() and socket.exists():break
                     if kitty.poll() is not None:raise RuntimeError("private kitty failed")

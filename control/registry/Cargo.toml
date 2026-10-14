@@ -12,10 +12,9 @@ kitty-rc-tokio.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
 thiserror.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 kitty-rc-credentials.workspace = true
 kitty-rc-discovery.workspace = true
 kitty-rc-frame.workspace = true

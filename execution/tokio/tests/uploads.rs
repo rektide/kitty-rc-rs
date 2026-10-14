@@ -203,11 +203,16 @@ async fn run_empty_small_exact_large_preserves_bytes_metadata_ids_and_one_eof() 
 #[tokio::test]
 async fn png_profiles_use_own_bound_and_submission_still_waits_for_handshake() {
     use base64::{Engine, engine::general_purpose::STANDARD};
-    for logo in [false, true] {
+    for (logo, size) in [false, true].into_iter().flat_map(|logo| {
+        let bound = if logo { 2048 } else { 512 };
+        [8, bound, bound + 1, bound * 2]
+            .into_iter()
+            .map(move |size| (logo, size))
+    }) {
         let peer = Peer::new();
         let mut session = peer.session();
         let bound = if logo { 2048 } else { 512 };
-        let mut bytes = vec![42; bound * 2];
+        let mut bytes = vec![42; size];
         bytes[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
         let expected = bytes.clone();
         let (source, calls, max) = probe(bytes, false, false);
@@ -336,8 +341,14 @@ async fn early_error_interrupts_pending_source_and_cancellation_retains_evidence
         let evidence = Evidence::default();
         let p = prepare_upload(&run(), &Protection::Plain, 16384).unwrap();
         if cancel {
-            let mut future =
-                Box::pin(session.upload_prepared(p, source, options(), evidence.clone()));
+            let mut future = Box::pin(session.upload_prepared(
+                p,
+                source,
+                options().session.deadline,
+                options().session.max_response,
+                options().max_upload,
+                evidence.clone(),
+            ));
             tokio::select! { _= &mut future => panic!("pending producer unexpectedly complete"),_=started=>{} }
             tokio::time::sleep(Duration::from_millis(20)).await;
             tokio::select! { _=&mut future=>panic!(),_=tokio::time::sleep(Duration::from_millis(20))=>{} }
@@ -347,7 +358,14 @@ async fn early_error_interrupts_pending_source_and_cancellation_retains_evidence
             assert!(!evidence.input_complete());
         } else {
             let out = session
-                .upload_prepared(p, source, options(), evidence)
+                .upload_prepared(
+                    p,
+                    source,
+                    options().session.deadline,
+                    options().session.max_response,
+                    options().max_upload,
+                    evidence,
+                )
                 .await;
             assert!(matches!(out, Outcome::Reply(_)));
             started.await.unwrap();
@@ -462,7 +480,14 @@ async fn upload_future_fixed_storage_fits_prepared_reservation_without_polling_s
     let prepared = prepare_upload(&run(), &Protection::Plain, 16384).unwrap();
     let reserved = prepared.reservation_bytes();
     let (source, calls, _) = probe(vec![], false, true);
-    let future = session.upload_prepared(prepared, source, options(), Evidence::default());
+    let future = session.upload_prepared(
+        prepared,
+        source,
+        options().session.deadline,
+        options().session.max_response,
+        options().max_upload,
+        Evidence::default(),
+    );
     assert!(std::mem::size_of_val(&future) <= reserved);
     assert_eq!(calls.load(Ordering::Relaxed), 0);
     drop(future);

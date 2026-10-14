@@ -44,6 +44,7 @@ impl Fixture {
                             tx.send(request.clone()).await.unwrap();
                             let reply=match request["cmd"].as_str().unwrap(){
                                 "run"=>if request["payload"]["data"]!=""{json!({"ok":true,"stream":true})}else{json!({"ok":true,"data":{"stdout":"","stderr":"","exit_code":0,"exit_status":0}})},
+                                "set-background-image"|"set-window-logo"=>if request["stream"]==true{json!({"ok":true,"stream":true})}else if request["no_response"]==true || request["payload"]["data"]!=""{continue;}else{json!({"ok":true})},
                                 "get-text"=>json!({"ok":true,"data":"independent text"}),
                                 _=>json!({"ok":true}),
                             };
@@ -365,5 +366,39 @@ async fn producer_error_retains_source_budget_until_native_take() {
     next.cancel();
     registry.release(next.token()).unwrap();
     registry.release(op.token()).unwrap();
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn suppressed_image_terminal_holds_lane_until_explicit_supersession_policy() {
+    use kitty_rc_commands::upload::{BackgroundPng, UploadSubmission};
+    let mut server = Fixture::new();
+    let r = Registry::new(Limits::default()).unwrap();
+    let ep = r.register(server.endpoint()).unwrap();
+    let group = r.coordination_group(ep).unwrap();
+    let driver = r.start().unwrap();
+    let op = r
+        .submit_upload(
+            &r.reserve(),
+            ep,
+            UploadSubmission(BackgroundPng::default()),
+            UploadSource::bytes(b"\x89PNG\r\n\x1a\n".to_vec()),
+            up(),
+        )
+        .unwrap();
+    assert_eq!(server.next().await["stream"], true);
+    assert_eq!(server.next().await["payload"]["data"], "");
+    op.wait().await.unwrap();
+    assert!(matches!(op.take().unwrap(), Completion::Submitted));
+    let claim = r.lane_claim(group, UploadKey::BackgroundImage).unwrap();
+    assert!(matches!(
+        r.release(op.token()),
+        Err(CustodyError::UploadLaneRetained)
+    ));
+    assert!(r.shutdown(Shutdown::Drain).await.unwrap().is_empty());
+    assert_eq!(r.lane_inventory(), vec![claim]);
+    r.resolve_lane(claim, LanePolicy::AllowNewStreamToSupersede)
+        .unwrap();
+    r.release(op.token()).unwrap();
     driver.stop().await;
 }

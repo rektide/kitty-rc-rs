@@ -3,7 +3,7 @@
 use super::*;
 use kitty_rc_commands::upload::{UploadCommand, UploadKey};
 use kitty_rc_exchange::{PreparedUpload, prepare_upload};
-use kitty_rc_tokio::{SessionOptions, UploadSource};
+use kitty_rc_tokio::UploadSource;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CoordinationGroupId {
@@ -280,14 +280,9 @@ pub(super) async fn execute_input(
                 .upload_prepared(
                     p.prepared,
                     p.source,
-                    kitty_rc_tokio::UploadOptions {
-                        session: SessionOptions {
-                            deadline,
-                            max_request: 0,
-                            max_response,
-                        },
-                        max_upload: p.max_upload,
-                    },
+                    deadline,
+                    max_response,
+                    p.max_upload,
                     evidence,
                 )
                 .await
@@ -295,12 +290,7 @@ pub(super) async fn execute_input(
     }
 }
 pub(super) fn successful_terminal(outcome: &Outcome) -> bool {
-    #[derive(serde::Deserialize)]
-    struct Header {
-        ok: bool,
-        stream: Option<bool>,
-    }
-    matches!(outcome,Outcome::Reply(bytes) if serde_json::from_slice::<Header>(bytes).is_ok_and(|h|h.ok && h.stream!=Some(true)))
+    matches!(outcome,Outcome::Reply(bytes) if kitty_rc_exchange::response_head(bytes).is_ok_and(|h|h==kitty_rc_exchange::ResponseHead::Success))
 }
 pub(super) fn release_exact(
     s: &mut State,

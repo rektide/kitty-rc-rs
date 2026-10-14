@@ -59,9 +59,16 @@ impl Session {
             options.session.max_request,
         )
         .map_err(Failure::Prepare)?;
-        self.upload_prepared(prepared, source, options, Evidence::default())
-            .await
-            .decode::<C>()
+        self.upload_prepared(
+            prepared,
+            source,
+            options.session.deadline,
+            options.session.max_response,
+            options.max_upload,
+            Evidence::default(),
+        )
+        .await
+        .decode::<C>()
     }
     pub fn new(endpoint: Endpoint) -> Self {
         Self {

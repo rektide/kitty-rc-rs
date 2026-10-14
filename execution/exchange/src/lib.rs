@@ -1,9 +1,11 @@
 //! Preparation and evidence vocabulary independent of a transport/runtime.
+mod response;
 mod upload;
 use kitty_rc_commands::{Command, Mode};
 use kitty_rc_endpoint::Address;
 use kitty_rc_endpoint::Protection;
 use kitty_rc_schema::{ResponseEnvelope, ResponseKind};
+pub use response::{ResponseHead, response_head};
 use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering},
@@ -83,18 +85,8 @@ impl Outcome {
         if let Self::Reply(bytes) = self {
             // Structural validation without allocating success data before
             // custody/shutdown. Typed data is interpreted by the sole taker.
-            #[derive(serde::Deserialize)]
-            struct Header {
-                ok: bool,
-                stream: Option<bool>,
-                data: Option<serde::de::IgnoredAny>,
-                error: Option<String>,
-            }
-            return match serde_json::from_slice::<Header>(bytes) {
-                Ok(h) => {
-                    let _ = (h.ok, h.data, h.error);
-                    h.stream == Some(true)
-                }
+            return match response_head(bytes) {
+                Ok(head) => head == ResponseHead::StreamAcknowledged,
                 Err(_) => true,
             };
         }

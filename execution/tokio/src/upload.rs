@@ -1,6 +1,5 @@
 use super::*;
-use kitty_rc_exchange::PreparedUpload;
-use kitty_rc_schema::{ResponseEnvelope, ResponseKind};
+use kitty_rc_exchange::{PreparedUpload, ResponseHead, response_head};
 
 /// Source ownership is transferred once, never cloned or replayed.
 pub struct UploadSource {
@@ -41,15 +40,15 @@ impl Session {
         &mut self,
         prepared: PreparedUpload,
         mut source: UploadSource,
-        options: UploadOptions,
+        deadline: Instant,
+        max_response: usize,
+        max_upload: u64,
         evidence: Evidence,
     ) -> Outcome {
         self.last_evidence = Some(evidence.clone());
         let mut connection = self.connection.take();
         let reused = connection.is_some();
         let address = &self.endpoint.address;
-        let deadline = options.session.deadline;
-        let max_response = options.session.max_response;
         if Instant::now() >= deadline {
             return Outcome::Interrupted {
                 progress: evidence.progress(),
@@ -85,7 +84,7 @@ impl Session {
                 }
             }
             let mut total = n as u64;
-            if total > options.max_upload {
+            if total > max_upload {
                 return Err(ExecutionError::UploadLimit);
             }
             evidence.set_phase(Phase::Connect);
@@ -139,8 +138,8 @@ impl Session {
                 evidence.set_phase(Phase::Handshake);
                 let ack = read_frame_with_surplus(conn, address, true).await?;
                 match kind(&ack) {
-                    Some(ResponseKind::StreamAcknowledged) => evidence.acknowledge_stream(),
-                    Some(ResponseKind::Failure { .. }) => return Ok(Outcome::Reply(ack)),
+                    Some(ResponseHead::StreamAcknowledged) => evidence.acknowledge_stream(),
+                    Some(ResponseHead::Failure) => return Ok(Outcome::Reply(ack)),
                     _ => {
                         return Err(ExecutionError::UploadResponse {
                             phase: Phase::Handshake,
@@ -164,7 +163,7 @@ impl Session {
                     total = total
                         .checked_add(n as u64)
                         .ok_or(ExecutionError::UploadLimit)?;
-                    if total > options.max_upload {
+                    if total > max_upload {
                         return Err(ExecutionError::UploadLimit);
                     }
                     if let Some(reply) = write_frame(
@@ -204,9 +203,7 @@ impl Session {
             evidence.set_phase(Phase::Read);
             let reply = read_frame(conn, address).await?;
             match kind(&reply) {
-                Some(ResponseKind::Success { .. } | ResponseKind::Failure { .. }) => {
-                    Ok(Outcome::Reply(reply))
-                }
+                Some(ResponseHead::Success | ResponseHead::Failure) => Ok(Outcome::Reply(reply)),
                 _ => Err(ExecutionError::UploadResponse {
                     phase: Phase::Read,
                     native: reply,
@@ -223,7 +220,7 @@ impl Session {
             Ok(outcome) => {
                 if prepared.reusable()
                     && evidence.input_complete()
-                    && matches!(&outcome,Outcome::Reply(bytes) if matches!(kind(bytes),Some(ResponseKind::Success { .. })))
+                    && matches!(&outcome,Outcome::Reply(bytes) if matches!(kind(bytes),Some(ResponseHead::Success)))
                 {
                     self.connection = connection;
                 }
@@ -243,14 +240,11 @@ fn io_error(address: &Address, phase: Phase, source: std::io::Error) -> Executio
         source,
     }
 }
-fn kind(bytes: &[u8]) -> Option<ResponseKind> {
-    serde_json::from_slice::<ResponseEnvelope>(bytes)
-        .ok()?
-        .into_kind()
-        .ok()
+fn kind(bytes: &[u8]) -> Option<ResponseHead> {
+    response_head(bytes).ok()
 }
 fn early(bytes: Vec<u8>) -> Result<Outcome, ExecutionError> {
-    if matches!(kind(&bytes), Some(ResponseKind::Failure { .. })) {
+    if matches!(kind(&bytes), Some(ResponseHead::Failure)) {
         Ok(Outcome::Reply(bytes))
     } else {
         Err(ExecutionError::UploadResponse {
