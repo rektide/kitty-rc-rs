@@ -212,6 +212,14 @@ async fn waiter_loss_running_cancel_and_driver_replacement_never_replay() {
     registry.wait(token).await.unwrap();
     assert!(registry.summary(token).unwrap().unresolved);
     fixture.long.add_permits(1); // late reply belongs to retired socket
+    let reading = registry
+        .submit(&registry.reserve(), ep, GetText::default(), options())
+        .unwrap();
+    assert_eq!(fixture.next().await.0, "get-text");
+    assert!(reading.cancel());
+    reading.wait().await.unwrap();
+    assert!(registry.summary(reading.token()).unwrap().unresolved);
+    fixture.text.add_permits(1); // partial response's tail cannot be reused
     let new = registry
         .submit(&registry.reserve(), ep, focus(), options())
         .unwrap();
@@ -250,7 +258,7 @@ async fn waiter_loss_running_cancel_and_driver_replacement_never_replay() {
     assert_eq!(fixture.next().await.0, "ls");
     check.wait().await.unwrap();
     assert!(registry.summary(running.token()).unwrap().unresolved);
-    assert_eq!(registry.shutdown(Shutdown::Drain).await.unwrap().len(), 2);
+    assert_eq!(registry.shutdown(Shutdown::Drain).await.unwrap().len(), 3);
     replacement.stop().await;
 }
 
