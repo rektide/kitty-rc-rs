@@ -34,7 +34,7 @@ sources:
     title: Inspected consumer illustrating retry and connection-management pressures, without compatibility authority
 verification:
   scope: Initial design grounded in inspected code and baseline upstream sources; not implemented or validated as a new API
-  checks: Existing 159 nextest tests passed; strict Clippy failed in the preceding review; no live kitty interoperability run
+  checks: Earlier session snapshot passed 159 nextest tests and failed strict Clippy; concurrent cleanup subsequently changed that source state; no new test run or live kitty interoperability run
 ---
 
 # A composable library with an explicit exchange lifecycle
@@ -80,7 +80,7 @@ Representative defects from the review:
 
 | Evidence | Missing architectural property |
 | --- | --- |
-| `src/client.rs:199`: inner write error discarded | One owner of I/O result propagation |
+| Historical `src/client.rs:199`: inner write error discarded; current `97990cb2` source fixes it with `??` | One owner of I/O result propagation |
 | `src/client.rs:240`: send-all encrypts before send encrypts again | Exactly one envelope transformation boundary |
 | `send_command` leaves replies unread; `execute` ignores no-response mode | An exchange owns both outgoing traffic and required incoming traffic |
 | `receive` has a disposable local buffer and per-read timeout | Persistent framing state and cancellation/deadline semantics |
@@ -91,6 +91,12 @@ Representative defects from the review:
 Some command wire shapes already disagree with kitty v0.43.1. Repairing the
 architecture must include an independent schema audit; rearranging existing
 serialization into crates would preserve those mistakes.
+
+Source-state correction after preserving the initial draft: the checkout advanced
+concurrently during research. Direct reinspection confirms `client.rs:201` now
+propagates both results. The original test/Clippy report describes the earlier
+snapshot and is not a fresh judgment of the cleanup. This correction changes
+the defect inventory, not the proposed lifecycle contract.
 
 ## Proposed architecture
 
@@ -309,7 +315,7 @@ Before presenting the replacement as dependable:
 5. **Real kitty interoperability:** independently launched test instances and a
    stated version matrix, including sequential reuse and asynchronous completion.
 
-159 passing current tests provide a starting regression inventory, not acceptance
+159 passing tests in the earlier reviewed snapshot provide a starting regression inventory, not acceptance
 of the current protocol. Static warnings exposing dropped results deserve priority
 over stylistic cleanup. Tests should assert outcomes and ownership guarantees,
 not merely mirror whatever a serializer happens to emit.
