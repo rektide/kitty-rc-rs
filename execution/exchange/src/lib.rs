@@ -146,7 +146,7 @@ pub struct Prepared {
 pub fn prepare<C: Command>(
     command: &C,
     protection: &Protection,
-    async_id: String,
+    _async_id: String,
     timestamp_ns: u64,
     max_request: usize,
 ) -> Result<Prepared, String> {
@@ -157,7 +157,7 @@ pub fn prepare<C: Command>(
     }
     let mode = command.mode();
     if mode == Mode::Deferred {
-        r.r#async = Some(async_id);
+        r.r#async = Some(remote_request_id());
     }
     if mode == Mode::SubmissionOnly {
         r.no_response = Some(true);
@@ -187,4 +187,24 @@ pub fn prepare<C: Command>(
         bytes: kitty_rc_frame::frame(&bytes),
         mode,
     })
+}
+
+/// Server-global async identity, independent of process-local operation IDs.
+/// Kitty evicts the oldest registration after 32 concurrent async requests;
+/// randomness avoids collisions, not eviction caused by other clients.
+pub fn remote_request_id() -> String {
+    use rand_core::RngCore;
+    let mut bytes = [0u8; 32];
+    rand_core::OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn independent_client_id_sequences_do_not_restart() {
+        let first: Vec<_> = (0..64).map(|_| super::remote_request_id()).collect();
+        let second: Vec<_> = (0..64).map(|_| super::remote_request_id()).collect();
+        assert!(first.iter().all(|id| id.len() == 64 && !second.contains(id)));
+    }
 }
