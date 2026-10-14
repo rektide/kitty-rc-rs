@@ -63,12 +63,19 @@ and separated discovery/authentication steps.
   execution, detached waiters, bounded native outcome custody, scripted concurrency
   tests and isolated real-kitty 0.48.2 encrypted conformance.
 
-The first slice is checkpointed; parent review commissioned a correction pass
-for actual reusable connection leases (the initial implementation retired every
-socket), cross-process-safe remote async IDs, typed error causes, send-time
-encryption timestamps, and shutdown concurrent with driver loss. The checkpoint's
-successful tests do not establish those additional properties. The report and
-native tickets carry subsequent completion evidence.
+The first slice and its review-driven corrections are committed. Audited
+reply-bearing sessions now reuse sockets; idle/active/connecting resources count
+against registry quotas. Remote async IDs use CSPRNG randomness, execution errors
+retain typed causes, encryption timestamps are created at first send, and drain
+handles concurrent driver loss. Interrupted, ambiguous and submission-only
+exchanges retire their transports; raw/custom profiles default to retirement.
+
+The [correction report](implementation0.sol61m.md#review-driven-corrections)
+records 82 passing workspace tests, Rust 1.88 all-target/Clippy/format gates,
+scripted connection-count/reuse checks, and repeated encrypted direct/managed
+reuse against isolated kitty 0.48.2. Parent review inspected the corrected session,
+pool selection and error/evidence code. A full supported-version/live matrix,
+discovery, uploads and catalog breadth remain tracked work.
 
 ## Research contributions
 
