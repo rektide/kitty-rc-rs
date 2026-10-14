@@ -16,7 +16,7 @@ kitty-rc is a Rust library that provides a type-safe, async interface for contro
 - **Error Handling**: Detailed error types for protocol, command, connection, and encryption errors
 - **Streaming Support**: Automatic chunking for large payloads (e.g., background images)
 - **Async Commands**: Support for async operations with unique ID generation
-- **Comprehensive Testing**: 143 unit tests ensuring reliability
+- **Comprehensive Testing**: 159 unit tests ensuring reliability
 
 ## Installation
 
@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kitty-rc = "0.4.0"
+kitty-rc = "0.5.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -404,7 +404,8 @@ This script will:
 - Generate a random 48-character password in `~/.config/kitty/rc.password`
 - Create `~/.config/kitty/rc.conf` with remote control configuration
 - Add `include rc.conf` to `~/.config/kitty/kitty.conf` if not present
-- Set up a socket in the XDG runtime directory at `kitty/kitty-{kitty_pid}.sock`
+- Set up a socket in the XDG runtime directory at `kitty/kitty-{pid}.sock`
+- Fail if any remote control settings are already configured
 
 ### Manual Configuration
 
@@ -423,25 +424,6 @@ Then add to `~/.config/kitty/kitty.conf`:
 
 ```conf
 include rc.conf
-```
-
-This script will:
-- Generate a random 48-character password in `~/.config/kitty/rc.password`
-- Add remote control configuration to `~/.config/kitty/kitty.conf`
-- Set up a socket in the XDG runtime directory at `kitty/kitty-{pid}.sock`
-- Fail if any remote control settings are already configured
-
-### Manual Configuration
-
-To manually configure kitty for remote control, add to `~/.config/kitty/kitty.conf`:
-
-```conf
-# Enable password-based remote control
-allow_remote_control password
-remote_control_password "$(cat ~/.config/kitty/rc.password)"
-
-# Listen on socket in XDG runtime directory
-listen_on unix:${XDG_RUNTIME_DIR}/kitty/kitty-{kitty_pid}.sock
 ```
 
 Generate a secure password:
@@ -469,7 +451,7 @@ Run the test suite:
 cargo test
 ```
 
-All 146 tests pass successfully.
+All 159 tests pass successfully.
 
 ## Examples
 
@@ -483,7 +465,7 @@ Contributions are welcome! Please read the project's AGENTS.md for development g
 
 ## License
 
-[Specify your license here]
+[MIT](LICENSE)
 
 ## Related
 
