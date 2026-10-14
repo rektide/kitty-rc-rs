@@ -3,10 +3,10 @@
 //!
 //! Format (unchanged from the existing store, which is user data): one record
 //! per line, tab-separated — `pid  window_id  pubkey  timestamp`. `window_id`
-//! may be empty; a missing or unparseable timestamp reads as `0`. The store
+//! may be empty; a missing timestamp reads as `0`, an invalid one is reported. The store
 //! file conventionally lives at `$XDG_STATE_HOME/kitty/pubkey.tsv`.
 //!
-//! This crate is format-only and pure: no filesystem access, no process
+//! Parsing is pure; [`storage`] is an explicit bounded I/O adapter. No process
 //! liveness checks, no cleanup. Malformed lines are **reported, never
 //! silently dropped** — erasing or filtering user data is a deliberate
 //! caller action. Validation of the key string itself (the `1:<base85>`
@@ -14,6 +14,8 @@
 //! here is opaque text with its origin metadata.
 
 use thiserror::Error;
+
+pub mod storage;
 
 /// Why a single store line could not be parsed.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
