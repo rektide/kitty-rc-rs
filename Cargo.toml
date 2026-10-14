@@ -1,39 +1,26 @@
-[package]
-name = "kitty-rc"
-version = "0.5.0"
+[workspace]
+resolver = "2"
+members = []
+
+[workspace.package]
 edition = "2024"
-description = "A Rust library for controlling kitty terminal emulator via its remote control protocol"
+rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/rektide/kitty-rc-rs"
-documentation = "https://docs.rs/kitty-rc"
-exclude = ["doc", ".beads"]
 
-[[bin]]
-name = "list-windows"
-path = "src/bin/list_windows.rs"
-
-[[bin]]
-name = "kitty-pubkey-db"
-path = "src/bin/kitty-pubkey-db.rs"
-
-[[example]]
-name = "test-connectivity"
-path = "examples/test-connectivity.rs"
-
-[[example]]
-name = "test-encrypted"
-path = "examples/test-encrypted.rs"
-
-[dependencies]
+[workspace.dependencies]
 aes-gcm = "0.10"
 base85 = "2.0"
 bon = "3.5"
 clap = { version = "4.0", features = ["derive"] }
-rand_core = "0.6"
+kitty-rc-schema = { path = "protocol/schema" }
+kitty-rc-frame = { path = "protocol/frame" }
+kitty-rc-commands = { path = "protocol/commands" }
+kitty-rc-crypto = { path = "access/crypto" }
+kitty-rc-key-store = { path = "access/key-store" }
+rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 thiserror = "2.0"
-tokio = { version = "1.0", features = ["full"] }
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
-xdg = "3.0.0"
