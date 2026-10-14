@@ -16,3 +16,10 @@ kitty-rc-credentials.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+clap.workspace = true
+kitty-rc-schema.workspace = true
+kitty-rc-frame.workspace = true
+kitty-rc-listing = { path = "../observation/listing" }
+kitty-rc-check = { path = "../observation/check" }
+rand_core.workspace = true
+serde_json.workspace = true
