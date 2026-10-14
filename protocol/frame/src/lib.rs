@@ -29,9 +29,6 @@ pub const PREFIX: &[u8] = b"\x1bP@kitty-cmd";
 /// String terminator that closes every RC frame: `ESC \`.
 pub const SUFFIX: &[u8] = b"\x1b\\";
 
-/// Maximum payload retained for diagnostics when a stream goes wrong.
-const MAX_DIAGNOSTIC_BYTES: usize = 32;
-
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum FrameError {
     /// A single frame's payload exceeded the configured limit. Reported as
@@ -48,6 +45,9 @@ pub enum FrameError {
     /// buffered.
     #[error("stream ended mid-frame with {pending} buffered bytes")]
     Truncated { pending: usize },
+
+    #[error("decoder retention budget exhausted")]
+    RetentionFull,
 }
 
 /// Encode one complete frame around `payload`.
@@ -71,28 +71,36 @@ pub fn frame(payload: &[u8]) -> Vec<u8> {
 #[derive(Debug)]
 pub struct FrameDecoder {
     max_payload: usize,
-    /// Buffered bytes not yet consumed into complete frames.
     buf: Vec<u8>,
-    /// Byte index where the payload of the frame currently being scanned
-    /// starts; `None` when idle (expecting a PREFIX).
-    frame_start: Option<usize>,
-    /// Complete payloads awaiting `next_frame`, in arrival order.
+    prefix: usize,
+    in_frame: bool,
+    pending_escape: bool,
     ready: std::collections::VecDeque<Vec<u8>>,
-    /// Number of buffered bytes already consumed by complete frames; drained
-    /// from `buf` at the end of each scan.
-    consumed: usize,
+    retained: usize,
+    max_retained: usize,
+    max_frames: usize,
     poisoned: Option<FrameError>,
 }
 
 impl FrameDecoder {
     /// Create a decoder that accepts payloads of at most `max_payload` bytes.
     pub fn new(max_payload: usize) -> Self {
+        Self::with_limits(max_payload, max_payload.saturating_mul(2), 2)
+    }
+
+    /// Bound queued payload bytes and frame count as well as each payload.
+    /// Exhaustion poisons the stream; drain frames between transport reads.
+    pub fn with_limits(max_payload: usize, max_retained: usize, max_frames: usize) -> Self {
         Self {
             max_payload,
             buf: Vec::new(),
-            frame_start: None,
+            prefix: 0,
+            in_frame: false,
+            pending_escape: false,
             ready: std::collections::VecDeque::new(),
-            consumed: 0,
+            retained: 0,
+            max_retained,
+            max_frames,
             poisoned: None,
         }
     }
@@ -103,8 +111,40 @@ impl FrameDecoder {
         if let Some(error) = &self.poisoned {
             return Err(error.clone());
         }
-        self.buf.extend_from_slice(bytes);
-        self.scan()
+        for &byte in bytes {
+            if !self.in_frame {
+                if byte != PREFIX[self.prefix] {
+                    return self.poison(FrameError::UnexpectedBytes { found: vec![byte] });
+                }
+                self.prefix += 1;
+                if self.prefix == PREFIX.len() {
+                    self.prefix = 0;
+                    self.in_frame = true;
+                }
+            } else if self.pending_escape {
+                if byte != b'\\' {
+                    return self.poison(FrameError::UnexpectedBytes { found: vec![0x1b, byte] });
+                }
+                if self.ready.len() == self.max_frames {
+                    return self.poison(FrameError::RetentionFull);
+                }
+                self.ready.push_back(std::mem::take(&mut self.buf));
+                self.in_frame = false;
+                self.pending_escape = false;
+            } else if byte == 0x1b {
+                self.pending_escape = true;
+            } else {
+                if self.buf.len() == self.max_payload {
+                    return self.poison(FrameError::PayloadTooLarge { limit: self.max_payload, actual: self.buf.len() + 1 });
+                }
+                if self.retained == self.max_retained {
+                    return self.poison(FrameError::RetentionFull);
+                }
+                self.buf.push(byte);
+                self.retained += 1;
+            }
+        }
+        Ok(())
     }
 
     /// Take the next complete frame's payload, in arrival order. `Ok(None)`
@@ -113,7 +153,9 @@ impl FrameDecoder {
         if let Some(error) = &self.poisoned {
             return Err(error.clone());
         }
-        Ok(self.ready.pop_front())
+        let result = self.ready.pop_front();
+        if let Some(payload) = &result { self.retained -= payload.len(); }
+        Ok(result)
     }
 
     /// Confirm the stream ended cleanly: no partial frame or partial prefix
@@ -122,11 +164,11 @@ impl FrameDecoder {
         if let Some(error) = &self.poisoned {
             return Err(error.clone());
         }
-        if self.buf.is_empty() && self.frame_start.is_none() {
+        if !self.in_frame && self.prefix == 0 {
             Ok(())
         } else {
-            Err(FrameError::Truncated {
-                pending: self.buf.len(),
+            self.poison(FrameError::Truncated {
+                pending: self.buf.len() + self.prefix + usize::from(self.pending_escape),
             })
         }
     }
@@ -134,70 +176,7 @@ impl FrameDecoder {
     /// True when no partial frame is buffered (all received bytes have been
     /// consumed into complete frames).
     pub fn is_idle(&self) -> bool {
-        self.frame_start.is_none() && self.buf.is_empty()
-    }
-
-    fn scan(&mut self) -> Result<(), FrameError> {
-        loop {
-            if let Some(start) = self.frame_start {
-                // Inside a frame: search for the terminator.
-                let hay = &self.buf[start..];
-                match find_subslice(hay, SUFFIX) {
-                    Some(index) => {
-                        if index > self.max_payload {
-                            return self.poison(FrameError::PayloadTooLarge {
-                                limit: self.max_payload,
-                                actual: index,
-                            });
-                        }
-                        let payload = self.buf[start..start + index].to_vec();
-                        self.ready.push_back(payload);
-                        self.consumed = start + index + SUFFIX.len();
-                        self.frame_start = None;
-                    }
-                    None => {
-                        let pending = self.buf.len() - start;
-                        if pending > self.max_payload {
-                            return self.poison(FrameError::PayloadTooLarge {
-                                limit: self.max_payload,
-                                actual: pending,
-                            });
-                        }
-                        break;
-                    }
-                }
-            } else {
-                // Idle: a frame prefix must start here.
-                let remaining = &self.buf[self.consumed..];
-                if remaining.is_empty() {
-                    break;
-                }
-                if remaining.starts_with(PREFIX) {
-                    self.frame_start = Some(self.consumed + PREFIX.len());
-                } else {
-                    let matched = common_prefix_len(PREFIX, remaining);
-                    if matched == remaining.len() {
-                        // A proper prefix of PREFIX; wait for more bytes.
-                        break;
-                    }
-                    let found: Vec<u8> = remaining
-                        [matched..(matched + MAX_DIAGNOSTIC_BYTES).min(remaining.len())]
-                        .to_vec();
-                    return self.poison(FrameError::UnexpectedBytes { found });
-                }
-            }
-        }
-
-        // Drop bytes already folded into complete frames, keeping later
-        // indices consistent.
-        if self.consumed > 0 {
-            self.buf.drain(..self.consumed);
-            if let Some(start) = self.frame_start.as_mut() {
-                *start -= self.consumed;
-            }
-            self.consumed = 0;
-        }
-        Ok(())
+        !self.in_frame && self.prefix == 0 && self.ready.is_empty() && self.poisoned.is_none()
     }
 
     fn poison(&mut self, error: FrameError) -> Result<(), FrameError> {
@@ -206,26 +185,35 @@ impl FrameDecoder {
     }
 }
 
-fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || haystack.len() < needle.len() {
-        return None;
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}
-
-fn common_prefix_len(expected: &[u8], actual: &[u8]) -> usize {
-    expected
-        .iter()
-        .zip(actual.iter())
-        .take_while(|(a, b)| a == b)
-        .count()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exact_limit_split_suffix_and_poisoned_eof() {
+        let mut d = FrameDecoder::new(3);
+        d.extend(PREFIX).unwrap();
+        d.extend(b"abc\x1b").unwrap();
+        d.extend(b"\\").unwrap();
+        assert!(!d.is_idle());
+        assert_eq!(d.next_frame().unwrap().unwrap(), b"abc");
+        assert!(d.is_idle());
+        d.extend(PREFIX).unwrap();
+        let error = d.finish().unwrap_err();
+        assert_eq!(d.extend(b"x").unwrap_err(), error);
+        assert_eq!(d.next_frame().unwrap_err(), error);
+    }
+
+    #[test]
+    fn huge_read_and_empty_frame_flood_are_bounded() {
+        let mut d = FrameDecoder::with_limits(8, 8, 1);
+        d.extend(&frame(b"12345678")).unwrap();
+        assert_eq!(d.extend(&frame(b"x")), Err(FrameError::RetentionFull));
+        assert_eq!(d.retained, 8);
+        let mut d = FrameDecoder::with_limits(8, 8, 1);
+        d.extend(&frame(b"")).unwrap();
+        assert_eq!(d.extend(&frame(b"")), Err(FrameError::RetentionFull));
+    }
 
     const PAYLOAD_A: &[u8] = br#"{"cmd":"ls","version":[0,43,1]}"#;
     const PAYLOAD_B: &[u8] = b"{\"ok\":true,\"data\":\"windows\"}";
@@ -343,7 +331,7 @@ mod tests {
         let error = decoder.extend(&bytes).unwrap_err();
         assert!(matches!(
             error,
-            FrameError::PayloadTooLarge { limit: 8, actual } if actual >= 100
+            FrameError::PayloadTooLarge { limit: 8, actual: 9 }
         ));
         assert!(decoder.next_frame().is_err());
     }
