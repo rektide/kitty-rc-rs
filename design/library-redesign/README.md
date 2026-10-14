@@ -24,6 +24,8 @@ sources:
     title: Human-corrected registry-first concurrency design and constructive generic kubeless adaptations
   - resource: /design/library-redesign/draft1.gpt6a.md
     title: Post-discussion registry-first synthesis and remaining design choices
+  - resource: /design/library-redesign/implementation0.sol61m.md
+    title: First implemented concurrent slice, verified evidence and parent-reviewed lifecycle gaps
 ---
 
 # Library redesign
@@ -50,6 +52,23 @@ and separated discovery/authentication steps.
   pooling and retries need reconsideration under the new lifecycle model.
 - [Earlier public-key store plan](../../doc/PLAN-pubkey-db.md): historical
   standalone authentication context and a candidate integration to redesign.
+
+## Implementation and work anchors
+
+- [Applied epics and ticket roadmap](tickets0.sol61m.md): native work IDs,
+  dependencies, acceptance criteria, and tracker migration evidence.
+- [G's teardown and foundation handoff](teardown0.glm53m.md): removed legacy paths,
+  preserved capability inventory, pure concern crates and recovery coordinate.
+- [Sol's first concurrent slice](implementation0.sol61m.md): typed direct/managed
+  execution, detached waiters, bounded native outcome custody, scripted concurrency
+  tests and isolated real-kitty 0.48.2 encrypted conformance.
+
+The first slice is checkpointed; parent review commissioned a correction pass
+for actual reusable connection leases (the initial implementation retired every
+socket), cross-process-safe remote async IDs, typed error causes, send-time
+encryption timestamps, and shutdown concurrent with driver loss. The checkpoint's
+successful tests do not establish those additional properties. The report and
+native tickets carry subsequent completion evidence.
 
 ## Research contributions
 
