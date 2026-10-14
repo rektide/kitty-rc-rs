@@ -605,10 +605,7 @@ fn raw_defaults_retire_and_catalog_has_all_stable_names_plus_explicit_head_only(
     );
     let names: std::collections::BTreeSet<_> = CAPABILITIES.iter().map(|c| c.name).collect();
     assert_eq!(names.len(), CAPABILITIES.len());
-    assert_eq!(
-        capability("run").unwrap().coverage,
-        Coverage::UploadDeferred
-    );
+    assert_eq!(capability("run").unwrap().coverage, Coverage::TypedUpload);
     assert_eq!(
         capability("new-window").unwrap().coverage,
         Coverage::DeprecatedRaw

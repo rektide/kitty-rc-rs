@@ -189,6 +189,8 @@ impl Registry {
         };
         let ticket = entry.ticket(id);
         s.endpoints.insert(id, entry);
+        s.groups
+            .insert(id, crate::CoordinationGroupId::for_endpoint(id));
         Ok(ticket)
     }
     /// Retire idle old sockets and reject queued old preparation. Already
@@ -295,7 +297,11 @@ impl Registry {
                     },
                 },
             );
-            record.rejected_input = frozen;
+            match frozen {
+                Some(crate::uploads::Input::Finite(input)) => record.rejected_input = Some(input),
+                Some(crate::uploads::Input::Upload(input)) => record.rejected_upload = Some(input),
+                None => {}
+            }
             record.input_bytes = bytes;
         }
         let retired = s.idle.remove(&endpoint);

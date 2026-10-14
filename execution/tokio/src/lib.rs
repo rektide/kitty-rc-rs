@@ -1,5 +1,6 @@
 //! Single-owner reusable sessions. Cancelable exchange futures take the socket
 //! out of the session before I/O and return it only at a verified clean boundary.
+mod upload;
 use kitty_rc_commands::{Command, Mode};
 use kitty_rc_endpoint::{Address, Endpoint};
 use kitty_rc_exchange::{
@@ -9,6 +10,7 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     time::Instant,
 };
+pub use upload::{UploadOptions, UploadSource};
 
 trait Socket: AsyncRead + AsyncWrite + Unpin + Send {
     fn try_read(&self, bytes: &mut [u8]) -> std::io::Result<usize>;
@@ -42,12 +44,30 @@ pub struct SessionOptions {
 pub struct Session {
     endpoint: Endpoint,
     connection: Option<Connection>,
+    last_evidence: Option<Evidence>,
 }
 impl Session {
+    pub async fn upload<C: kitty_rc_commands::upload::UploadCommand>(
+        &mut self,
+        command: C,
+        source: UploadSource,
+        options: UploadOptions,
+    ) -> Result<Completion<C::Output>, Failure> {
+        let prepared = kitty_rc_exchange::prepare_upload(
+            &command,
+            &self.endpoint.protection,
+            options.session.max_request,
+        )
+        .map_err(Failure::Prepare)?;
+        self.upload_prepared(prepared, source, options, Evidence::default())
+            .await
+            .decode::<C>()
+    }
     pub fn new(endpoint: Endpoint) -> Self {
         Self {
             endpoint,
             connection: None,
+            last_evidence: None,
         }
     }
     pub fn is_connected(&self) -> bool {
@@ -56,6 +76,11 @@ impl Session {
     }
     pub fn connection_token(&self) -> Option<ConnectionToken> {
         self.connection.as_ref().map(|c| c.token)
+    }
+    /// Bounded in-memory progress remains inspectable after future cancellation.
+    /// Neither this record nor a closed socket proves remote rollback/cleanup.
+    pub fn last_evidence(&self) -> Option<&Evidence> {
+        self.last_evidence.as_ref()
     }
     pub async fn execute<C: Command>(
         &mut self,
@@ -97,6 +122,7 @@ impl Session {
         max_response: usize,
         evidence: Evidence,
     ) -> Outcome {
+        self.last_evidence = Some(evidence.clone());
         // Before any await: cancellation owns/drops this transport, never leaves
         // a partly consumed socket sitting in the borrowed session.
         let mut connection = self.connection.take();

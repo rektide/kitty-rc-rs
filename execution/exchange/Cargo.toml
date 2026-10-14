@@ -14,6 +14,8 @@ serde_json.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 rand_core.workspace = true
+base64.workspace = true
 
 [dev-dependencies]
 base85.workspace = true
+x25519-dalek.workspace = true

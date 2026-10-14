@@ -24,6 +24,12 @@ use std::{
 use tokio::{sync::Notify, task::JoinHandle, time::Instant};
 
 static NEXT_OWNER: AtomicU64 = AtomicU64::new(1);
+mod uploads;
+use uploads::Input;
+pub use uploads::{
+    CoordinationGroupId, LaneClaim, LaneError, LanePolicy, RefusedUpload, RejectedUpload,
+    UploadOptions,
+};
 mod setup;
 pub use setup::{
     AcquisitionError, BindingGeneration, CredentialGeneration, SetupError, SetupRejection,
@@ -158,6 +164,10 @@ pub enum RefusalReason {
 }
 #[derive(Debug, thiserror::Error)]
 pub enum CustodyError {
+    #[error(
+        "upload lane remains unresolved; explicitly resolve its exact claim before releasing the operation"
+    )]
+    UploadLaneRetained,
     #[error("unknown or released operation")]
     Missing,
     #[error("operation unfinished or result already taken")]
@@ -189,10 +199,12 @@ struct Record {
     setup_version: SetupVersion,
     setup_rejection: Option<SetupRejection>,
     rejected_input: Option<Prepared>,
+    rejected_upload: Option<RejectedUpload>,
+    lane: Option<(CoordinationGroupId, kitty_rc_commands::upload::UploadKey)>,
     class: usize,
     deadline: Instant,
     max_response: usize,
-    input: Option<Prepared>,
+    input: Option<Input>,
     input_bytes: usize,
     reservation: usize,
     status: Status,
@@ -204,6 +216,8 @@ struct Record {
     done: Arc<Notify>,
 }
 struct State {
+    groups: BTreeMap<EndpointId, CoordinationGroupId>,
+    lanes: BTreeMap<(CoordinationGroupId, kitty_rc_commands::upload::UploadKey), LaneClaim>,
     endpoints: BTreeMap<EndpointId, setup::Entry>,
     records: BTreeMap<Token, Record>,
     closed: bool,
@@ -288,6 +302,8 @@ impl Registry {
                 sequence: AtomicU64::new(1),
                 limits,
                 state: Mutex::new(State {
+                    groups: BTreeMap::new(),
+                    lanes: BTreeMap::new(),
                     endpoints: BTreeMap::new(),
                     records: BTreeMap::new(),
                     closed: false,
@@ -332,6 +348,9 @@ impl Registry {
             sequence: t.sequence,
         };
         state.endpoints.insert(id, setup::Entry::ready(endpoint));
+        state
+            .groups
+            .insert(id, CoordinationGroupId::for_endpoint(id));
         Ok(id)
     }
     /// No await occurs between input installation and handle delivery. Refusal
@@ -369,8 +388,38 @@ impl Registry {
             Err(reason) => return Err(Refused { command, reason }),
         };
         let class = class_index(command.class());
-        let (setup_version, frozen_setup) = setup.as_ref().unwrap();
-        let cause_bytes = match &frozen_setup.as_ref().unwrap().address {
+        self.admit::<C>(
+            reservation,
+            endpoint,
+            setup.as_ref().unwrap().0,
+            class,
+            Input::Finite(input),
+            options,
+        )
+        .map_err(|(_, reason)| Refused { command, reason })
+    }
+    fn admit<C: Command>(
+        &self,
+        reservation: &Reservation,
+        endpoint: EndpointId,
+        setup_version: SetupVersion,
+        class: usize,
+        input: Input,
+        options: Options,
+    ) -> Result<Operation<C>, (Input, RefusalReason)> {
+        let token = reservation.token;
+        let setup = self
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .endpoints
+            .get(&endpoint)
+            .map(|entry| entry.setup.clone());
+        let Some(Some(frozen_setup)) = setup else {
+            return Err((input, RefusalReason::SetupUnavailable));
+        };
+        let cause_bytes = match &frozen_setup.address {
             kitty_rc_endpoint::Address::Unix(path) => path.as_os_str().as_encoded_bytes().len(),
             kitty_rc_endpoint::Address::Tcp(_) => 32,
         };
@@ -395,7 +444,7 @@ impl Registry {
         } else if state
             .endpoints
             .get(&endpoint)
-            .is_none_or(|entry| entry.version != *setup_version || entry.setup.is_none())
+            .is_none_or(|entry| entry.version != setup_version || entry.setup.is_none())
         {
             Some(RefusalReason::SetupChanged)
         } else if state.records.contains_key(&token) {
@@ -416,23 +465,23 @@ impl Registry {
             None
         };
         if let Some(reason) = reason {
-            return Err(Refused { command, reason });
+            return Err((input, reason));
         }
         if reservation.committed.swap(true, Ordering::SeqCst) {
-            return Err(Refused {
-                command,
-                reason: RefusalReason::Committed,
-            });
+            return Err((input, RefusalReason::Committed));
         }
         let done = Arc::new(Notify::new());
         let input_bytes = input.reservation_bytes();
+        let lane = input.key().map(|key| (state.groups[&endpoint], key));
         state.records.insert(
             token,
             Record {
                 endpoint,
-                setup_version: *setup_version,
+                setup_version,
                 setup_rejection: None,
                 rejected_input: None,
+                rejected_upload: None,
+                lane,
                 class,
                 deadline: options.deadline,
                 max_response: options.max_response,
@@ -516,9 +565,14 @@ impl Registry {
     /// Explicitly release completed native output and its admission slot.
     pub fn release(&self, token: Token) -> Result<(), CustodyError> {
         let mut s = self.shared.state.lock().unwrap();
+        if s.lanes.values().any(|claim| claim.token == token) {
+            return Err(CustodyError::UploadLaneRetained);
+        }
         match s.records.get(&token) {
             Some(r) if matches!(r.status, Status::Completed | Status::Taken) => {
-                s.records.remove(&token);
+                let record = s.records.remove(&token);
+                drop(s);
+                drop(record); // Caller-owned source destructors never hold lock.
                 Ok(())
             }
             Some(_) => Err(CustodyError::Unfinished),
@@ -711,8 +765,14 @@ fn class_index(c: Class) -> usize {
 }
 fn complete(r: &mut Record, outcome: Outcome) {
     r.unresolved = outcome.unresolved();
-    r.input = None;
-    r.input_bytes = 0;
+    match r.input.take() {
+        Some(Input::Upload(input)) => {
+            // Queued cancellation/deadline retains an unpolled owned source.
+            // It is quota-counted until explicit take/release outside this lock.
+            r.rejected_upload = Some(input);
+        }
+        _ => r.input_bytes = 0,
+    }
     r.outcome = Some(outcome);
     r.status = Status::Completed;
     // Storage precedes notification, under the same ownership turn.
@@ -724,7 +784,7 @@ struct Work {
     setup_version: SetupVersion,
     session: Session,
     retired: Option<Session>,
-    prepared: Prepared,
+    prepared: Input,
     deadline: Instant,
     max_response: usize,
     evidence: Evidence,
@@ -788,7 +848,10 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                 .records
                 .iter()
                 .find(|(_, r)| {
-                    r.endpoint == endpoint && r.class == class && r.status == Status::Queued
+                    r.endpoint == endpoint
+                        && r.class == class
+                        && r.status == Status::Queued
+                        && r.lane.is_none_or(|lane| !s.lanes.contains_key(&lane))
                 })
                 .map(|(token, _)| *token);
             if let Some(token) = token {
@@ -820,6 +883,10 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                         Session::new(setup)
                     };
                 s.cursor = Some(endpoint);
+                if let Some(lane) = s.records[&token].lane {
+                    s.lanes
+                        .insert(lane, LaneClaim::new(lane, token, generation));
+                }
                 let r = s.records.get_mut(&token).unwrap();
                 r.status = Status::Running;
                 r.generation = generation;
@@ -859,7 +926,7 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
                 let outcome = tokio::select! {
                     biased;
                     _ = work.cancel.notified() => Outcome::Interrupted { progress: evidence.progress(), reason: ExecutionError::Cancelled { phase: evidence.phase() } },
-                    outcome = work.session.execute_prepared(work.prepared, work.deadline, work.max_response, work.evidence) => outcome,
+                    outcome = uploads::execute_input(&mut work.session, work.prepared, work.deadline, work.max_response, work.evidence) => outcome,
                 };
                 (work.token, work.endpoint_id, work.setup_version, work.session, outcome)
             });
@@ -884,7 +951,12 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
                     let current = s.endpoints.get(&endpoint).is_some_and(|entry| entry.version == setup_version && entry.setup.is_some());
                     if let Some(r) = s.records.get_mut(&token)
                         && r.status == Status::Running && r.generation == generation && r.setup_version == setup_version {
+                        let lane = r.lane;
+                        let clean = r.evidence.progress() == Progress::NotWritten || uploads::successful_terminal(&outcome);
                         complete(r, outcome);
+                        if clean && let Some(lane) = lane {
+                            uploads::release_exact(&mut s, lane, token, generation);
+                        }
                         if reusable && current { s.idle.entry(endpoint).or_default().push(returned_session.take().unwrap()); }
                     }
                     let retiring = returned_session.is_some();

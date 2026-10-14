@@ -8,6 +8,8 @@ pub const HEAD_REVISION: &str = "5bf3c2dc676efd5c4b4526eb135c922701565707";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coverage {
+    TypedUpload,
+    FiniteAndUpload,
     TypedFinite,
     FiniteSubsetUploadDeferred,
     UploadDeferred,
@@ -169,9 +171,9 @@ pub const CAPABILITIES: &[Capability] = &[
     ),
     stable!(
         "run",
-        UploadDeferred,
+        TypedUpload,
         UploadConversation,
-        "RunOutput decoder only; empty input also requires shared accumulator exclusion"
+        "Bounded stdin, first-chunk handshake and buffered async RunOutput; empty input shares exclusion lane"
     ),
     Capability {
         name: "screenshot",
@@ -207,9 +209,9 @@ pub const CAPABILITIES: &[Capability] = &[
     ),
     stable!(
         "set-background-image",
-        FiniteSubsetUploadDeferred,
-        Terminal,
-        "Removal/index only; PNG upload deferred"
+        FiniteAndUpload,
+        UploadConversation,
+        "Finite removal/index plus bounded 512-byte PNG conversation"
     ),
     stable!(
         "set-background-opacity",
@@ -269,9 +271,9 @@ pub const CAPABILITIES: &[Capability] = &[
     ),
     stable!(
         "set-window-logo",
-        FiniteSubsetUploadDeferred,
-        Terminal,
-        "Removal only; PNG upload deferred"
+        FiniteAndUpload,
+        UploadConversation,
+        "Finite removal plus bounded 2048-byte PNG conversation"
     ),
     stable!(
         "set-window-title",

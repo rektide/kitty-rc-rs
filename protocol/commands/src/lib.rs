@@ -5,7 +5,7 @@
 //! [`PlainRequest`](kitty_rc_schema::PlainRequest) and its typed output
 //! decoding runs only after the remote outcome has been validated. It
 //! implements audited domain families rather than drifted legacy builders.
-//! Upload execution is deliberately deferred. New commands follow this
+//! Dedicated bounded-source upload profiles live in [`upload`]. New commands follow this
 //! pattern against upstream-derived fixtures, never by treating an old
 //! serializer as an oracle.
 //!
@@ -38,6 +38,7 @@ pub mod outputs;
 pub mod process;
 pub mod tab;
 pub mod targets;
+pub mod upload;
 pub mod window;
 
 use kitty_rc_schema::{PlainRequest, ResponseEnvelope, ResponseKind};
@@ -75,6 +76,10 @@ pub trait Command: Send + 'static {
     fn class(&self) -> Class;
     fn mode(&self) -> Mode {
         Mode::Reply
+    }
+    /// Audited uploads require the dedicated bounded-source execution entrance.
+    fn is_upload(&self) -> bool {
+        false
     }
     /// Only audited single-terminal-reply profiles opt into sequential reuse.
     fn reusable(&self) -> bool {

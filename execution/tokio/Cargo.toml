@@ -10,3 +10,8 @@ kitty-rc-endpoint.workspace = true
 kitty-rc-exchange.workspace = true
 kitty-rc-frame.workspace = true
 tokio.workspace = true
+kitty-rc-schema.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+base64.workspace = true

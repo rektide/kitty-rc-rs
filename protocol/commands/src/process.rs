@@ -1,6 +1,6 @@
 //! Launch and finite deferred screenshot profiles. Run output decoding is
-//! available independently; run execution awaits command-specific upload
-//! exclusion, including the empty-stdin case.
+//! available independently; [`crate::upload::Run`] binds it to a bounded upload
+//! conversation, including the empty-stdin shared-accumulator case.
 use crate::targets::{Assignment, Finite, ServerPath, TabTarget, WindowId};
 use crate::{CanSubmitWithoutReply, Class, Command, DecodeError, Mode, request};
 use base64::{Engine, engine::general_purpose::STANDARD};

@@ -1,4 +1,5 @@
 //! Preparation and evidence vocabulary independent of a transport/runtime.
+mod upload;
 use kitty_rc_commands::{Command, Mode};
 use kitty_rc_endpoint::Address;
 use kitty_rc_endpoint::Protection;
@@ -7,6 +8,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering},
 };
+pub use upload::{PreparedUpload, prepare_upload};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Progress {
@@ -18,8 +20,22 @@ pub enum Progress {
 pub struct Evidence {
     progress: Arc<AtomicU8>,
     phase: Arc<AtomicU8>,
+    upload: Arc<AtomicU8>,
 }
 impl Evidence {
+    pub fn stream_acknowledged(&self) -> bool {
+        self.upload.load(Ordering::SeqCst) & 1 != 0
+    }
+    pub fn acknowledge_stream(&self) {
+        self.upload.fetch_or(1, Ordering::SeqCst);
+    }
+    /// Locally written EOF marker, not proof of accumulator cleanup.
+    pub fn input_complete(&self) -> bool {
+        self.upload.load(Ordering::SeqCst) & 2 != 0
+    }
+    pub fn complete_input(&self) {
+        self.upload.fetch_or(2, Ordering::SeqCst);
+    }
     pub fn progress(&self) -> Progress {
         match self.progress.load(Ordering::SeqCst) {
             0 => Progress::NotWritten,
@@ -43,6 +59,10 @@ impl Evidence {
             3 => Phase::IdleCheck,
             4 => Phase::Write,
             5 => Phase::Read,
+            6 => Phase::Source,
+            7 => Phase::Handshake,
+            8 => Phase::Upload,
+            9 => Phase::EndInput,
             _ => Phase::Queue,
         }
     }
@@ -89,6 +109,10 @@ impl Outcome {
     pub fn retained_bytes(&self) -> usize {
         match self {
             Self::Reply(b) => b.len(),
+            Self::Interrupted {
+                reason: ExecutionError::UploadResponse { native, .. },
+                ..
+            } => native.capacity().saturating_add(256),
             Self::Interrupted { .. } => 256,
             Self::Submitted => 0,
         }
@@ -229,9 +253,21 @@ pub enum Phase {
     IdleCheck = 3,
     Write = 4,
     Read = 5,
+    Source = 6,
+    Handshake = 7,
+    Upload = 8,
+    EndInput = 9,
 }
 #[derive(Debug, thiserror::Error)]
 pub enum ExecutionError {
+    #[error("upload source failed: {0}")]
+    Source(#[source] std::io::Error),
+    #[error("upload exceeds configured total byte limit")]
+    UploadLimit,
+    #[error("input does not begin with a PNG signature")]
+    InvalidPng,
+    #[error("invalid upload response during {phase:?}")]
+    UploadResponse { phase: Phase, native: Vec<u8> },
     #[error("{phase:?} I/O at {endpoint:?}: {source}")]
     Io {
         endpoint: Address,
@@ -258,6 +294,10 @@ pub enum ExecutionError {
 }
 #[derive(Debug, thiserror::Error)]
 pub enum PrepareError {
+    #[error("upload requires the dedicated bounded-source entrance")]
+    UploadEntrance,
+    #[error("invalid upload metadata or response mode")]
+    UploadProfile,
     #[error("finite command supplied executor-owned envelope flags")]
     Flags,
     #[error("request or protected expansion exceeds byte limit")]
@@ -289,7 +329,25 @@ pub fn prepare<C: Command>(
     protection: &Protection,
     max_request: usize,
 ) -> Result<Prepared, PrepareError> {
+    if command.is_upload() {
+        return Err(PrepareError::UploadEntrance);
+    }
     let mut r = command.request();
+    // A raw/custom finite constructor cannot disguise an accumulator upload,
+    // especially run's empty-input path, as an ordinary one-frame command.
+    if r.cmd == "run"
+        || (matches!(r.cmd.as_str(), "set-background-image" | "set-window-logo")
+            && !r
+                .payload
+                .as_ref()
+                .and_then(|p| p.get("data"))
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|data| {
+                    data == "-" || (r.cmd == "set-background-image" && data.starts_with("index:"))
+                }))
+    {
+        return Err(PrepareError::UploadEntrance);
+    }
     if r.stream.is_some() || r.stream_id.is_some() || r.r#async.is_some() || r.no_response.is_some()
     {
         return Err(PrepareError::Flags);
@@ -301,6 +359,16 @@ pub fn prepare<C: Command>(
     if mode == Mode::SubmissionOnly {
         r.no_response = Some(true);
     }
+    prepare_request(r, mode, command.reusable(), protection, max_request)
+}
+
+pub(crate) fn prepare_request(
+    r: kitty_rc_schema::PlainRequest,
+    mode: Mode,
+    reusable: bool,
+    protection: &Protection,
+    max_request: usize,
+) -> Result<Prepared, PrepareError> {
     // A bounded writer rejects oversized input without first building an
     // oversized serialized copy. Caller-supplied Command::request is synchronous.
     struct Limited {
@@ -358,7 +426,7 @@ pub fn prepare<C: Command>(
     Ok(Prepared {
         bytes: plain,
         mode,
-        reusable: command.reusable(),
+        reusable,
         scratch_factor: if matches!(protection, Protection::Plain) {
             3
         } else {
