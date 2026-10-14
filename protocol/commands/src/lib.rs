@@ -33,6 +33,15 @@ pub enum Mode {
     Deferred,
     SubmissionOnly,
 }
+#[derive(Debug, thiserror::Error)]
+pub enum DecodeError {
+    #[error("required command data missing or invalid")]
+    MissingData,
+    #[error("typed JSON data decode failed: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("custom command decoder failed: {0}")]
+    Custom(#[source] Box<dyn std::error::Error + Send + Sync>),
+}
 
 /// Commands bind their output decoder and finite wire conversation.
 /// Decoders receive only a classified success's data, never a remote error.
@@ -43,10 +52,17 @@ pub trait Command: Send + 'static {
     fn mode(&self) -> Mode {
         Mode::Reply
     }
-    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, String>;
+    /// Only audited single-terminal-reply profiles opt into sequential reuse.
+    fn reusable(&self) -> bool {
+        false
+    }
+    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, DecodeError>;
 }
 
 impl Command for Ls {
+    fn reusable(&self) -> bool {
+        true
+    }
     type Output = Vec<OsWindow>;
     fn request(&self) -> PlainRequest {
         self.to_request()
@@ -54,8 +70,10 @@ impl Command for Ls {
     fn class(&self) -> Class {
         Class::Observation
     }
-    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, String> {
-        outputs::parse_ls_data(&data.ok_or("ls reply carried no data")?).map_err(|e| e.to_string())
+    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, DecodeError> {
+        Ok(outputs::parse_ls_data(
+            &data.ok_or(DecodeError::MissingData)?,
+        )?)
     }
 }
 
@@ -77,6 +95,9 @@ pub struct GetText {
     pub extent: TextExtent,
 }
 impl Command for GetText {
+    fn reusable(&self) -> bool {
+        true
+    }
     type Output = String;
     fn request(&self) -> PlainRequest {
         let mut r = PlainRequest::new("get-text");
@@ -88,7 +109,7 @@ impl Command for GetText {
     fn class(&self) -> Class {
         Class::Observation
     }
-    fn decode(data: Option<serde_json::Value>) -> Result<String, String> {
+    fn decode(data: Option<serde_json::Value>) -> Result<String, DecodeError> {
         decode_string(data)
     }
 }
@@ -99,6 +120,9 @@ pub struct FocusWindow {
     pub match_spec: String,
 }
 impl Command for FocusWindow {
+    fn reusable(&self) -> bool {
+        true
+    }
     type Output = ();
     fn request(&self) -> PlainRequest {
         let mut r = PlainRequest::new("focus-window");
@@ -108,7 +132,7 @@ impl Command for FocusWindow {
     fn class(&self) -> Class {
         Class::Short
     }
-    fn decode(_: Option<serde_json::Value>) -> Result<(), String> {
+    fn decode(_: Option<serde_json::Value>) -> Result<(), DecodeError> {
         Ok(())
     }
 }
@@ -120,6 +144,9 @@ pub struct LaunchWait {
     pub args: Vec<String>,
 }
 impl Command for LaunchWait {
+    fn reusable(&self) -> bool {
+        true
+    }
     type Output = String;
     fn request(&self) -> PlainRequest {
         let mut r = PlainRequest::new("launch");
@@ -134,15 +161,15 @@ impl Command for LaunchWait {
     fn mode(&self) -> Mode {
         Mode::Deferred
     }
-    fn decode(data: Option<serde_json::Value>) -> Result<String, String> {
+    fn decode(data: Option<serde_json::Value>) -> Result<String, DecodeError> {
         decode_string(data)
     }
 }
 
-fn decode_string(data: Option<serde_json::Value>) -> Result<String, String> {
+fn decode_string(data: Option<serde_json::Value>) -> Result<String, DecodeError> {
     match data {
         Some(serde_json::Value::String(s)) => Ok(s),
-        _ => Err("required string data missing or invalid".into()),
+        _ => Err(DecodeError::MissingData),
     }
 }
 
@@ -172,7 +199,7 @@ impl Command for RawFinite {
             Mode::Reply
         }
     }
-    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, String> {
+    fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, DecodeError> {
         Ok(data)
     }
 }

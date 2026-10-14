@@ -13,4 +13,8 @@ kitty-rc-endpoint.workspace = true
 kitty-rc-frame.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 rand_core.workspace = true
+
+[dev-dependencies]
+base85.workspace = true

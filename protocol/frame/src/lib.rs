@@ -48,6 +48,8 @@ pub enum FrameError {
 
     #[error("decoder retention budget exhausted")]
     RetentionFull,
+    #[error("decoder is not at an empty reusable boundary")]
+    NotIdle,
 }
 
 /// Encode one complete frame around `payload`.
@@ -84,6 +86,20 @@ pub struct FrameDecoder {
 }
 
 impl FrameDecoder {
+    pub fn reconfigure(
+        &mut self,
+        max_payload: usize,
+        max_retained: usize,
+        max_frames: usize,
+    ) -> Result<(), FrameError> {
+        if !self.is_idle() {
+            return self.poison(FrameError::NotIdle);
+        }
+        self.max_payload = max_payload;
+        self.max_retained = max_retained;
+        self.max_frames = max_frames;
+        Ok(())
+    }
     /// Create a decoder that accepts payloads of at most `max_payload` bytes.
     pub fn new(max_payload: usize) -> Self {
         Self::with_limits(max_payload, max_payload.saturating_mul(2), 2)
@@ -210,6 +226,20 @@ impl FrameDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_an_empty_boundary_can_change_limits_for_sequential_reuse() {
+        let mut decoder = FrameDecoder::new(8);
+        decoder.extend(&frame(b"abc")).unwrap();
+        assert_eq!(decoder.reconfigure(16, 16, 1), Err(FrameError::NotIdle));
+        assert_eq!(decoder.next_frame(), Err(FrameError::NotIdle));
+        let mut decoder = FrameDecoder::new(8);
+        decoder.extend(&frame(b"abc")).unwrap();
+        decoder.next_frame().unwrap();
+        decoder.reconfigure(16, 16, 1).unwrap();
+        decoder.extend(&frame(b"more than eight")).unwrap();
+        assert_eq!(decoder.next_frame().unwrap().unwrap(), b"more than eight");
+    }
 
     #[test]
     fn exact_limit_split_suffix_and_poisoned_eof() {

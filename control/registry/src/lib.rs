@@ -8,7 +8,11 @@
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use kitty_rc_commands::{Class, Command};
 use kitty_rc_endpoint::Endpoint;
-use kitty_rc_exchange::{Completion, Evidence, Failure, Outcome, Prepared, Progress, prepare};
+use kitty_rc_exchange::{
+    Completion, Evidence, ExecutionError, Failure, Outcome, Phase, PrepareError, Prepared,
+    Progress, prepare,
+};
+use kitty_rc_tokio::Session;
 use std::{
     collections::BTreeMap,
     marker::PhantomData,
@@ -49,10 +53,11 @@ pub struct Limits {
     /// Includes queued, running, and retained completed records.
     pub accepted: usize,
     pub accepted_per_endpoint: usize,
-    /// Active sockets plus connecting attempts, which each own one slot.
+    /// Idle + active sockets + connecting attempts; each owns one slot.
     pub connections: usize,
     pub connections_per_endpoint: usize,
-    /// Strict partitions [short, observation, long-wait]; no borrowing.
+    /// Strict active/connecting partitions [short, observation, long-wait].
+    /// Compatible idle sessions can serve any class without borrowing its quota.
     pub class_connections: [usize; 3],
     pub class_connections_per_endpoint: [usize; 3],
     pub input_bytes: usize,
@@ -101,9 +106,55 @@ pub struct Summary {
     pub unresolved: bool,
 }
 #[derive(Debug)]
+pub struct PoolStats {
+    pub idle: usize,
+    pub active_or_connecting: usize,
+    pub endpoints: BTreeMap<EndpointId, (usize, usize)>,
+    pub idle_tokens: BTreeMap<EndpointId, Vec<kitty_rc_tokio::ConnectionToken>>,
+}
+#[derive(Debug)]
 pub struct Refused<C> {
     pub command: C,
-    pub reason: String,
+    pub reason: RefusalReason,
+}
+#[derive(Debug, thiserror::Error)]
+pub enum RefusalReason {
+    #[error("intake closed")]
+    Closed,
+    #[error("foreign submission token")]
+    ForeignToken,
+    #[error("response reservation must be at least 256 bytes")]
+    ResponseReservation,
+    #[error("unknown endpoint")]
+    UnknownEndpoint,
+    #[error("token already accepted")]
+    AlreadyAccepted,
+    #[error("deadline elapsed before acceptance")]
+    Deadline,
+    #[error("accepted-record quota full")]
+    AcceptedCapacity,
+    #[error("input-byte quota full")]
+    InputCapacity,
+    #[error("output-retention quota full")]
+    OutputCapacity,
+    #[error("submission occurrence already committed")]
+    Committed,
+    #[error("preparation failed: {0}")]
+    Prepare(#[from] PrepareError),
+}
+#[derive(Debug, thiserror::Error)]
+pub enum CustodyError {
+    #[error("unknown or released operation")]
+    Missing,
+    #[error("operation unfinished or result already taken")]
+    Unavailable,
+    #[error("operation unfinished")]
+    Unfinished,
+}
+#[derive(Debug, thiserror::Error)]
+pub enum ShutdownError {
+    #[error("driver stopped with unfinished work; retained inventory has {} operations", inventory.len())]
+    DriverStopped { inventory: Vec<Summary> },
 }
 
 struct Record {
@@ -129,6 +180,7 @@ struct State {
     driver: bool,
     generation: u64,
     cursor: Option<EndpointId>,
+    idle: BTreeMap<EndpointId, Vec<Session>>,
 }
 struct Shared {
     owner: u64,
@@ -143,6 +195,44 @@ pub struct Registry {
     shared: Arc<Shared>,
 }
 impl Registry {
+    pub fn pool_stats(&self) -> PoolStats {
+        let s = self.shared.state.lock().unwrap();
+        let endpoints: BTreeMap<_, _> = s
+            .endpoints
+            .keys()
+            .map(|&id| {
+                (
+                    id,
+                    (
+                        s.idle.get(&id).map_or(0, Vec::len),
+                        s.records
+                            .values()
+                            .filter(|r| r.endpoint == id && r.status == Status::Running)
+                            .count(),
+                    ),
+                )
+            })
+            .collect();
+        let idle_tokens = s
+            .idle
+            .iter()
+            .map(|(&id, sessions)| {
+                (
+                    id,
+                    sessions
+                        .iter()
+                        .filter_map(Session::connection_token)
+                        .collect(),
+                )
+            })
+            .collect();
+        PoolStats {
+            idle: endpoints.values().map(|(idle, _)| idle).sum(),
+            active_or_connecting: endpoints.values().map(|(_, active)| active).sum(),
+            endpoints,
+            idle_tokens,
+        }
+    }
     pub fn new(limits: Limits) -> Result<Self, String> {
         if limits.class_connections.iter().sum::<usize>() > limits.connections
             || limits.class_connections_per_endpoint.iter().sum::<usize>()
@@ -167,6 +257,7 @@ impl Registry {
                     driver: false,
                     generation: 0,
                     cursor: None,
+                    idle: BTreeMap::new(),
                 }),
                 wake: Notify::new(),
                 lifecycle: Notify::new(),
@@ -251,25 +342,25 @@ impl Registry {
             .cloned();
         let prepared = (|| {
             if token.owner != self.shared.owner {
-                return Err("foreign submission token".into());
+                return Err(RefusalReason::ForeignToken);
             }
             if options.max_response < 256 {
-                return Err("response reservation must be at least 256 bytes".into());
+                return Err(RefusalReason::ResponseReservation);
             }
-            let setup = setup.ok_or("unknown endpoint")?;
-            prepare(
-                &command,
-                &setup.protection,
-                format!("{}-{}", token.owner, token.sequence),
-                kitty_rc_tokio::timestamp_ns()?,
-                self.shared.limits.max_request,
-            )
+            let setup = setup.as_ref().ok_or(RefusalReason::UnknownEndpoint)?;
+            prepare(&command, &setup.protection, self.shared.limits.max_request)
+                .map_err(RefusalReason::Prepare)
         })();
         let input = match prepared {
             Ok(p) => p,
             Err(reason) => return Err(Refused { command, reason }),
         };
         let class = class_index(command.class());
+        let cause_bytes = match &setup.as_ref().unwrap().address {
+            kitty_rc_endpoint::Address::Unix(path) => path.as_os_str().as_encoded_bytes().len(),
+            kitty_rc_endpoint::Address::Tcp(_) => 32,
+        };
+        let output_reservation = options.max_response.saturating_add(cause_bytes);
         let mut state = self.shared.state.lock().unwrap();
         let l = &self.shared.limits;
         let records = state.records.values();
@@ -286,38 +377,35 @@ impl Registry {
             .map(|r| r.reservation)
             .sum::<usize>();
         let reason = if state.closed {
-            Some("intake closed")
+            Some(RefusalReason::Closed)
         } else if state.records.contains_key(&token) {
-            Some("token already accepted")
+            Some(RefusalReason::AlreadyAccepted)
         } else if options.deadline <= Instant::now() {
-            Some("deadline elapsed before acceptance")
+            Some(RefusalReason::Deadline)
         } else if state.records.len() >= l.accepted || ep_count >= l.accepted_per_endpoint {
-            Some("accepted-record quota full")
-        } else if input.bytes.len() > l.input_bytes.saturating_sub(input_total)
-            || input.bytes.len() > l.input_bytes_per_endpoint.saturating_sub(ep_input)
+            Some(RefusalReason::AcceptedCapacity)
+        } else if input.reservation_bytes() > l.input_bytes.saturating_sub(input_total)
+            || input.reservation_bytes() > l.input_bytes_per_endpoint.saturating_sub(ep_input)
         {
-            Some("input-byte quota full")
-        } else if options.max_response > l.output_bytes.saturating_sub(output_total)
-            || options.max_response > l.output_bytes_per_endpoint.saturating_sub(ep_output)
+            Some(RefusalReason::InputCapacity)
+        } else if output_reservation > l.output_bytes.saturating_sub(output_total)
+            || output_reservation > l.output_bytes_per_endpoint.saturating_sub(ep_output)
         {
-            Some("output-retention quota full")
+            Some(RefusalReason::OutputCapacity)
         } else {
             None
         };
         if let Some(reason) = reason {
-            return Err(Refused {
-                command,
-                reason: reason.into(),
-            });
+            return Err(Refused { command, reason });
         }
         if reservation.committed.swap(true, Ordering::SeqCst) {
             return Err(Refused {
                 command,
-                reason: "submission occurrence already committed".into(),
+                reason: RefusalReason::Committed,
             });
         }
         let done = Arc::new(Notify::new());
-        let input_bytes = input.bytes.len();
+        let input_bytes = input.reservation_bytes();
         state.records.insert(
             token,
             Record {
@@ -327,7 +415,7 @@ impl Registry {
                 max_response: options.max_response,
                 input: Some(input),
                 input_bytes,
-                reservation: options.max_response,
+                reservation: output_reservation,
                 status: Status::Queued,
                 evidence: Evidence::default(),
                 outcome: None,
@@ -386,7 +474,9 @@ impl Registry {
                 r,
                 Outcome::Interrupted {
                     progress: Progress::NotWritten,
-                    reason: "queued cancellation".into(),
+                    reason: ExecutionError::Cancelled {
+                        phase: Phase::Queue,
+                    },
                 },
             ),
             Status::Running => r.cancel.notify_one(),
@@ -397,27 +487,27 @@ impl Registry {
         true
     }
     /// Explicitly release completed native output and its admission slot.
-    pub fn release(&self, token: Token) -> Result<(), String> {
+    pub fn release(&self, token: Token) -> Result<(), CustodyError> {
         let mut s = self.shared.state.lock().unwrap();
         match s.records.get(&token) {
             Some(r) if matches!(r.status, Status::Completed | Status::Taken) => {
                 s.records.remove(&token);
                 Ok(())
             }
-            Some(_) => Err("operation unfinished".into()),
-            None => Err("unknown operation".into()),
+            Some(_) => Err(CustodyError::Unfinished),
+            None => Err(CustodyError::Missing),
         }
     }
     /// Recover native evidence using the caller-known token, without typed decode.
-    pub fn take_native(&self, token: Token) -> Result<Outcome, String> {
+    pub fn take_native(&self, token: Token) -> Result<Outcome, CustodyError> {
         let mut state = self.shared.state.lock().unwrap();
-        let r = state.records.get_mut(&token).ok_or("unknown operation")?;
-        let outcome = r.outcome.take().ok_or("unfinished or already taken")?;
+        let r = state.records.get_mut(&token).ok_or(CustodyError::Missing)?;
+        let outcome = r.outcome.take().ok_or(CustodyError::Unavailable)?;
         r.status = Status::Taken;
         r.reservation = 0;
         Ok(outcome)
     }
-    pub async fn wait(&self, token: Token) -> Result<(), String> {
+    pub async fn wait(&self, token: Token) -> Result<(), CustodyError> {
         loop {
             let done = self
                 .shared
@@ -427,11 +517,11 @@ impl Registry {
                 .records
                 .get(&token)
                 .map(|r| r.done.clone())
-                .ok_or("unknown operation")?;
+                .ok_or(CustodyError::Missing)?;
             let notified = done.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            let status = self.summary(token).ok_or("released operation")?.status;
+            let status = self.summary(token).ok_or(CustodyError::Missing)?.status;
             if matches!(status, Status::Completed | Status::Taken) {
                 return Ok(());
             }
@@ -467,7 +557,7 @@ impl Registry {
     }
     /// Close intake, then deliberately drain or cancel. Drain needs an attached
     /// driver; return all unknown outcomes, not a false remote rollback claim.
-    pub async fn shutdown(&self, policy: Shutdown) -> Result<Vec<Summary>, String> {
+    pub async fn shutdown(&self, policy: Shutdown) -> Result<Vec<Summary>, ShutdownError> {
         self.close();
         if policy == Shutdown::Cancel {
             for s in self.inventory() {
@@ -476,13 +566,30 @@ impl Registry {
         }
         loop {
             let changed = self.shared.lifecycle.notified();
-            tokio::pin!(changed); changed.as_mut().enable();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
             let (attached, unfinished) = {
                 let s = self.shared.state.lock().unwrap();
-                (s.driver, s.records.values().any(|r| matches!(r.status, Status::Queued | Status::Running)))
+                (
+                    s.driver,
+                    s.records
+                        .values()
+                        .any(|r| matches!(r.status, Status::Queued | Status::Running)),
+                )
             };
-            if !unfinished { return Ok(self.inventory().into_iter().filter(|s| s.unresolved).collect()); }
-            if !attached { return Err("driver stopped with unfinished work; inventory remains available".into()); }
+            if !unfinished {
+                self.shared.state.lock().unwrap().idle.clear();
+                return Ok(self
+                    .inventory()
+                    .into_iter()
+                    .filter(|s| s.unresolved)
+                    .collect());
+            }
+            if !attached {
+                return Err(ShutdownError::DriverStopped {
+                    inventory: self.inventory(),
+                });
+            }
             changed.await;
         }
     }
@@ -501,7 +608,7 @@ impl<C: Command> Operation<C> {
     pub fn token(&self) -> Token {
         self.token
     }
-    pub async fn wait(&self) -> Result<(), String> {
+    pub async fn wait(&self) -> Result<(), CustodyError> {
         self.registry.wait(self.token).await
     }
     pub fn cancel(&self) -> bool {
@@ -512,10 +619,10 @@ impl<C: Command> Operation<C> {
     pub fn take(&self) -> Result<Completion<C::Output>, Failure> {
         self.registry
             .take_native(self.token)
-            .map_err(Failure::InvalidReply)?
+            .map_err(|e| Failure::Unavailable(Box::new(e)))?
             .decode::<C>()
     }
-    pub fn release(self) -> Result<(), String> {
+    pub fn release(self) -> Result<(), CustodyError> {
         self.registry.release(self.token)
     }
 }
@@ -556,7 +663,9 @@ impl Drop for DriverGuard {
                 r,
                 Outcome::Interrupted {
                     progress: r.evidence.progress(),
-                    reason: "driver stopped; never replayed".into(),
+                    reason: ExecutionError::DriverStopped {
+                        phase: r.evidence.phase(),
+                    },
                 },
             );
         }
@@ -572,15 +681,7 @@ fn class_index(c: Class) -> usize {
         Class::LongWait => 2,
     }
 }
-fn complete(r: &mut Record, mut outcome: Outcome) {
-    if let Outcome::Interrupted { reason, .. } = &mut outcome {
-        let mut end = reason.len().min(256);
-        while !reason.is_char_boundary(end) {
-            end -= 1;
-        }
-        reason.truncate(end);
-        reason.shrink_to_fit();
-    }
+fn complete(r: &mut Record, outcome: Outcome) {
     r.unresolved = outcome.unresolved();
     r.input = None;
     r.input_bytes = 0;
@@ -591,7 +692,8 @@ fn complete(r: &mut Record, mut outcome: Outcome) {
 }
 struct Work {
     token: Token,
-    endpoint: Endpoint,
+    endpoint_id: EndpointId,
+    session: Session,
     prepared: Prepared,
     deadline: Instant,
     max_response: usize,
@@ -609,7 +711,9 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
             r,
             Outcome::Interrupted {
                 progress: Progress::NotWritten,
-                reason: "queue deadline elapsed".into(),
+                reason: ExecutionError::Deadline {
+                    phase: Phase::Queue,
+                },
             },
         );
         shared.lifecycle.notify_waiters();
@@ -652,6 +756,26 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                 .map(|(token, _)| *token);
             if let Some(token) = token {
                 let setup = s.endpoints[&endpoint].clone();
+                let session =
+                    if let Some(session) = s.idle.get_mut(&endpoint).and_then(|idle| idle.pop()) {
+                        session
+                    } else {
+                        let idle_count = s.idle.values().map(Vec::len).sum::<usize>();
+                        if running.len() + idle_count >= l.connections {
+                            // Demand-driven capacity transfer, not TTL pruning.
+                            let victim = s
+                                .idle
+                                .iter()
+                                .find(|(_, sockets)| !sockets.is_empty())
+                                .map(|(id, _)| *id);
+                            if let Some(victim) = victim {
+                                s.idle.get_mut(&victim).unwrap().pop();
+                            } else {
+                                continue;
+                            }
+                        }
+                        Session::new(setup)
+                    };
                 s.cursor = Some(endpoint);
                 let r = s.records.get_mut(&token).unwrap();
                 r.status = Status::Running;
@@ -660,7 +784,8 @@ fn select(shared: &Shared, generation: u64) -> Option<Work> {
                 // Input byte quota stays reserved until the driving task returns.
                 return Some(Work {
                     token,
-                    endpoint: setup,
+                    endpoint_id: endpoint,
+                    session,
                     prepared,
                     deadline: r.deadline,
                     max_response: r.max_response,
@@ -680,15 +805,15 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
         let wake = shared.wake.notified();
         tokio::pin!(wake);
         wake.as_mut().enable();
-        while let Some(work) = select(&shared, generation) {
+        while let Some(mut work) = select(&shared, generation) {
             tasks.push(async move {
                 let evidence = work.evidence.clone();
                 let outcome = tokio::select! {
                     biased;
-                    _ = work.cancel.notified() => Outcome::Interrupted { progress: evidence.progress(), reason: "explicit cancellation".into() },
-                    outcome = kitty_rc_tokio::drive(&work.endpoint.address, work.prepared, work.deadline, work.max_response, work.evidence) => outcome,
+                    _ = work.cancel.notified() => Outcome::Interrupted { progress: evidence.progress(), reason: ExecutionError::Cancelled { phase: evidence.phase() } },
+                    outcome = work.session.execute_prepared(work.prepared, work.deadline, work.max_response, work.evidence) => outcome,
                 };
-                (work.token, outcome)
+                (work.token, work.endpoint_id, work.session, outcome)
             });
         }
         let next_deadline = shared
@@ -704,9 +829,10 @@ async fn driver_loop(shared: Arc<Shared>, generation: u64) {
             _ = &mut wake => {},
             _ = async { match next_deadline { Some(d) => tokio::time::sleep_until(d).await, None => std::future::pending().await } } => {},
             returned = tasks.next(), if !tasks.is_empty() => {
-                if let Some((token, outcome)) = returned {
+                if let Some((token, endpoint, session, outcome)) = returned {
+                        let idle = if session.is_connected() && matches!(&outcome, Outcome::Reply(_)) && !outcome.unresolved() { Some(session) } else { drop(session); None };
                         let mut s = shared.state.lock().unwrap();
-                        if let Some(r) = s.records.get_mut(&token) { if r.status == Status::Running && r.generation == generation { complete(r, outcome); } }
+                        if let Some(r) = s.records.get_mut(&token) { if r.status == Status::Running && r.generation == generation { complete(r, outcome); if let Some(session) = idle { s.idle.entry(endpoint).or_default().push(session); } } }
                         shared.lifecycle.notify_waiters();
                 }
             }

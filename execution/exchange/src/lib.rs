@@ -1,5 +1,6 @@
 //! Preparation and evidence vocabulary independent of a transport/runtime.
 use kitty_rc_commands::{Command, Mode};
+use kitty_rc_endpoint::Address;
 use kitty_rc_endpoint::Protection;
 use kitty_rc_schema::{ResponseEnvelope, ResponseKind};
 use std::sync::{
@@ -14,20 +15,36 @@ pub enum Progress {
     OutboundComplete,
 }
 #[derive(Clone, Default)]
-pub struct Evidence(Arc<AtomicU8>);
+pub struct Evidence {
+    progress: Arc<AtomicU8>,
+    phase: Arc<AtomicU8>,
+}
 impl Evidence {
     pub fn progress(&self) -> Progress {
-        match self.0.load(Ordering::SeqCst) {
+        match self.progress.load(Ordering::SeqCst) {
             0 => Progress::NotWritten,
             1 => Progress::WriteStarted,
             _ => Progress::OutboundComplete,
         }
     }
     pub fn write_started(&self) {
-        self.0.store(1, Ordering::SeqCst);
+        self.progress.store(1, Ordering::SeqCst);
     }
     pub fn outbound_complete(&self) {
-        self.0.store(2, Ordering::SeqCst);
+        self.progress.store(2, Ordering::SeqCst);
+    }
+    pub fn set_phase(&self, phase: Phase) {
+        self.phase.store(phase as u8, Ordering::SeqCst);
+    }
+    pub fn phase(&self) -> Phase {
+        match self.phase.load(Ordering::SeqCst) {
+            1 => Phase::Prepare,
+            2 => Phase::Connect,
+            3 => Phase::IdleCheck,
+            4 => Phase::Write,
+            5 => Phase::Read,
+            _ => Phase::Queue,
+        }
     }
 }
 
@@ -36,7 +53,10 @@ impl Evidence {
 pub enum Outcome {
     Reply(Vec<u8>),
     Submitted,
-    Interrupted { progress: Progress, reason: String },
+    Interrupted {
+        progress: Progress,
+        reason: ExecutionError,
+    },
 }
 impl Outcome {
     pub fn unresolved(&self) -> bool {
@@ -69,7 +89,7 @@ impl Outcome {
     pub fn retained_bytes(&self) -> usize {
         match self {
             Self::Reply(b) => b.len(),
-            Self::Interrupted { reason, .. } => reason.len(),
+            Self::Interrupted { .. } => 256,
             Self::Submitted => 0,
         }
     }
@@ -84,7 +104,7 @@ impl Outcome {
                     Ok(envelope) => envelope,
                     Err(e) => {
                         return Err(Failure::MalformedReply {
-                            error: e.to_string(),
+                            error: kitty_rc_schema::SchemaError::Json(e),
                             native: bytes,
                         });
                     }
@@ -93,7 +113,7 @@ impl Outcome {
                     Ok(kind) => kind,
                     Err(e) => {
                         return Err(Failure::MalformedReply {
-                            error: e.to_string(),
+                            error: e,
                             native: bytes,
                         });
                     }
@@ -104,7 +124,9 @@ impl Outcome {
                         native: bytes,
                     }),
                     ResponseKind::StreamAcknowledged => Err(Failure::MalformedReply {
-                        error: "unexpected stream acknowledgment".into(),
+                        error: kitty_rc_schema::SchemaError::InvalidEnvelope(
+                            "unexpected stream acknowledgment".into(),
+                        ),
                         native: bytes,
                     }),
                     ResponseKind::Success { data } => C::decode(data)
@@ -125,35 +147,139 @@ pub enum Completion<T> {
 }
 #[derive(Debug)]
 pub enum Failure {
-    Remote { error: String, native: Vec<u8> },
-    TypedDecode { error: String, native: Vec<u8> },
-    MalformedReply { error: String, native: Vec<u8> },
-    InvalidReply(String),
-    Interrupted { progress: Progress, reason: String },
+    Remote {
+        error: String,
+        native: Vec<u8>,
+    },
+    TypedDecode {
+        error: kitty_rc_commands::DecodeError,
+        native: Vec<u8>,
+    },
+    MalformedReply {
+        error: kitty_rc_schema::SchemaError,
+        native: Vec<u8>,
+    },
+    Unavailable(Box<dyn std::error::Error + Send + Sync>),
+    Prepare(PrepareError),
+    Interrupted {
+        progress: Progress,
+        reason: ExecutionError,
+    },
 }
 impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+        let text: &dyn std::fmt::Display = match self {
+            Self::Remote { error, .. } => error,
+            Self::TypedDecode { error, .. } => error,
+            Self::MalformedReply { error, .. } => error,
+            Self::Unavailable(error) => error,
+            Self::Prepare(error) => error,
+            Self::Interrupted { reason, .. } => reason,
+        };
+        struct Bounded<'a, 'b> {
+            f: &'a mut std::fmt::Formatter<'b>,
+            left: usize,
+        }
+        impl std::fmt::Write for Bounded<'_, '_> {
+            fn write_str(&mut self, value: &str) -> std::fmt::Result {
+                let mut end = value.len().min(self.left);
+                while !value.is_char_boundary(end) {
+                    end -= 1;
+                }
+                self.left -= end;
+                self.f.write_str(&value[..end])
+            }
+        }
+        let mut bounded = Bounded { f, left: 256 };
+        let category = match self { Self::Remote { .. } => "remote error", Self::TypedDecode { .. } => "typed decode", Self::MalformedReply { .. } => "malformed reply", Self::Unavailable(_) => "custody unavailable", Self::Prepare(_) => "prepare", Self::Interrupted { progress, .. } => return std::fmt::write(&mut bounded, format_args!("interrupted ({progress:?}): {text}")) };
+        std::fmt::write(&mut bounded, format_args!("{category}: {text}"))
     }
 }
-impl std::error::Error for Failure {}
+impl std::error::Error for Failure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Prepare(e) => Some(e),
+            Self::Unavailable(e) => Some(e.as_ref()),
+            Self::Interrupted { reason, .. } => Some(reason),
+            Self::TypedDecode { error, .. } => Some(error),
+            Self::MalformedReply { error, .. } => Some(error),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Phase {
+    Queue = 0,
+    Prepare = 1,
+    Connect = 2,
+    IdleCheck = 3,
+    Write = 4,
+    Read = 5,
+}
+#[derive(Debug, thiserror::Error)]
+pub enum ExecutionError {
+    #[error("{phase:?} I/O at {endpoint:?}: {source}")]
+    Io {
+        endpoint: Address,
+        phase: Phase,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("deadline elapsed during {phase:?}")]
+    Deadline { phase: Phase },
+    #[error("explicit operation cancellation during {phase:?}")]
+    Cancelled { phase: Phase },
+    #[error("driver stopped during {phase:?}; no replay")]
+    DriverStopped { phase: Phase },
+    #[error("framing error: {0}")]
+    Framing(#[from] kitty_rc_frame::FrameError),
+    #[error("unexplained surplus after terminal reply")]
+    Surplus,
+    #[error("EOF before terminal reply")]
+    Eof,
+    #[error("idle peer closed before write")]
+    IdleClosed,
+    #[error("preparation failed: {0}")]
+    Prepare(#[from] PrepareError),
+}
+#[derive(Debug, thiserror::Error)]
+pub enum PrepareError {
+    #[error("finite command supplied executor-owned envelope flags")]
+    Flags,
+    #[error("request or protected expansion exceeds byte limit")]
+    Limit,
+    #[error("JSON preparation failed: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("schema preparation failed: {0}")]
+    Schema(#[from] kitty_rc_schema::SchemaError),
+    #[error("request protection failed: {0}")]
+    Crypto(#[from] kitty_rc_crypto::CryptoError),
+    #[error("clock before Unix epoch: {0}")]
+    Clock(#[from] std::time::SystemTimeError),
+    #[error("timestamp overflow")]
+    TimestampOverflow,
+}
 
 /// Transport accepts only prepared bytes, never a command to encrypt again.
 pub struct Prepared {
-    pub bytes: Vec<u8>,
-    pub mode: Mode,
+    /// Immutable plaintext; no password/timestamp injected until first send.
+    bytes: Vec<u8>,
+    mode: Mode,
+    encoded_bound: usize,
+    reusable: bool,
+    scratch_factor: usize,
 }
 pub fn prepare<C: Command>(
     command: &C,
     protection: &Protection,
-    _async_id: String,
-    timestamp_ns: u64,
     max_request: usize,
-) -> Result<Prepared, String> {
+) -> Result<Prepared, PrepareError> {
     let mut r = command.request();
     if r.stream.is_some() || r.stream_id.is_some() || r.r#async.is_some() || r.no_response.is_some()
     {
-        return Err("finite command supplied executor-owned envelope flags".into());
+        return Err(PrepareError::Flags);
     }
     let mode = command.mode();
     if mode == Mode::Deferred {
@@ -162,31 +288,115 @@ pub fn prepare<C: Command>(
     if mode == Mode::SubmissionOnly {
         r.no_response = Some(true);
     }
-    let plain = r.to_json_bytes().map_err(|e| e.to_string())?;
-    if plain.len() > max_request {
-        return Err("request byte limit exceeded".into());
+    // A bounded writer rejects oversized input without first building an
+    // oversized serialized copy. Caller-supplied Command::request is synchronous.
+    struct Limited {
+        bytes: Vec<u8>,
+        limit: usize,
+        full: bool,
     }
-    let bytes = match protection {
-        Protection::Plain => plain,
-        Protection::Encrypted { key, password, .. } => serde_json::to_vec(
-            &kitty_rc_crypto::encrypt_request(
-                &r,
-                password,
-                timestamp_ns,
-                key,
-                &mut rand_core::OsRng,
-            )
-            .map_err(|_| "request protection failed")?,
-        )
-        .map_err(|e| e.to_string())?,
+    impl std::io::Write for Limited {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if bytes.len() > self.limit.saturating_sub(self.bytes.len()) {
+                self.full = true;
+                return Err(std::io::Error::other("request limit"));
+            }
+            if self.bytes.len() + bytes.len() > self.bytes.capacity() {
+                let desired = (self.bytes.capacity().max(64).saturating_mul(2))
+                    .max(self.bytes.len() + bytes.len())
+                    .min(self.limit);
+                self.bytes.reserve_exact(desired - self.bytes.len());
+            }
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut writer = Limited {
+        bytes: Vec::new(),
+        limit: max_request,
+        full: false,
     };
-    if bytes.len() > max_request {
-        return Err("protected request byte limit exceeded".into());
+    if let Err(error) = serde_json::to_writer(&mut writer, &r) {
+        return Err(if writer.full {
+            PrepareError::Limit
+        } else {
+            PrepareError::Json(error)
+        });
+    }
+    let plain = writer.bytes;
+    // JSON escaping is at most six bytes per password byte. Base85 expansion
+    // plus fixed nonce/key/tag/envelope fields is reserved before acceptance.
+    let encoded_bound = match protection {
+        Protection::Plain => plain.len(),
+        Protection::Encrypted { password, .. } => plain
+            .len()
+            .saturating_add(password.len().saturating_mul(6))
+            .saturating_add(128)
+            .div_ceil(4)
+            .saturating_mul(5)
+            .saturating_add(256),
+    };
+    if encoded_bound > max_request {
+        return Err(PrepareError::Limit);
     }
     Ok(Prepared {
-        bytes: kitty_rc_frame::frame(&bytes),
+        bytes: plain,
         mode,
+        reusable: command.reusable(),
+        scratch_factor: if matches!(protection, Protection::Plain) {
+            3
+        } else {
+            8
+        },
+        encoded_bound: encoded_bound
+            .saturating_add(kitty_rc_frame::PREFIX.len() + kitty_rc_frame::SUFFIX.len()),
     })
+}
+
+impl Prepared {
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+    pub fn reusable(&self) -> bool {
+        self.reusable
+    }
+    pub fn plaintext(&self) -> &[u8] {
+        &self.bytes
+    }
+    pub fn reservation_bytes(&self) -> usize {
+        self.bytes
+            .capacity()
+            .saturating_add(self.encoded_bound.saturating_mul(self.scratch_factor))
+    }
+    /// One first-send protection boundary, never a retry/re-encryption path.
+    pub fn protect(self, protection: &Protection) -> Result<Vec<u8>, PrepareError> {
+        let payload = match protection {
+            Protection::Plain => self.bytes,
+            Protection::Encrypted { key, password, .. } => {
+                let request = serde_json::from_slice(&self.bytes)?;
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_nanos()
+                    .try_into()
+                    .map_err(|_| PrepareError::TimestampOverflow)?;
+                serde_json::to_vec(&kitty_rc_crypto::encrypt_request(
+                    &request,
+                    password,
+                    timestamp,
+                    key,
+                    &mut rand_core::OsRng,
+                )?)?
+            }
+        };
+        let framed = kitty_rc_frame::frame(&payload);
+        if framed.len() > self.encoded_bound {
+            return Err(PrepareError::Limit);
+        }
+        Ok(framed)
+    }
 }
 
 /// Server-global async identity, independent of process-local operation IDs.
@@ -205,6 +415,81 @@ mod tests {
     fn independent_client_id_sequences_do_not_restart() {
         let first: Vec<_> = (0..64).map(|_| super::remote_request_id()).collect();
         let second: Vec<_> = (0..64).map(|_| super::remote_request_id()).collect();
-        assert!(first.iter().all(|id| id.len() == 64 && !second.contains(id)));
+        assert!(
+            first
+                .iter()
+                .all(|id| id.len() == 64 && !second.contains(id))
+        );
+    }
+
+    #[test]
+    fn plaintext_freeze_reserves_protection_expansion_without_sealing() {
+        let mut point = [0; 32];
+        point[0] = 9;
+        let key = kitty_rc_crypto::ServerPublicKey::parse(&format!("1:{}", base85::encode(&point)))
+            .unwrap();
+        let protection = kitty_rc_endpoint::Protection::Encrypted {
+            key,
+            password: "\0\u{0001}\"\\🦀".into(),
+            key_origin: "test".into(),
+        };
+        let prepared =
+            super::prepare(&kitty_rc_commands::Ls::default(), &protection, 4096).unwrap();
+        let frozen: serde_json::Value = serde_json::from_slice(prepared.plaintext()).unwrap();
+        assert!(frozen.get("password").is_none());
+        assert!(frozen.get("timestamp").is_none());
+        assert!(frozen.get("encrypted").is_none());
+        let bound = prepared.encoded_bound;
+        assert!(prepared.reservation_bytes() >= bound);
+        let framed = prepared.protect(&protection).unwrap();
+        assert!(framed.len() <= bound);
+        let envelope: serde_json::Value = serde_json::from_slice(
+            &framed[kitty_rc_frame::PREFIX.len()..framed.len() - kitty_rc_frame::SUFFIX.len()],
+        )
+        .unwrap();
+        assert!(envelope.get("encrypted").is_some());
+        assert!(envelope.get("cmd").is_none());
+    }
+
+    #[test]
+    fn custom_decoder_keeps_trait_object_cause_and_native_evidence() {
+        struct Custom;
+        impl kitty_rc_commands::Command for Custom {
+            type Output = Box<u8>;
+            fn request(&self) -> kitty_rc_schema::PlainRequest {
+                kitty_rc_schema::PlainRequest::new("custom")
+            }
+            fn class(&self) -> kitty_rc_commands::Class {
+                kitty_rc_commands::Class::Short
+            }
+            fn decode(
+                _: Option<serde_json::Value>,
+            ) -> Result<Self::Output, kitty_rc_commands::DecodeError> {
+                Err(kitty_rc_commands::DecodeError::Custom(Box::new(
+                    std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+                )))
+            }
+        }
+        let failure = super::Outcome::Reply(b"{\"ok\":true}".to_vec())
+            .decode::<Custom>()
+            .unwrap_err();
+        let cause = std::error::Error::source(&failure)
+            .unwrap()
+            .source()
+            .unwrap()
+            .downcast_ref::<std::io::Error>()
+            .unwrap();
+        assert_eq!(cause.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(
+            matches!(failure, super::Failure::TypedDecode { native, .. } if native == b"{\"ok\":true}")
+        );
+    }
+
+    #[test]
+    fn default_diagnostics_are_bounded_without_truncating_native_evidence() {
+        let error = "🦀".repeat(1024);
+        let failure = super::Failure::Remote { error: error.clone(), native: error.as_bytes().to_vec() };
+        let display = failure.to_string(); assert!(display.len() <= 256); assert!(display.starts_with("remote error:"));
+        assert!(matches!(failure, super::Failure::Remote { native, error } if native.len() == 4096 && error.len() == 4096));
     }
 }

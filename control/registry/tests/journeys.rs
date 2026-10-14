@@ -22,6 +22,7 @@ struct Fixture {
     seen: mpsc::Receiver<(String, Value)>,
     long: Arc<Semaphore>,
     text: Arc<Semaphore>,
+    accepts: Arc<AtomicUsize>,
 }
 impl Fixture {
     fn new(secret: Option<x25519_dalek::StaticSecret>) -> Self {
@@ -36,18 +37,23 @@ impl Fixture {
         let text = Arc::new(Semaphore::new(0));
         let (a, b) = (long.clone(), text.clone());
         let secret = secret.map(Arc::new);
+        let accepts = Arc::new(AtomicUsize::new(0));
+        let counted = accepts.clone();
+        let active = Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
         let task = tokio::spawn(async move {
             let mut children = JoinSet::new();
             loop {
                 tokio::select! {
                     connection = listener.accept() => {
                         let (mut socket, _) = connection.unwrap();
-                        let (tx, a, b, secret) = (tx.clone(), a.clone(), b.clone(), secret.clone());
+                        counted.fetch_add(1, Ordering::SeqCst);
+                        let (tx, a, b, secret, active) = (tx.clone(), a.clone(), b.clone(), secret.clone(), active.clone());
                         children.spawn(async move {
-                            let mut request = read_request(&mut socket).await;
-                            if let Some(secret) = secret {
+                            loop {
+                            let Some(mut request) = read_request(&mut socket).await else { return; };
+                            if let Some(secret) = &secret {
                                 let envelope = serde_json::from_value(request).unwrap();
-                                request = kitty_rc_crypto::decrypt_envelope(&envelope, &secret).unwrap();
+                                request = kitty_rc_crypto::decrypt_envelope(&envelope, secret).unwrap();
                             }
                             let cmd = request["cmd"].as_str().unwrap().to_owned();
                             if cmd == "get-text" {
@@ -59,7 +65,7 @@ impl Fixture {
                             } else {
                                 tx.send((cmd.clone(), request.clone())).await.unwrap();
                                 let response = match cmd.as_str() {
-                                    "launch" => { a.acquire().await.unwrap().forget(); json!({"ok": true, "data": "0"}) },
+                                    "launch" => { let id = request["async"].as_str().unwrap().to_owned(); active.lock().unwrap().insert(id.clone()); a.acquire().await.unwrap().forget(); if !active.lock().unwrap().remove(&id) { return; } json!({"ok": true, "data": "0"}) },
                                     "ls" => json!({"ok": true, "data": "[]"}),
                                     "remote-error" => json!({"ok": false, "error": "denied"}),
                                     "bad-text" => json!({"ok": true, "data": 42}),
@@ -69,7 +75,8 @@ impl Fixture {
                                     "trickle" => { for byte in kitty_rc_frame::frame(b"{\"ok\":true}") { if socket.write_all(&[byte]).await.is_err() { return; } tokio::time::sleep(Duration::from_millis(15)).await; } return; },
                                     _ => json!({"ok": true}),
                                 };
-                                let _ = socket.write_all(&kitty_rc_frame::frame(&serde_json::to_vec(&response).unwrap())).await;
+                                if socket.write_all(&kitty_rc_frame::frame(&serde_json::to_vec(&response).unwrap())).await.is_err() { return; }
+                            }
                             }
                         });
                     },
@@ -83,6 +90,7 @@ impl Fixture {
             seen,
             long,
             text,
+            accepts,
         }
     }
     fn endpoint(&self) -> Endpoint {
@@ -104,15 +112,17 @@ impl Drop for Fixture {
         let _ = std::fs::remove_file(&self.path);
     }
 }
-async fn read_request(socket: &mut UnixStream) -> Value {
+async fn read_request(socket: &mut UnixStream) -> Option<Value> {
     let mut decoder = kitty_rc_frame::FrameDecoder::new(10 * 1024 * 1024);
     let mut b = [0; 8192];
     loop {
         let n = socket.read(&mut b).await.unwrap();
-        assert!(n != 0);
+        if n == 0 {
+            return None;
+        }
         decoder.extend(&b[..n]).unwrap();
         if let Some(payload) = decoder.next_frame().unwrap() {
-            return serde_json::from_slice(&payload).unwrap();
+            return Some(serde_json::from_slice(&payload).unwrap());
         }
     }
 }
@@ -268,8 +278,8 @@ async fn admission_custody_byte_budgets_close_and_queued_cancel() {
     let limits = Limits {
         accepted: 2,
         accepted_per_endpoint: 2,
-        output_bytes: 512,
-        output_bytes_per_endpoint: 512,
+        output_bytes: 1024,
+        output_bytes_per_endpoint: 1024,
         ..Limits::default()
     };
     let registry = Registry::new(limits).unwrap();
@@ -423,7 +433,7 @@ async fn native_remote_error_decode_failure_submission_only_and_surplus() {
         fn class(&self) -> Class {
             Class::Short
         }
-        fn decode(data: Option<Value>) -> Result<String, String> {
+        fn decode(data: Option<Value>) -> Result<String, kitty_rc_commands::DecodeError> {
             <GetText as Command>::decode(data)
         }
     }
@@ -470,7 +480,7 @@ impl Command for NonCloneCommand {
     fn class(&self) -> Class {
         Class::Short
     }
-    fn decode(_: Option<Value>) -> Result<Self::Output, String> {
+    fn decode(_: Option<Value>) -> Result<Self::Output, kitty_rc_commands::DecodeError> {
         DECODES.fetch_add(1, Ordering::SeqCst);
         Ok(NonCloneOutput(Box::new(9)))
     }
@@ -561,6 +571,7 @@ async fn direct_future_drop_retires_transport() {
             .unwrap(),
         Completion::Reply(())
     ));
+    assert_eq!(fixture.accepts.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
@@ -573,8 +584,8 @@ async fn cancellation_through_real_partial_unix_write_retires_socket() {
     let listener = UnixListener::bind(&path).unwrap();
     let registry = Registry::new(Limits {
         max_request: 6 * 1024 * 1024,
-        input_bytes: 6 * 1024 * 1024,
-        input_bytes_per_endpoint: 6 * 1024 * 1024,
+        input_bytes: 32 * 1024 * 1024,
+        input_bytes_per_endpoint: 32 * 1024 * 1024,
         ..Limits::default()
     })
     .unwrap();
@@ -617,8 +628,8 @@ async fn cancellation_through_real_partial_unix_write_retires_socket() {
 async fn concurrent_shared_submit_and_independent_input_retention_quotas() {
     let fixture = Fixture::new(None);
     let registry = Registry::new(Limits {
-        output_bytes: 256,
-        output_bytes_per_endpoint: 256,
+        output_bytes: 512,
+        output_bytes_per_endpoint: 512,
         ..Limits::default()
     })
     .unwrap();
@@ -655,14 +666,14 @@ async fn concurrent_shared_submit_and_independent_input_retention_quotas() {
     })
     .unwrap();
     let ep = tight.register(fixture.endpoint()).unwrap();
-    assert!(
+    assert!(matches!(
         tight
             .submit(&tight.reserve(), ep, focus(), opts)
             .err()
             .unwrap()
-            .reason
-            .contains("input-byte")
-    );
+            .reason,
+        kitty_rc_registry::RefusalReason::InputCapacity
+    ));
 }
 
 #[tokio::test]
@@ -688,13 +699,383 @@ async fn driver_stop_after_drain_started_returns_instead_of_hanging() {
     let registry = Registry::new(Limits::default()).unwrap();
     let ep = registry.register(fixture.endpoint()).unwrap();
     let driver = registry.start().unwrap();
-    let running = registry.submit(&registry.reserve(), ep, launch(), options()).unwrap();
+    let running = registry
+        .submit(&registry.reserve(), ep, launch(), options())
+        .unwrap();
     fixture.next().await;
-    let queued = registry.submit(&registry.reserve(), ep, launch(), options()).unwrap();
+    let queued = registry
+        .submit(&registry.reserve(), ep, launch(), options())
+        .unwrap();
     let mut drain = Box::pin(registry.shutdown(Shutdown::Drain));
     tokio::select! { result = &mut drain => panic!("premature {result:?}"), _ = tokio::task::yield_now() => {} }
     driver.stop().await;
-    assert!(timeout(Duration::from_secs(1), drain).await.unwrap().is_err());
+    assert!(
+        timeout(Duration::from_secs(1), drain)
+            .await
+            .unwrap()
+            .is_err()
+    );
     assert!(registry.summary(running.token()).unwrap().unresolved);
-    assert_eq!(registry.summary(queued.token()).unwrap().status, Status::Queued);
+    assert_eq!(
+        registry.summary(queued.token()).unwrap().status,
+        Status::Queued
+    );
+}
+
+#[tokio::test]
+async fn direct_and_managed_sequential_audited_commands_reuse_one_connection() {
+    let fixture = Fixture::new(None);
+    let mut direct = kitty_rc_tokio::Session::new(fixture.endpoint());
+    for _ in 0..4 {
+        assert!(
+            matches!(direct.execute(Ls::default(), options().deadline, 4096, 4096).await.unwrap(), Completion::Reply(v) if v.is_empty())
+        );
+    }
+    assert_eq!(fixture.accepts.load(Ordering::SeqCst), 1);
+    drop(direct);
+    let registry = Registry::new(Limits::default()).unwrap();
+    let ep = registry.register(fixture.endpoint()).unwrap();
+    let driver = registry.start().unwrap();
+    for _ in 0..4 {
+        let listing = registry
+            .submit(&registry.reserve(), ep, Ls::default(), options())
+            .unwrap();
+        listing.wait().await.unwrap();
+        listing.take().unwrap();
+        listing.release().unwrap();
+        let action = registry
+            .submit(&registry.reserve(), ep, focus(), options())
+            .unwrap();
+        action.wait().await.unwrap();
+        action.take().unwrap();
+        action.release().unwrap();
+        assert_eq!(registry.pool_stats().idle, 1);
+        assert_eq!(registry.pool_stats().active_or_connecting, 0);
+    }
+    assert_eq!(fixture.accepts.load(Ordering::SeqCst), 2); // one per entrance
+    driver.stop().await;
+    assert_eq!(registry.pool_stats().idle, 1); // registry, not driver, owns idle
+    let replacement = registry.start().unwrap();
+    let action = registry
+        .submit(&registry.reserve(), ep, focus(), options())
+        .unwrap();
+    action.wait().await.unwrap();
+    action.take().unwrap();
+    assert_eq!(fixture.accepts.load(Ordering::SeqCst), 2);
+    registry.shutdown(Shutdown::Drain).await.unwrap();
+    assert_eq!(registry.pool_stats().idle, 0);
+    replacement.stop().await;
+}
+
+#[tokio::test]
+async fn independent_registries_have_distinct_remote_ids_and_async_replies() {
+    let mut fixture = Fixture::new(None);
+    let a = Registry::new(Limits::default()).unwrap();
+    let b = Registry::new(Limits::default()).unwrap();
+    let ea = a.register(fixture.endpoint()).unwrap();
+    let eb = b.register(fixture.endpoint()).unwrap();
+    let da = a.start().unwrap();
+    let db = b.start().unwrap();
+    let aa = a.submit(&a.reserve(), ea, launch(), options()).unwrap();
+    let ba = b.submit(&b.reserve(), eb, launch(), options()).unwrap();
+    let (_, first) = fixture.next().await;
+    let (_, second) = fixture.next().await;
+    assert_ne!(first["async"], second["async"]);
+    assert_eq!(first["async"].as_str().unwrap().len(), 64);
+    fixture.long.add_permits(2);
+    aa.wait().await.unwrap();
+    ba.wait().await.unwrap();
+    assert!(matches!(aa.take().unwrap(), Completion::Reply(v) if v == "0"));
+    assert!(matches!(ba.take().unwrap(), Completion::Reply(v) if v == "0"));
+    da.stop().await;
+    db.stop().await;
+}
+
+#[tokio::test]
+async fn queued_encrypted_input_uses_first_send_timestamp_not_admission_timestamp() {
+    let secret = x25519_dalek::StaticSecret::from([43; 32]);
+    let public = x25519_dalek::PublicKey::from(&secret);
+    let key = kitty_rc_crypto::ServerPublicKey::parse(&format!(
+        "1:{}",
+        base85::encode(public.as_bytes())
+    ))
+    .unwrap();
+    let mut fixture = Fixture::new(Some(secret));
+    let mut endpoint = fixture.endpoint();
+    endpoint.protection = Protection::Encrypted {
+        key,
+        password: "fresh-first-send".into(),
+        key_origin: "fixture".into(),
+    };
+    let registry = Registry::new(Limits::default()).unwrap();
+    let ep = registry.register(endpoint).unwrap();
+    let driver = registry.start().unwrap();
+    let block = registry
+        .submit(&registry.reserve(), ep, GetText::default(), options())
+        .unwrap();
+    fixture.next().await;
+    let queued = registry
+        .submit(&registry.reserve(), ep, Ls::default(), options())
+        .unwrap();
+    assert_eq!(
+        registry.summary(queued.token()).unwrap().status,
+        Status::Queued
+    );
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    let first_send_floor = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    fixture.text.add_permits(1);
+    let (_, actual) = fixture.next().await;
+    assert!(actual["timestamp"].as_u64().unwrap() >= first_send_floor);
+    assert_eq!(actual["password"], "fresh-first-send");
+    block.wait().await.unwrap();
+    queued.wait().await.unwrap();
+    queued.take().unwrap();
+    assert_eq!(fixture.accepts.load(Ordering::SeqCst), 1);
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn structured_connect_and_preparation_errors_keep_sources_and_stage() {
+    let endpoint = Endpoint {
+        address: Address::Unix("/tmp/opencode/no-such-kitty-socket-for-cause-test".into()),
+        protection: Protection::Plain,
+    };
+    let registry = Registry::new(Limits::default()).unwrap();
+    let ep = registry.register(endpoint).unwrap();
+    let driver = registry.start().unwrap();
+    let op = registry
+        .submit(&registry.reserve(), ep, focus(), options())
+        .unwrap();
+    op.wait().await.unwrap();
+    let error = op.take().unwrap_err();
+    assert!(
+        std::error::Error::source(&error)
+            .unwrap()
+            .source()
+            .is_some()
+    );
+    match error {
+        Failure::Interrupted {
+            progress: Progress::NotWritten,
+            reason:
+                kitty_rc_exchange::ExecutionError::Io {
+                    phase: kitty_rc_exchange::Phase::Connect,
+                    source,
+                    ..
+                },
+        } => assert_eq!(source.kind(), std::io::ErrorKind::NotFound),
+        other => panic!("{other:?}"),
+    }
+    let too_large = RawFinite {
+        payload: json!({"data": "x".repeat(300 * 1024)}),
+        ..raw("oversize")
+    };
+    assert!(matches!(
+        registry
+            .submit(&registry.reserve(), ep, too_large, options())
+            .err()
+            .unwrap()
+            .reason,
+        kitty_rc_registry::RefusalReason::Prepare(kitty_rc_exchange::PrepareError::Limit)
+    ));
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn closed_idle_peer_is_not_replayed_and_reconnect_is_a_new_operation() {
+    let path = std::path::PathBuf::from(format!(
+        "/tmp/opencode/kitty-rc-idle-{}-{}.sock",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let listener = UnixListener::bind(&path).unwrap();
+    let (closed_tx, closed_rx) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut first, _) = listener.accept().await.unwrap();
+        read_request(&mut first).await.unwrap();
+        first
+            .write_all(&kitty_rc_frame::frame(b"{\"ok\":true,\"data\":\"[]\"}"))
+            .await
+            .unwrap();
+        first.shutdown().await.unwrap();
+        drop(first);
+        closed_tx.send(()).unwrap();
+        let (mut second, _) = listener.accept().await.unwrap();
+        read_request(&mut second).await.unwrap();
+        second
+            .write_all(&kitty_rc_frame::frame(b"{\"ok\":true,\"data\":\"[]\"}"))
+            .await
+            .unwrap();
+    });
+    let mut session = kitty_rc_tokio::Session::new(Endpoint {
+        address: Address::Unix(path.clone()),
+        protection: Protection::Plain,
+    });
+    session
+        .execute(Ls::default(), options().deadline, 4096, 4096)
+        .await
+        .unwrap();
+    closed_rx.await.unwrap();
+    let error = session
+        .execute(Ls::default(), options().deadline, 4096, 4096)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        Failure::Interrupted {
+            progress: Progress::NotWritten,
+            reason: kitty_rc_exchange::ExecutionError::IdleClosed
+        }
+    ));
+    assert!(!session.is_connected());
+    // Caller deliberately submits a new command; no hidden replay occurred.
+    session
+        .execute(Ls::default(), options().deadline, 4096, 4096)
+        .await
+        .unwrap();
+    server.await.unwrap();
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn idle_sockets_count_in_quotas_and_compatible_classes_share_them() {
+    let mut first = Fixture::new(None);
+    let mut second = Fixture::new(None);
+    let third = Fixture::new(None);
+    let fourth = Fixture::new(None);
+    let registry = Registry::new(Limits {
+        connections: 3,
+        class_connections: [1, 1, 1],
+        ..Limits::default()
+    })
+    .unwrap();
+    let ea = registry.register(first.endpoint()).unwrap();
+    let eb = registry.register(second.endpoint()).unwrap();
+    let ec = registry.register(third.endpoint()).unwrap();
+    let ed = registry.register(fourth.endpoint()).unwrap();
+    let driver = registry.start().unwrap();
+    for ep in [ea, eb, ec] {
+        let op = registry
+            .submit(&registry.reserve(), ep, Ls::default(), options())
+            .unwrap();
+        op.wait().await.unwrap();
+        op.take().unwrap();
+        op.release().unwrap();
+    }
+    assert_eq!(registry.pool_stats().idle, 3);
+    // Observation-created idle sessions are compatible with long/short work.
+    let long = registry
+        .submit(&registry.reserve(), ea, launch(), options())
+        .unwrap();
+    assert_eq!(first.next().await.0, "ls");
+    assert_eq!(first.next().await.0, "launch");
+    let read = registry
+        .submit(&registry.reserve(), eb, GetText::default(), options())
+        .unwrap();
+    assert_eq!(second.next().await.0, "ls");
+    assert_eq!(second.next().await.0, "get-text");
+    let short = registry
+        .submit(&registry.reserve(), ec, focus(), options())
+        .unwrap();
+    short.wait().await.unwrap();
+    short.take().unwrap();
+    assert_eq!(first.accepts.load(Ordering::SeqCst), 1);
+    assert_eq!(second.accepts.load(Ordering::SeqCst), 1);
+    assert_eq!(third.accepts.load(Ordering::SeqCst), 1);
+    let stats = registry.pool_stats();
+    assert_eq!(stats.idle + stats.active_or_connecting, 3);
+    // Full idle-inclusive budget transfers an unused incompatible route slot
+    // on demand; it does not block short work behind unrelated idle resources.
+    let other = registry
+        .submit(&registry.reserve(), ed, focus(), options())
+        .unwrap();
+    other.wait().await.unwrap();
+    other.take().unwrap();
+    let stats = registry.pool_stats();
+    assert_eq!(stats.idle + stats.active_or_connecting, 3);
+    assert_eq!(stats.endpoints[&ec].0, 0);
+    assert_eq!(fourth.accepts.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        registry.summary(long.token()).unwrap().status,
+        Status::Running
+    );
+    assert_eq!(
+        registry.summary(read.token()).unwrap().status,
+        Status::Running
+    );
+    assert_eq!(registry.shutdown(Shutdown::Cancel).await.unwrap().len(), 2);
+    assert_eq!(registry.pool_stats().idle, 0);
+    driver.stop().await;
+}
+
+#[tokio::test]
+async fn managed_closed_idle_peer_retires_without_replaying_accepted_input() {
+    let path = std::path::PathBuf::from(format!(
+        "/tmp/opencode/kitty-rc-managed-idle-{}-{}.sock",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let listener = UnixListener::bind(&path).unwrap();
+    let accepts = Arc::new(AtomicUsize::new(0));
+    let counted = accepts.clone();
+    let (closed_tx, closed_rx) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut first, _) = listener.accept().await.unwrap();
+        counted.fetch_add(1, Ordering::SeqCst);
+        read_request(&mut first).await.unwrap();
+        first
+            .write_all(&kitty_rc_frame::frame(b"{\"ok\":true,\"data\":\"[]\"}"))
+            .await
+            .unwrap();
+        first.shutdown().await.unwrap();
+        drop(first);
+        closed_tx.send(()).unwrap();
+        let (mut second, _) = listener.accept().await.unwrap();
+        counted.fetch_add(1, Ordering::SeqCst);
+        read_request(&mut second).await.unwrap();
+        second
+            .write_all(&kitty_rc_frame::frame(b"{\"ok\":true,\"data\":\"[]\"}"))
+            .await
+            .unwrap();
+    });
+    let registry = Registry::new(Limits::default()).unwrap();
+    let ep = registry
+        .register(Endpoint {
+            address: Address::Unix(path.clone()),
+            protection: Protection::Plain,
+        })
+        .unwrap();
+    let driver = registry.start().unwrap();
+    let first = registry
+        .submit(&registry.reserve(), ep, Ls::default(), options())
+        .unwrap();
+    first.wait().await.unwrap();
+    first.take().unwrap();
+    closed_rx.await.unwrap();
+    let stale = registry
+        .submit(&registry.reserve(), ep, Ls::default(), options())
+        .unwrap();
+    stale.wait().await.unwrap();
+    assert!(matches!(
+        stale.take(),
+        Err(Failure::Interrupted {
+            progress: Progress::NotWritten,
+            reason: kitty_rc_exchange::ExecutionError::IdleClosed
+        })
+    ));
+    assert_eq!(accepts.load(Ordering::SeqCst), 1);
+    assert_eq!(registry.pool_stats().idle, 0);
+    let deliberate_new = registry
+        .submit(&registry.reserve(), ep, Ls::default(), options())
+        .unwrap();
+    deliberate_new.wait().await.unwrap();
+    deliberate_new.take().unwrap();
+    assert_eq!(accepts.load(Ordering::SeqCst), 2);
+    registry.shutdown(Shutdown::Drain).await.unwrap();
+    driver.stop().await;
+    server.await.unwrap();
+    std::fs::remove_file(path).unwrap();
 }
