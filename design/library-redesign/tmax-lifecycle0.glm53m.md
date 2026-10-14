@@ -11,7 +11,7 @@ generated:
 updated:
   at: 2026-10-14
   by: model:zai-coding-plan/glm-5.3#max
-  reason: parent review corrections — async response correlation, ownership model, purity boundaries, schema tolerance, connection-vs-instance identity, no auto-reconciliation, preflight limits (see Correction addendum)
+  reason: parent review corrections — async response correlation, ownership model, purity boundaries, schema tolerance, connection-vs-instance identity, no auto-reconciliation, preflight limits, transport invalidation on interrupted exchanges, HEAD-vs-v0.43.1 citation precision (see Correction addendum)
 sources:
   - resource: opencode://ses_ec7b1e11effeOrmZ7s7gR2AXJY
     title: Commissioned tmax lifecycle research and independent comparison wave (this document)
@@ -52,7 +52,9 @@ sources:
   - repository: kitty-rc src @ git 97990cb2 (jj rvzszymznvwz; later commits touch design/ only)
     title: kitty-rc client/protocol/error sources re-read for the comparison
   - repository: ~/archive/kovidgoyal/kitty @ git 5bf3c2dc6 (nightly-131-g5bf3c2dc6)
-    title: kitty baseline remote_control.py — response construction and async handling, read for the correlation correction
+    title: inspected kitty HEAD remote_control.py — response construction and async handling, read for the correlation correction
+  - repository: ~/archive/kovidgoyal/kitty @ tag v0.43.1 (e128af470f7c)
+    title: kitty v0.43.1 remote_control.py — same response-correlation facts verified at the release tag
 ---
 
 # tmax lifecycle reconstruction and what kitty-rc should and should not take from it
@@ -247,17 +249,20 @@ progress, outside-line retention, and cardinality checks
 
 **kitty-rc does not need any of this machinery, but not because kitty "has
 IDs."** The kitty RC protocol has **no response correlation at all**: in the
-baseline implementation, sync responses are `{'ok', 'data'|'error'}` dicts
-with no request identifier (`~/archive/kovidgoyal/kitty/kitty/remote_control.py:260-264`),
-and async completions sent by `send_response_to_client` likewise do not echo
-the `async` id — the id is only a server-side key into
-`active_async_requests` used for dedupe and cancellation gating
-(`remote_control.py:472-484`, registration at `227-247`; note the wire field is
-`async`, `remote_control.py:468`). A client receiving a late frame cannot
-attribute it to a particular outstanding request. Therefore **one outstanding
-exchange at a time is not merely a safe first shape — it is the only sound
-default** given the protocol; correlating multiple concurrent requests would
-require an upstream protocol change (echoing a request id in responses), not a
+inspected kitty HEAD (nightly-131-g5bf3c2dc6), sync responses are
+`{'ok', 'data'|'error'}` dicts with no request identifier
+(`~/archive/kovidgoyal/kitty/kitty/remote_control.py:260-264`), and async
+completions sent by `send_response_to_client` likewise do not echo the `async`
+id — the id is only a server-side key into `active_async_requests` used for
+dedupe and cancellation gating (`remote_control.py:472-484`, registration at
+`227-247`; note the wire field is `async`, `remote_control.py:468`). The same
+facts hold at release tag **v0.43.1** (`send_response_to_client` at
+`remote_control.py:460-471`, sync shape at `:251-253`, registration `:218-235`,
+wire field `:218,456`). A client receiving a late frame cannot attribute it to
+a particular outstanding request. Therefore **one outstanding exchange at a
+time is not merely a safe first shape — it is the only sound default** given
+the protocol; correlating multiple concurrent requests would require an
+upstream protocol change (echoing a request id in responses), not a
 client-side pending map.
 
 ### Shutdown and cleanup
@@ -337,7 +342,7 @@ Costs observed in the record, for calibration:
 
 | Concern | Recommended kitty-rc semantics | tmax precedent |
 |---|---|---|
-| Ownership | Exclusive-owner client: one `Exchange` future per command, borrowing `&mut client` across awaits is fine — no `Arc`/split-half prescription. The real constraint is cancellation hygiene, not borrow shape: dropping an exchange mid-receive leaves unknown stream state (possibly a partial frame and, with no response correlation, no way to resynchronize), so cancellation **marks the connection unusable or discards its buffered input**; a subsequent exchange requires a fresh connection or an explicit resync decision | `Request` owner; `#[must_use]`; drop cancels delivery |
+| Ownership | Exclusive-owner client: one `Exchange` future per command, borrowing `&mut client` across awaits is fine — no `Arc`/split-half prescription. The real constraint is cancellation hygiene, not borrow shape: dropping an exchange mid-receive leaves unknown stream state, and with no response correlation there is no way to resynchronize. An interrupted in-flight exchange therefore **invalidates the transport** — the connection must be discarded and a later exchange requires a fresh one. Merely dropping the user-space buffered input is *not* safe: replies to the interrupted command can still arrive on the socket, cannot be attributed, and no protocol-proven resynchronization exists to justify reuse | `Request` owner; `#[must_use]`; drop cancels delivery |
 | Tasks | No resident engine task; each exchange owns its receive until frame complete | (tmax's threads exist only because it is sync; do not copy) |
 | Shutdown | Drop the stream; explicit `close()` optional; reconnect yields a fresh **local connection token** (bookkeeping identity for this client's connection) — it is *not* proof of a new server instance; the same kitty may still own that socket | `close()` nonblocking; `Shared::drop` closes (`mod.rs:196-200`); `ConnectionId` is connection identity, explicitly not instance identity |
 | Cancellation | Dropping the exchange future cancels the *wait*, never implies the command did not run | cancel "abandons delivery, not tmux execution" |
@@ -447,8 +452,9 @@ mistake `Prepared` prevents.
 
 ## Open questions for the parent discussion
 
-- Baseline source settles that responses carry no request identifier
-  (`remote_control.py:260-264, 472-484`), so one outstanding exchange is the
+- Inspected kitty source (HEAD and v0.43.1) settles that responses carry no
+  request identifier (`remote_control.py:260-264, 472-484`; v0.43.1
+  `:251-253, 460-471`), so one outstanding exchange is the
   only sound default. Remaining upstream question: is FIFO ordering of
   pipelined *sync* responses on one socket ever guaranteed (event-loop
   serialization), and could upstream be asked to echo a request id so async
@@ -470,13 +476,15 @@ mistake `Prepared` prevents.
 ## Correction addendum (2026-10-14, after parent review)
 
 The initial version (jj `wsloqquworzs`) was checkpointed; these corrections
-are grounded in the kitty baseline read after review. Deltas:
+are grounded in inspected kitty HEAD (and, where noted, verified at v0.43.1)
+read after review. Deltas:
 
 1. **Async correlation removed.** The claim that `async_id` "tags late
    responses" and enables "a small pending-map" was unsupported: responses
-   never echo any request identifier
-   (`~/archive/kovidgoyal/kitty/kitty/remote_control.py:472-484`; sync shape at
-   `:260-264`; wire field is `async`, `:227,468`). One outstanding exchange is
+   never echo any request identifier (inspected kitty HEAD
+   `~/archive/kovidgoyal/kitty/kitty/remote_control.py:472-484`; sync shape at
+   `:260-264`; wire field is `async`, `:227,468`; same verified at v0.43.1 at
+   `:460-471`, `:251-253`, `:218,456`). One outstanding exchange is
    justified by the *absence* of general response correlation, and the pending
    map / one-outstanding-async-limit middle-tier trigger was replaced by
    serialization plus an upstream protocol-change ask.
@@ -484,8 +492,10 @@ are grounded in the kitty baseline read after review. Deltas:
    prescription was unjustified and conflicted with the minimal exclusive-owner
    model; borrowing `&mut client` across awaits is fine. The real constraint
    is cancellation hygiene: a cancelled read leaves unknown stream state that
-   cannot be resynchronized without request ids, so cancellation marks the
-   connection unusable or discards buffered input.
+   cannot be resynchronized without request ids, so an interrupted in-flight
+   exchange invalidates the transport itself — the connection is discarded,
+   not merely its buffered input, since further replies may still arrive on
+   the socket; no resync claim is currently justified.
 3. **Purity boundaries split.** "discovery (pure, no I/O)" and "credentials
    (pure pubkey lookup)" were contradictory; both now carry a pure
    parsing/selection core and a separate I/O edge (enumeration, env/file/db
@@ -507,6 +517,18 @@ are grounded in the kitty baseline read after review. Deltas:
    now applies to what is checkable without consuming the input; incrementally
    produced input gets envelope preflight plus mid-exchange source errors
    classified as `UnknownOutcome{after: Send}`.
+8. **Transport invalidation, not buffer discard.** "marks the connection
+   unusable or discards its buffered input" offered a buffer-cleanup
+   alternative that is unsound: replies to the interrupted command can still
+   arrive on the socket after the user-space buffer is dropped, and without
+   response correlation they cannot be attributed or safely drained. The
+   requirement is now invalidation/discard of the transport itself after an
+   interrupted in-flight exchange, and the "explicit resync decision" option
+   was removed — no resync mechanism is protocol-proven.
+9. **Citation precision.** `5bf3c2dc6` is the inspected kitty HEAD, not a
+   release "baseline"; references were renamed accordingly, and the response-
+   correlation facts were separately verified at release tag v0.43.1
+   (`e128af470f7c`) with their own line citations.
 
 ## Reading pointers (tmax)
 
