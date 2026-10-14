@@ -36,6 +36,8 @@ sources:
     title: Finite uncertain-effect follow-up implementation and native setup evidence
   - resource: /design/library-redesign/verification/entrances0.sol61m.md
     title: Support-policy and runnable independent entrance verification
+  - resource: /design/library-redesign/cli/implementation0.sol61m.md
+    title: Completed CLI/store adoption and verified no-focus watch and maximum-response corrections
 ---
 
 # Library redesign
@@ -88,6 +90,10 @@ and separated discovery/authentication steps.
 - [Public entrances and support evidence](verification/entrances0.sol61m.md):
   [usage guide](../../client/README.md), compiled leaf-import examples and
   [provisional support policy](../../doc/usage/support.md).
+- [CLI and shared-store adoption](cli/implementation0.sol61m.md): list/active/goto/
+  sampled watch, explicit configuration/authentication, preserved TSV maintenance,
+  and 28 targeted executable journeys after parent-review corrections.
+  [CLI guide](../../apps/cli/README.md).
 
 The first slice and its review-driven corrections are committed. Audited
 reply-bearing sessions now reuse sockets; idle/active/connecting resources count
@@ -104,10 +110,9 @@ pool selection and error/evidence code. A full supported-version/live matrix,
 full upload conversations and CLI adoption remain tracked work. Discovery and
 finite catalog breadth are now implemented by the subsequent slices above.
 
-Active follow-on work is command-specific uploads/run and CLI/shared-store
-adoption. Their owning agents work in separate
-concerns; registry ownership transferred from access to upload after its checked
-handoff. User-directed Rust policy now follows the user's mise selection without
+Active follow-on work is command-specific uploads/run and final isolated
+multi-version verification. Registry ownership transferred from access to upload
+after its checked handoff. User-directed Rust policy follows the user's mise selection without
 repository pinning; historical toolchain results remain historical evidence.
 
 ## Research contributions

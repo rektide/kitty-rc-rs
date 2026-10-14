@@ -24,6 +24,8 @@ sources:
     title: Runnable independent public entrances and lifecycle guide
   - resource: /doc/usage/support.md
     title: Provisional source and live evidence policy
+  - resource: /design/library-redesign/cli/implementation0.sol61m.md
+    title: Completed CLI and shared-store adoption, including watch absence and response-budget corrections
 ---
 
 # kitty-rc (unstable redesign)
@@ -66,7 +68,7 @@ from the exact server versions and profiles exercised live.
 | [`protocol/commands`](protocol/commands) | Grouped associated-output command families and nested actions; required structural listing data and tolerant additive fields |
 | [`access/crypto`](access/crypto) | The one outbound protection boundary: exact `1:<base85>` X25519 key parsing, X25519 → SHA-256 → AES-256-GCM sealing with RFC 1924 base85, explicit inputs only (no env/file/subprocess/clock), plus a decrypt oracle for conformance fixtures |
 | [`access/key-store`](access/key-store) | The persisted pubkey record format (TSV): parsing with malformed-line reporting, rendering, newest-per-PID selection |
-| [`apps/cli`](apps/cli) | The `kitty-pubkey-db` binary (`init`/`add`/`get`/`cleanup`) over the shared store library |
+| [`apps/cli`](apps/cli) | `kitty-rc` listing, active-window, goto and sampled watch with explicit setup; `kitty-pubkey-db` over the shared store library |
 | [`access/endpoint`](access/endpoint) | Explicit Unix/TCP addresses and plain or key/password protection; secret-redacted setup diagnostics |
 | [`access/discovery`](access/discovery) | Injectable candidate acquisition, native paths, provenance and explicit ambiguity policy |
 | [`access/credentials`](access/credentials) | Endpoint-scoped key/password sources, pure validation and explicit resolution policy |
@@ -77,8 +79,8 @@ from the exact server versions and profiles exercised live.
 | [`observation/check`](observation/check) | Explicit fresh listing checks after uncertainty, with matching/satisfaction separate from original native outcomes |
 | [`client`](client) | Direct/managed re-exports and public examples |
 
-Command-specific uploads and CLI adoption are the active follow-on stages;
-continuous desired-state goals remain separately selectable. The registry reuses
+Command-specific uploads are the active follow-on stage; continuous desired-state
+goals remain separately selectable. The registry reuses
 resolved setup **and clean audited reply-bearing sessions**. Setup invalidation
 rejects queued stale preparation with recoverable input; already leased work
 keeps its accepted basis and cannot populate a newer setup pool.
@@ -88,6 +90,23 @@ connecting sockets all count against global/per-endpoint connection limits.
 Unused incompatible idle routes can be retired on demand to serve eligible
 work at another endpoint; there is no TTL pruning. Input/protection reservations,
 retained native output bytes and record counts also have explicit limits.
+
+## Command-line usage
+
+```sh
+mise exec -- cargo run -p kitty-rc-cli --bin kitty-rc -- --help
+kitty-rc --to unix:/chosen/kitty.sock ls --json
+kitty-rc --to unix:/chosen/kitty.sock active
+kitty-rc --to unix:/chosen/kitty.sock goto 42
+kitty-rc --to unix:/chosen/kitty.sock watch --count 10 --json
+```
+
+`ls` can use the selected `KITTY_LISTEN_ON` when no explicit route is supplied.
+Encrypted mode, declared configuration, source precedence and credential binding
+are documented in the [CLI guide](apps/cli/README.md). Watch uses finite polling,
+reports normal no-focus samples without terminating, and does not claim a server
+event subscription. The [key-store utility](apps/cli/README.md#shared-public-key-utility)
+preserves existing records and keeps cleanup explicit.
 
 ## Explicit managed usage
 
