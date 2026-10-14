@@ -59,7 +59,9 @@ async fn main() -> Result<()> {
         socket.file_name().is_some_and(|s| s == "rc.sock")
             && fixture.file_name().is_some_and(|s| {
                 let name = s.to_string_lossy();
-                name.starts_with("kitty-rc-live-") || name.starts_with("kitty-private-upload-")
+                name.starts_with("kitty-rc-fixture-")
+                    || name.starts_with("kitty-rc-live-")
+                    || name.starts_with("kitty-private-upload-")
             }),
         "refusing a non-conformance endpoint",
     )?;
@@ -157,16 +159,24 @@ async fn main() -> Result<()> {
                 token = Some(next);
             }
             let sentinel = fixture.join("long-started");
-            let child = format!(
-                "import pathlib,time,sys;pathlib.Path({:?}).write_text('started');time.sleep(1.5);sys.exit(7)",
-                sentinel.to_string_lossy()
-            );
+            // The Rust fixture child (kitty-rc-verify-child) owns the
+            // long-running journey: write the sentinel, sleep, exit 7. No
+            // embedded interpreter string remains in this example.
+            let child = std::env::var("KITTY_RC_MATRIX_CHILD")?;
             let long = registry
                 .submit(
                     &registry.reserve(),
                     ep,
                     LaunchWait {
-                        args: vec!["python3".into(), "-c".into(), child],
+                        args: vec![
+                            child,
+                            "sentinel".into(),
+                            sentinel.to_string_lossy().into_owned(),
+                            "--sleep-ms".into(),
+                            "1500".into(),
+                            "--exit".into(),
+                            "7".into(),
+                        ],
                     },
                     managed_options(),
                 )

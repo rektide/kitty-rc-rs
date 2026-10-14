@@ -1,4 +1,4 @@
-//! ONLY invoked with the private fixture created by verify-isolated-uploads.py.
+//! ONLY invoked with the private fixture created by kitty-rc-verify uploads.
 use kitty_rc_commands::{
     GetText, Ls,
     targets::{WindowId, WindowTarget},
@@ -9,8 +9,27 @@ use kitty_rc_exchange::Completion;
 use kitty_rc_registry::{Limits, Options, Registry, Shutdown, UploadOptions};
 use kitty_rc_tokio::{Session, SessionOptions, UploadSource};
 use tokio::time::{Duration, Instant};
-fn run() -> Run {
-    Run::builder().cmdline(vec!["python3".into(),"-c".into(),"import sys;d=sys.stdin.buffer.read();sys.stdout.buffer.write(d);sys.stderr.buffer.write(bytes([0,255,128]));sys.exit(7)".into()]).build()
+
+/// The fixture child binary (kitty-rc-verify-child) launched by kitty for
+/// the raw run journeys: exact binary stdin/stdout round trip, fixed stderr
+/// bytes and a chosen exit code — no embedded interpreter strings.
+fn child_program() -> Result<String, Box<dyn std::error::Error>> {
+    std::env::var("KITTY_RC_MATRIX_CHILD").map_err(|_| {
+        "private fixture contract: KITTY_RC_MATRIX_CHILD must name the fixture child".into()
+    })
+}
+
+fn run() -> Result<Run, Box<dyn std::error::Error>> {
+    Ok(Run::builder()
+        .cmdline(vec![
+            child_program()?,
+            "stream".into(),
+            "--stderr-hex".into(),
+            "00ff80".into(),
+            "--exit".into(),
+            "7".into(),
+        ])
+        .build())
 }
 fn opts() -> Options {
     Options {
@@ -91,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bytes: Vec<_> = (0..size).map(|n| (n % 256) as u8).collect();
         let expected = bytes.clone();
         let Completion::Reply(output) = session
-            .upload(run(), UploadSource::bytes(bytes), direct())
+            .upload(run()?, UploadSource::bytes(bytes), direct())
             .await?
         else {
             panic!()
@@ -108,9 +127,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let driver = registry.start()?;
     let long = Run::builder()
         .cmdline(vec![
-            "python3".into(),
-            "-c".into(),
-            "import time;time.sleep(.2)".into(),
+            child_program()?,
+            "sleep".into(),
+            "--ms".into(),
+            "200".into(),
         ])
         .build();
     let first = registry
@@ -129,7 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .submit_upload(
             &registry.reserve(),
             alias,
-            run(),
+            run()?,
             UploadSource::bytes(vec![0, 255, 128]),
             UploadOptions {
                 operation: opts(),
