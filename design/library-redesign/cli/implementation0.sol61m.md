@@ -153,11 +153,14 @@ children `goy`, `b9t`, `e6p`, `g4x`, `wbs`, `aqh`, `74i` beneath `slb`.
 The store ticket was closed after its isolated preservation checks; all existing
 IDs/history are preserved, without new substitute tickets. Dependencies are
 honored (store before encrypted CLI; list before standalone adoption).
+All seven selected CLI children and the existing `slb` epic are now closed
+with native acceptance reasons/provenance; its older closed `htb` remains intact.
 
 Checkpoints already retained: `ddb9d505` store acceptance;
 `0a72ad12` isolated owned Cargo.lock source/signal hunks;
 `cb9c4112` first executable CLI stage. Later modular-store, stricter lifecycle,
-additional journeys and documentation are committed separately.
+additional journeys are in `318a33d7`; full CLI reference/evidence is in
+`95b25c40`. Final closure standing is recorded separately.
 Cargo.lock's unrelated upload-engine dependency hunks remain with their owner.
 No root workspace manifest changes were necessary.
 

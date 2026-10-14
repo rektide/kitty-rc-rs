@@ -170,6 +170,13 @@ accepted work locally, reports retained progress/uncertainty before release,
 and never claims remote rollback or replay. This custody is in-process, not
 crash-durable history.
 
+The CLI deliberately chooses the managed entrance. Library callers may instead
+use low-level `Session::execute`: dropping that future invalidates its owned
+transport. In contrast, dropping a managed waiter detaches interest while the
+registry retains accepted work; cancel/release/shutdown are explicit owner
+actions. The CLI does not expose a second direct-mode engine with different
+hidden retry/cancellation behavior.
+
 ## Shared public-key utility
 
 ```sh
