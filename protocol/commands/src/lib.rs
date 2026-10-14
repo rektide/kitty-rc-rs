@@ -68,9 +68,11 @@ pub enum TextExtent {
     Selection,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, bon::Builder)]
+#[builder(on(String, into))]
 pub struct GetText {
     pub match_spec: Option<String>,
+    #[builder(default)]
     pub extent: TextExtent,
 }
 impl Command for GetText {
@@ -90,7 +92,8 @@ impl Command for GetText {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
+#[builder(on(String, into))]
 pub struct FocusWindow {
     pub match_spec: String,
 }
@@ -111,7 +114,7 @@ impl Command for FocusWindow {
 
 /// Wait for a launched child's exit. The output is upstream's exit-code or
 /// signal-name string, not a window ID. Cancel is local, not child rollback.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 pub struct LaunchWait {
     pub args: Vec<String>,
 }
