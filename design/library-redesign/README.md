@@ -9,11 +9,17 @@ generated:
   at: 2026-10-13
 sources:
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
-    title: Human redesign direction, research sequence, and initial architecture draft
+    title: Human redesign direction, independent initial draft, research dispatch and review, and discussion preparation
   - resource: /design/library-redesign/draft0.gpt6a.md
     title: Independent parent proposal before research integration
   - resource: /design/upstream-kitty/evolution0.gpt6a.md
     title: Completed upstream study, baseline and summary inspected for navigation
+  - resource: /design/library-redesign/kubeless-assessment0.glm53fx.md
+    title: Initial kubeless opportunity inventory, qualified by the subsequent Astra study
+  - resource: /design/library-redesign/kubeless-design0.gpt6a.md
+    title: Verified kubeless mechanisms and kitty-native exchange design, read for discussion
+  - resource: /design/library-redesign/tmax-lifecycle0.glm53m.md
+    title: Lifecycle comparison and reviewed corrections to correlation and cancellation recommendations
 ---
 
 # Library redesign
@@ -33,17 +39,17 @@ and separated discovery/authentication steps.
 - [Earlier public-key store plan](../../doc/PLAN-pubkey-db.md): historical
   standalone authentication context and a candidate integration to redesign.
 
-## Commissioned research
+## Research contributions
 
-These are commissions, not findings. Completed documents will be linked after
-they are read and integrated into this map.
+All commissioned contributions are available. These are research and proposals,
+not acceptance of a replacement architecture.
 
 | Inquiry | Agent | Role |
 | --- | --- | --- |
-| Upstream kitty evolution | Astra medium | Establish build baseline and compare latest stable/HEAD behavior and schemas |
-| Kubeless reconnaissance | FX | Map concrete lifecycle/streaming reuse opportunities and uncertainties |
-| Kubeless research and design | Astra medium, after FX | Verify the reconnaissance and develop integration choices |
-| Tmax lifecycle comparison | G | Reconstruct ownership and lifecycle, identify useful mechanisms and excessive complexity |
+| [Upstream kitty evolution](../upstream-kitty/evolution0.gpt6a.md) | Astra medium | Build baseline, stable/HEAD behavior, schemas and server fixes |
+| [Kubeless reconnaissance](kubeless-assessment0.glm53fx.md) | FX | Initial lifecycle/streaming opportunity map; read with Astra's corrections |
+| [Kubeless research and design](kubeless-design0.gpt6a.md) | Astra medium, after FX | Verified evidence/ownership patterns, reuse decisions and concrete exchange/crate proposal |
+| [Tmax lifecycle comparison](tmax-lifecycle0.glm53m.md) | G | Typed-operation and deadline precedents, protocol-specific machinery, corrected correlation/cancellation guidance |
 
 ### Available upstream evidence
 
@@ -54,6 +60,26 @@ they are read and integrated into this map.
   This is evidence for the eventual synthesis; the parent draft has not been
   rewritten around its recommendations.
 
-The parent draft is independent of this wave. After the research is available,
-discuss tradeoffs with the human **before writing the next architecture draft**.
-No library implementation is commissioned by this research sequence.
+## Reading the findings together
+
+- **Common direction:** typed request/output binding, explicit outcome evidence,
+  absolute deadlines, one exchange owner, and concern-specific components.
+- **Kubeless reuse:** Astra recommends independent kitty machinery initially;
+  HTTP retry and Kubernetes channel framing do not directly supply kitty's
+  lifecycle. An optional settlement helper is a later possibility with a
+  concrete application predicate.
+- **Tmax boundary:** borrow its execution discipline and typed preparation
+  pattern; its tmux-specific correlation engine and sync-first task structure
+  are not a starting template for this Tokio client.
+- **New protocol constraints:** Astra's source-backed upload study describes
+  handshake versus terminal completion, empty-upload handling, and a shared
+  per-command upload accumulator that can cause interference across connections.
+  The parent checked the accumulator and Go handshake source; live kitty
+  verification is still outstanding.
+- **Decisions for discussion:** default connection lifetime, ordinary result
+  versus evidence-bearing API, extent of public exchange extension, concrete
+  crate boundaries, and supported upstream/runtime versions.
+
+The parent draft remains independent of this wave. Discuss these tradeoffs with
+the human **before writing the next architecture draft**. No library
+implementation is commissioned by this research sequence.
