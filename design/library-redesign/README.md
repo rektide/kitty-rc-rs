@@ -1,15 +1,15 @@
 ---
 type: DesignIndex
 title: Kitty remote-control library redesign
-description: Human-directed clean-slate API and crate design, with independent lifecycle and reuse research before synthesis.
+description: Clean-slate API and crate design with a post-discussion registry-first draft and preserved independent research.
 resource: /design/library-redesign/README.md
 status: draft
 generated:
   by: "model:openai/gpt-6-astra#medium"
-  at: 2026-10-13
+  at: 2026-10-14
 sources:
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
-    title: Human redesign direction, independent initial draft, research dispatch and review, and discussion preparation
+    title: Human redesign direction, research review and corrections, accepted managed-operation direction, and post-discussion draft
   - resource: /design/library-redesign/draft0.gpt6a.md
     title: Independent parent proposal before research integration
   - resource: /design/upstream-kitty/evolution0.gpt6a.md
@@ -22,6 +22,8 @@ sources:
     title: Lifecycle comparison and reviewed corrections to correlation and cancellation recommendations
   - resource: /design/library-redesign/kubeless-adaptation1.gpt6a.md
     title: Human-corrected registry-first concurrency design and constructive generic kubeless adaptations
+  - resource: /design/library-redesign/draft1.gpt6a.md
+    title: Post-discussion registry-first synthesis and remaining design choices
 ---
 
 # Library redesign
@@ -31,7 +33,15 @@ no consumer imposes a compatibility obligation.** The human favors a substantial
 restructure with independently composable concern crates, explicit lifecycle,
 and separated discovery/authentication steps.
 
-## Initial position
+## Current design
+
+- [Registry-first draft 1](draft1.gpt6a.md): post-discussion synthesis. The human
+  agreed to registry-owned accepted work, concurrent connection leases, and thin
+  managed coordination with retained outcomes first. Exact kubeless integration
+  remains subject to a native workflow comparison. Reconciliation is separately
+  usable; no current consumer constrains the new API.
+
+## Preserved initial position
 
 - [Initial architecture draft](draft0.gpt6a.md): typed commands/responses, a
   concern-crate workspace, explicit setup and exchange lifecycles, cancellation
@@ -43,8 +53,9 @@ and separated discovery/authentication steps.
 
 ## Research contributions
 
-All commissioned contributions are available. These are research and proposals,
-not acceptance of a replacement architecture.
+All commissioned contributions are available. The human selected the direction
+recorded in draft 1; individual research recommendations remain proposals unless
+that draft explicitly incorporates them.
 
 | Inquiry | Agent | Role |
 | --- | --- | --- |
@@ -60,8 +71,8 @@ not acceptance of a replacement architecture.
   February 2026 library release, declared kitty 0.43.1 target, latest stable 0.49.2,
   and pinned development HEAD. Its opening assessment distinguishes a stable
   core protocol from command growth, server fixes, and local pre-existing bugs.
-  This is evidence for the eventual synthesis; the parent draft has not been
-  rewritten around its recommendations.
+  This informs draft 1's support policy and verification requirements; specific
+  minimum versions remain to be selected.
 
 ## Reading the findings together
 
@@ -85,12 +96,12 @@ not acceptance of a replacement architecture.
   should progress across multiple bounded connection leases. Long waits and large
   reads must not block quick operations globally. One exchange per connection
   is not one exchange per registry; upload exclusion is a specialty constraint.
-- **Decisions for discussion:** thin coordination with direct custody versus a
-  retained control host, operation-versus-waiter cancellation, endpoint/class
-  capacity policy, public extension boundaries, concern crates, and upstream/runtime
-  support. Desired-state reconciliation is a selectable higher-level capability,
-  not a prerequisite for concurrent command execution.
+- **Selected direction and remaining decisions:** registry ownership outlives
+  individual waiters, with explicit operation cancellation and thin coordination
+  first. Direct custody versus the fuller retained host needs a workflow comparison;
+  admission commit details, capacity defaults, result retention, extension
+  boundaries and upstream/runtime support remain open. Reconciliation is a
+  selectable higher-level capability, not a prerequisite for concurrent commands.
 
-The parent draft remains independent of this wave. Discuss these tradeoffs with
-the human **before writing the next architecture draft**. No library
-implementation is commissioned by this research sequence.
+The initial draft remains preserved. Human discussion and agreement preceded
+draft 1; it is a design checkpoint, not an implemented or fully validated API.
