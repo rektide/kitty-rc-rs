@@ -1,4 +1,4 @@
-//! Opt-in only: invoked by scripts/verify-supported-kitty.py inside its fixture.
+//! Opt-in only: invoked by kitty-rc-verify (tool/verification) inside its private fixture.
 //! Exact profile evidence, not a whole-catalog/minimum-version promise.
 use kitty_rc::{commands::*, *};
 use serde_json::{Value, json};

@@ -19,11 +19,14 @@ sources:
 - ⇄ [Implementation and decisions](implementation0.sol61xh.md): BackgroundPng,
   LogoPng, buffered async Run, direct/managed entrances, explicit aliases and exact
   interrupted-lane policy. Includes verification and supported-version limits.
-- [Checkpointed pinned-source oracle](verify-source0.sol61xh.py): actual stable
-  constructors, without native imports or terminal mutation; Rust migration input.
-- [Checkpointed private live runner](../../../scripts/verify-isolated-uploads.py): explicit
-  `KITTY_RC_TEST_KITTY` override, private Weston/kitty/config/socket and PNG/run
-  Rust example; temporary migration input, not the parent-owned support matrix.
+- Checkpointed pinned-source oracle: the retired `verify-source0.sol61xh.py`
+  verified actual stable constructors without native imports or terminal
+  mutation; `kitty-rc-verify source` (tool/verification) retained the same
+  coverage at the same pinned revision.
+- Private live runner: superseded by `kitty-rc-verify uploads`
+  (explicit `KITTY_RC_TEST_KITTY` override, private
+  Weston/kitty/config/socket and the PNG/run Rust example are now
+  orchestrated by the Rust crate in tool/verification).
 
 The human directed Rust verification orchestration after the successful core gates.
 G owns that migration; [the handoff](implementation0.sol61xh.md#human-directed-rust-verification-migration)

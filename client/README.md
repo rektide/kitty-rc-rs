@@ -228,10 +228,11 @@ mise exec -- cargo clippy -p kitty-rc --examples --locked -- -D warnings
 ```
 
 [conformance.rs](examples/conformance.rs) is preserved for the isolated live
-runner in `scripts/verify-isolated-kitty.py`; unlike the offline/help checks,
-it performs deliberate mutations in a newly created private kitty instance.
-Do not point conformance at an ambient user endpoint. Current evidence and
-remaining multiversion limitations belong in the
+runner (`mise exec -- cargo run -p kitty-rc-verify -- finite`); unlike the
+offline/help checks, it performs deliberate mutations in a newly created
+private kitty instance. Do not point conformance at an ambient user
+endpoint. Current evidence and remaining multiversion limitations belong in
+the
 [verification report](../design/library-redesign/verification/entrances0.sol61m.md).
 
 ## Cross-references

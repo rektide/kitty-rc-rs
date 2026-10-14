@@ -17,7 +17,7 @@ sources:
   - resource: /tool/verification/README.md
     title: The maintained Rust verification guide replacing the Python entrances
   - resource: /scripts/conformance/README.md
-    title: Superseded Python guide (evidence retained; paths are historical)
+    title: Superseded Python conformance guide (deleted with its directory; paths in historical reports are evidence of what ran then)
 verification:
   scope: New kitty-rc-verify crate (35 lifecycle/unit tests), converted examples, retained-boundary oracle, real finite/uploads/matrix/source runs and converged workspace gates
   evidence: 220/220 workspace nextest, locked workspace all-target build, strict all-target clippy, fmt, doctests; live 0.48.2 finite+uploads; full 3-release encrypted+plain matrix with uploads and CLI smoke; pinned-source oracle parity
@@ -159,9 +159,9 @@ every overlapping profile.
   the maintained entrance is now
   `mise exec -- cargo run -p kitty-rc-verify -- …`. Suggested replacements:
   finite/uploads/matrix lines under "Building and testing".
-- The superseded [scripts/conformance guide](../../../scripts/conformance/README.md)
-  is deleted with its directory; historical reports referencing `scripts/*`
-  paths keep them as evidence of what ran then.
+- The superseded `scripts/conformance` guide was deleted with its directory;
+  historical reports referencing `scripts/*` paths keep them as evidence of
+  what ran then.
 - `design/library-redesign/README.md` should link this report as the current
   verification-tooling record.
 - New dependencies (`tar`, `xz2`, `ureq`, direct `libc`) were added only to
