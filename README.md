@@ -1,481 +1,71 @@
-# kitty-rc
+# kitty-rc (redesign in progress)
 
-> A Rust library for controlling the kitty terminal emulator via its remote control protocol
+> Rust crates for the kitty terminal emulator's remote-control (RC) protocol,
+> rebuilt around typed exchanges and a concurrent registry. Under active
+> redesign; nothing here is a finished client yet.
 
-## About
+## Current standing
 
-kitty-rc is a Rust library that provides a type-safe, async interface for controlling the kitty terminal emulator through its remote control protocol. It uses Unix domain sockets for communication and supports all major kitty remote control commands.
+This repository is in the middle of the redesign described in
+[`design/library-redesign/draft1.gpt6a.md`](design/library-redesign/draft1.gpt6a.md)
+(registry-first concurrent managed execution, one exchange per connection,
+explicit operation ownership). The **legacy 0.5.0 client was removed**
+rather than kept as a compatibility facade: its execution path had
+double-encrypted sends, implicit credential/subprocess lookup, generic
+long-string chunking that corrupted payloads, drifted command wire shapes,
+and self-confirming tests. The removal record, disposition map, and
+restoration inventory live in
+[`design/library-redesign/teardown0.glm53m.md`](design/library-redesign/teardown0.glm53m.md);
+the previous implementation is recoverable from jj commit `e78489cb`.
 
-## Features
+What exists today is the **verified protocol foundation** the rebuilt
+execution and registry layers will sit on. There is not yet a session,
+client facade, or connection pool — those are the next commissioned stage.
 
-- **Comprehensive Command Support**: All major kitty remote control commands organized into modules
-- **Type-Safe Builder API**: Fluent builder pattern for client setup and all commands
-- **Async-First**: Built on tokio for asynchronous I/O
-- **Single Connection**: Connect once at startup, reuse for all commands
-- **Password Authentication**: Secure encrypted communication using ECDH X25519 key exchange and AES-256-GCM
-- **Error Handling**: Detailed error types for protocol, command, connection, and encryption errors
-- **Streaming Support**: Automatic chunking for large payloads (e.g., background images)
-- **Async Commands**: Support for async operations with unique ID generation
-- **Comprehensive Testing**: 159 unit tests ensuring reliability
+## Workspace layout
 
-## Installation
+| Crate | Owns |
+| --- | --- |
+| [`protocol/schema`](protocol/schema) | Wire envelope types: `PlainRequest` (with the upstream `async` wire name), `ProtectedEnvelope`, `ResponseEnvelope` classification (terminal success/failure vs streaming acknowledgment), and the declared `SUPPORTED` kitty version `[0, 43, 1]` |
+| [`protocol/frame`](protocol/frame) | Incremental DCS framing (`ESC P @kitty-cmd … ESC \`): split-frame reassembly, in-order coalesced-frame delivery with surplus retention, bounded payloads, poisoning on out-of-frame bytes, clean-EOF truncation reporting |
+| [`protocol/commands`](protocol/commands) | Typed command catalog (currently the `ls` exemplar) and the salvaged output models (`WindowInfo`, `TabInfo`, `OsInstance`) with tolerant-additive decoding |
+| [`access/crypto`](access/crypto) | The one outbound protection boundary: exact `1:<base85>` X25519 key parsing, X25519 → SHA-256 → AES-256-GCM sealing with RFC 1924 base85, explicit inputs only (no env/file/subprocess/clock), plus a decrypt oracle for conformance fixtures |
+| [`access/key-store`](access/key-store) | The persisted pubkey record format (TSV): parsing with malformed-line reporting, rendering, newest-per-PID selection |
+| [`apps/cli`](apps/cli) | The `kitty-pubkey-db` binary (`init`/`add`/`get`/`cleanup`) over the shared store library |
 
-Add this to your `Cargo.toml`:
+Deliberately absent until they carry real code: `execution/{exchange,tokio}`,
+`access/{endpoint,discovery,credentials}`, `control/registry`,
+`observation/listing`, and the `client` facade. Upstream wire facts baked
+into the foundation crates were verified against the pinned kitty source
+tree (see the teardown and design documents for provenance).
 
-```toml
-[dependencies]
-kitty-rc = "0.5.0"
-tokio = { version = "1.0", features = ["full"] }
+## Building and testing
+
+```sh
+cargo build            # build all crates and the kitty-pubkey-db binary
+cargo nextest run      # test suite (or: cargo test)
+cargo clippy --workspace --all-targets
+cargo fmt --check
 ```
 
-## Usage
-
-### Basic Setup
-
-```rust
-use kitty_rc::Kitty;
-
-#[tokio::main]
-async fn main() -> Result<(), kitty_rc::KittyError> {
-    // Basic connection (no password)
-    let mut kitty = Kitty::builder()
-        .socket_path("/path/to/kitty.socket")
-        .connect()
-        .await?;
-
-    // Use kitty to send commands...
-    Ok(())
-}
-```
-
-### Connection with Password
-
-When kitty is configured with `remote_control_password`, password authentication provides encrypted communication.
-
-#### From within kitty
-
-**Note: Password authentication automatically works when your application is launched by kitty or running within a kitty window**, because kitty exposes its public key via `KITTY_PUBLIC_KEY` environment variable only to processes it launches.
-
-```rust
-use kitty_rc::Kitty;
-
-#[tokio::main]
-async fn main() -> Result<(), kitty_rc::KittyError> {
-    // KITTY_PUBLIC_KEY is automatically set by kitty for processes it launches
-    let mut kitty = Kitty::builder()
-        .socket_path("/path/to/kitty.socket")
-        .password("your-password-here")
-        .connect()
-        .await?;
-
-    // All commands will be encrypted automatically
-    Ok(())
-}
-```
-
-#### From standalone clients
-
-For standalone clients (not launched by kitty), you have two options:
-
-**Option 1: Automatic database query (recommended)**
-
-If you're using the kitty-pubkey-db shell integration, KittyBuilder will automatically query the database for the public key when:
-
-- A password is provided
-- No explicit `public_key()` is set
-- `KITTY_PUBLIC_KEY` environment variable is not set
-
-The socket path must contain the kitty PID (e.g., `/tmp/kitty-12345.sock` or `/run/user/1000/kitty/kitty-12345.sock`).
-
-```rust
-use kitty_rc::Kitty;
-
-#[tokio::main]
-async fn main() -> Result<(), kitty_rc::KittyError> {
-    let mut kitty = Kitty::builder()
-        .socket_path("/run/user/1000/kitty/kitty-12345.sock")
-        .password("your-password-here")
-        // No need for public_key() - will auto-query database
-        .connect()
-        .await?;
-
-    // All commands will be encrypted automatically
-    Ok(())
-}
-```
-
-**Option 2: Explicit public key**
-
-For standalone clients (not launched by kitty), you can provide the public key explicitly using the `public_key()` method. The public key can be obtained from kitty's public key database (see kitty-pubkey-db binary).
-
-```rust
-use kitty_rc::Kitty;
-
-#[tokio::main]
-async fn main() -> Result<(), kitty_rc::KittyError> {
-    // Get public key from kitty's public key database or other source
-    let pubkey = "1:abc123..."; // Base85 encoded public key
-
-    let mut kitty = Kitty::builder()
-        .socket_path("/path/to/kitty.socket")
-        .password("your-password-here")
-        .public_key(pubkey)
-        .connect()
-        .await?;
-
-    // All commands will be encrypted automatically
-    Ok(())
-}
-```
-
-The encryption uses kitty's protocol:
-- X25519 ECDH key exchange with kitty's public key (from KITTY_PUBLIC_KEY or provided via public_key())
-- Client generates ephemeral keys per command
-- AES-256-GCM authenticated encryption
-- SHA-256 derived shared secret
-
-For detailed specifications of the encrypted communication protocol, see [Encrypted communication](https://sw.kovidgoyal.net/kitty/rc_protocol/#encrypted-communication).
-
-### Listing Windows
-
-```rust
-use kitty_rc::{LsCommand, WindowInfo};
-
-let cmd = LsCommand::new()
-    .self_window(true)
-    .build()?;
-
-let response = kitty.execute(&cmd).await?;
-let instances = LsCommand::parse_response(&response)?;
-
-for instance in &instances {
-    for tab in &instance.tabs {
-        for window in &tab.windows {
-            println!("Window: {} (id: {:?})", window.title, window.id);
-            println!("  PID: {:?}", window.pid);
-            println!("  CWD: {:?}", window.cwd);
-        }
-    }
-}
-```
-
-### Sending Text to Windows
-
-```rust
-use kitty_rc::commands::SendTextCommand;
-
-let cmd = SendTextCommand::new("text:hello world")
-    .match_spec("id:1")
-    .build()?;
-
-kitty.send_command(&cmd).await?;
-```
-
-### Creating New Windows
-
-```rust
-use kitty_rc::commands::NewWindowCommand;
-
-let cmd = NewWindowCommand::new()
-    .args("bash")
-    .cwd("/home/user")
-    .title("My Window")
-    .build()?;
-
-kitty.send_command(&cmd).await?;
-```
-
-### Setting Font Size
-
-```rust
-use kitty_rc::commands::SetFontSizeCommand;
-
-// Set absolute font size
-let cmd = SetFontSizeCommand::new(16)
-    .all(true)
-    .build()?;
-
-kitty.execute(&cmd).await?;
-
-// Increment font size
-let cmd = SetFontSizeCommand::new(0)
-    .increment_op("+")
-    .build()?;
-
-kitty.execute(&cmd).await?;
-
-// Decrement font size
-let cmd = SetFontSizeCommand::new(0)
-    .increment_op("-")
-    .build()?;
-
-kitty.execute(&cmd).await?;
-```
-
-### Setting Background Opacity
-
-```rust
-use kitty_rc::commands::SetBackgroundOpacityCommand;
-
-let cmd = SetBackgroundOpacityCommand::new(0.8)
-    .all(true)
-    .build()?;
-
-kitty.send_command(&cmd).await?;
-```
-
-### Streaming Large Data
-
-```rust
-use kitty_rc::commands::SetBackgroundImageCommand;
-
-let large_image_data = "..."; // Large base64 string
-let cmd = SetBackgroundImageCommand::new(large_image_data).build()?;
-
-// send_all automatically handles chunking for large payloads
-kitty.send_all(&cmd.unwrap()).await?;
-```
-
-Or to get a response:
-
-```rust
-let response = kitty.execute_all(&cmd.unwrap()).await?;
-```
-
-## Command Modules
-
-### Tab Management (`commands::tab`)
-- `CloseTabCommand` - Close tabs
-- `DetachTabCommand` - Detach tabs to different OS windows
-- `FocusTabCommand` - Focus a specific tab
-- `SetTabTitleCommand` - Set tab title
-
-### Layout Management (`commands::layout`)
-- `GotoLayoutCommand` - Switch to a specific layout
-- `SetEnabledLayoutsCommand` - Set available layouts
-- `LastUsedLayoutCommand` - Switch to last used layout
-
-### Window Management (`commands::window`)
-- `CloseWindowCommand` - Close windows
-- `CreateMarkerCommand` - Create scroll markers
-- `DetachWindowCommand` - Detach windows
-- `FocusWindowCommand` - Focus a window
-- `GetTextCommand` - Extract text from windows
-- `LsCommand` - List windows and tabs (supports structured response parsing)
-- `NewWindowCommand` - Create new windows
-- `RemoveMarkerCommand` - Remove scroll markers
-- `ResizeWindowCommand` - Resize windows
-- `ScrollWindowCommand` - Scroll window content
-- `SelectWindowCommand` - Async window selection
-- `SendKeyCommand` - Send keyboard shortcuts
-- `SendTextCommand` - Send text to windows
-- `SetWindowLogoCommand` - Set window logo
-- `SetWindowTitleCommand` - Set window title
-
-### Process Management (`commands::process`)
-- `DisableLigaturesCommand` - Disable font ligatures
-- `EnvCommand` - Set environment variables
-- `KittenCommand` - Run kitty kittens
-- `LaunchCommand` - Launch new windows with comprehensive options
-- `LoadConfigCommand` - Load configuration files
-- `ResizeOSWindowCommand` - Resize OS windows
-- `RunCommand` - Run commands with streaming support
-- `SetUserVarsCommand` - Set user variables
-- `SignalChildCommand` - Send signals to child processes
-
-### Style and Appearance (`commands::style`)
-- `GetColorsCommand` - Get current colors
-- `SetBackgroundImageCommand` - Set background image (supports streaming)
-- `SetBackgroundOpacityCommand` - Set background opacity
-- `SetColorsCommand` - Set color scheme
-- `SetFontSizeCommand` - Set font size (absolute or increment/decrement)
-- `SetSpacingCommand` - Set window padding/spacing
-- `SetTabColorCommand` - Set tab colors
-
-> **Note**: Kitty's remote protocol does not include a `get-font-size` command. To retrieve the current font size, read it from `~/.config/kitty/kitty.conf`.
-
-## Response Types
-
-The library provides structured types for parsing kitty responses:
-
-### Window Information
-```rust
-use kitty_rc::{WindowInfo, LsCommand};
-
-let response = kitty.execute(&cmd).await?;
-let instances = LsCommand::parse_response(&response)?;
-
-for instance in &instances {
-    for tab in &instance.tabs {
-        for window in &tab.windows {
-            println!("Window: {} (id: {:?})", window.title, window.id);
-            println!("  PID: {:?}", window.pid);
-            println!("  CWD: {:?}", window.cwd);
-            println!("  Active: {:?}", window.is_active);
-            println!("  Focused: {:?}", window.is_focused);
-        }
-    }
-}
-```
-
-The `WindowInfo` struct includes all fields returned by kitty:
-- Window metadata: `id`, `title`, `pid`, `cwd`, `cmdline`
-- State: `is_active`, `is_focused`, `is_self`, `at_prompt`, `in_alternate_screen`
-- Terminal: `columns`, `lines`, `created_at`
-- Processes: `foreground_processes`, `env`, `user_vars`
-- Command: `last_cmd_exit_status`, `last_reported_cmdline`
-
-The `TabInfo` struct includes tab-level information:
-- Tab metadata: `id`, `title`
-- State: `is_active`, `is_focused`, `active_window_history`
-- Layout: `layout`, `enabled_layouts`, `layout_opts`, `layout_state`
-- Groups: `groups` (window grouping information)
-
-The `OsInstance` struct includes OS-level information:
-- OS metadata: `id`, `wm_class`, `wm_name`
-- State: `is_active`, `is_focused`, `last_focused`
-- Display: `background_opacity`, `platform_window_id`
-
-## Async and Streaming
-
-The library supports async commands and streaming for large payloads:
-
-### Async Commands
-```rust
-use kitty_rc::commands::SelectWindowCommand;
-use kitty_rc::protocol::KittyMessage;
-
-let async_id = KittyMessage::generate_unique_id();
-
-let cmd = SelectWindowCommand::new()
-    .title("Select a window")
-    .async_id(async_id.clone())
-    .build()?;
-```
-
-### Streaming
-Large payloads (>4096 bytes) can be sent using the helper methods that automatically handle chunking:
-
-```rust
-let message = cmd.build()?;
-client.send_all(&message).await?;  // Automatically chunks if needed
-```
-
-Or to get a response:
-
-```rust
-let response = client.execute_all(&message).await?;
-```
-
-The `send_all` and `execute_all` methods automatically detect if a message needs streaming and handle chunking internally, so you don't need to manually check or split payloads.
-
-## Error Handling
-
-kitty-rc provides detailed error types:
-
-```rust
-use kitty_rc::{KittyError, CommandError};
-
-match result {
-    Ok(response) => println!("Success: {:?}", response),
-    Err(KittyError::Command(CommandError::MissingParameter(field, _))) => {
-        eprintln!("Missing required parameter: {}", field);
-    }
-    Err(KittyError::Connection(err)) => {
-        eprintln!("Connection error: {}", err);
-    }
-    Err(err) => eprintln!("Error: {}", err),
-}
-```
-
-## Enabling Remote Control
-
-To use kitty-rc, you must enable remote control in kitty. The library provides a helper script to configure kitty securely with password authentication.
-
-### Quick Setup
-
-Run the included setup script:
-
-```bash
-./scripts/enable-rc.sh
-```
-
-This script will:
-- Generate a random 48-character password in `~/.config/kitty/rc.password`
-- Create `~/.config/kitty/rc.conf` with remote control configuration
-- Add `include rc.conf` to `~/.config/kitty/kitty.conf` if not present
-- Set up a socket in the XDG runtime directory at `kitty/kitty-{pid}.sock`
-- Fail if any remote control settings are already configured
-
-### Manual Configuration
-
-To manually configure kitty for remote control, create `~/.config/kitty/rc.conf`:
-
-```conf
-# Enable password-based remote control
-allow_remote_control password
-remote_control_password "$(cat ~/.config/kitty/rc.password)"
-
-# Listen on socket in XDG runtime directory
-listen_on unix:${XDG_RUNTIME_DIR}/kitty/kitty-{kitty_pid}.sock
-```
-
-Then add to `~/.config/kitty/kitty.conf`:
-
-```conf
-include rc.conf
-```
-
-Generate a secure password:
-
-```bash
-pwgen -s 48 1 > ~/.config/kitty/rc.password
-chmod 600 ~/.config/kitty/rc.password
-```
-
-Restart kitty after making changes.
-
-## Socket Configuration
-
-kitty-rc communicates with kitty via Unix domain sockets. The default socket location varies by system:
-
-- With the helper script: `$XDG_RUNTIME_DIR/kitty/kitty-{kitty_pid}.sock`
-- Linux/macOS: `$TMPDIR/kitty-*` or `/tmp/kitty-*`
-- You can also specify custom socket paths
-
-## Testing
-
-Run the test suite:
-
-```bash
-cargo test
-```
-
-All 159 tests pass successfully.
-
-## Examples
-
-See `src/bin/list_windows.rs` for a complete example of listing kitty windows and their processes.
-
-Use `scripts/enable-rc.sh` to quickly enable remote control in your kitty configuration.
-
-## Contributing
-
-Contributions are welcome! Please read the project's AGENTS.md for development guidelines.
+The `kitty-pubkey-db` store stays at `$XDG_STATE_HOME/kitty/pubkey.tsv`
+with its existing line format (`pid\twindow_id\tpubkey\ttimestamp`);
+existing files remain readable. The legacy automatic cleanup-on-add
+behavior was removed — run `kitty-pubkey-db cleanup` explicitly. `scripts/enable-rc.sh`
+remains for deliberately configuring a local kitty for future live
+interoperability runs.
+
+## Design and research
+
+- [`design/library-redesign/`](design/library-redesign/README.md) — redesign
+  home: accepted registry-first draft, preserved research, and the teardown
+  handoff for the next implementation stage.
+- [`design/upstream-kitty/evolution0.gpt6a.md`](design/upstream-kitty/evolution0.gpt6a.md) —
+  revision-pinned upstream evolution, defect inventory, and support-policy
+  context.
+- [`doc/`](doc/) — historical plans and bug evidence kept as research
+  material; not current API documentation.
 
 ## License
 
 [MIT](LICENSE)
-
-## Related
-
-- [kitty terminal emulator](https://sw.kovidgoyal.net/kitty/)
-- [kitty remote control protocol documentation](https://sw.kovidgoyal.net/kitty/remote-control/)
-- [kitty remote control protocol specification](https://sw.kovidgoyal.net/kitty/rc_protocol/)
-
-## Acknowledgments
-
-Built with:
-- [tokio](https://tokio.rs/) - Async runtime
-- [serde](https://serde.rs/) - Serialization framework
-- [thiserror](https://docs.rs/thiserror/) - Error derive macros

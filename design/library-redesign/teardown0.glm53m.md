@@ -273,9 +273,31 @@ behavior (official client message_to_kitty omits it; server reads it).
 
 ## 8. Verification record
 
-Filled at the end of the teardown stage; commands and results in the final
-commit's message and here. (Pre-commit state of this section: pending.)
+Executed at the end of this stage (workspace state at the "Rewrite README"
+commit):
 
-Risks carried forward: no live-kitty conformance yet for the foundation crates
-(upstream facts are source-verified only); `protocol/commands` carries one
-exemplar by design, so catalog breadth is intentionally a later stage's work.
+- `cargo fmt --all` — applied; clean.
+- `cargo check --workspace` — clean.
+- `cargo nextest run` — **49 tests, 49 passed, 0 failed** (schema 11,
+  frame 11, crypto 11, key-store 7, commands 9).
+- `cargo clippy --workspace --all-targets` — 0 warnings.
+- CLI smoke test with `XDG_STATE_HOME` redirected to a scratch directory:
+  `init` → `add --pid 4242 --pubkey 1:test --window-id 9` → `get 4242`
+  printed `1:test`; the store file held the legacy TSV shape
+  `4242\t9\t1:test\t<unix-seconds>`; appending a broken line made `get`
+  report `malformed record at line 2: …` on stderr while still returning
+  the newest record. No user store was touched.
+- Every removed file remains recoverable at `e78489cb`.
+
+Test-count note: the frame crate's 11 tests include the exhaustive
+every-split-point loop; the crypto suite includes the independent
+server-side decrypt round trip, tamper and wrong-recipient rejection, and
+exact-key-length rejection, not serializer mirrors.
+
+Risks carried forward: no live-kitty conformance run for the foundation
+crates (all wire facts are source-verified against the pinned upstream
+tree, and the crypto oracle verifies the algorithm against itself, but no
+kitty server has sealed/answered these frames); `protocol/commands`
+carries one exemplar by design, so catalog breadth is intentionally the
+next stage's work; `rust-version = "1.85"` is a declared floor, not a
+tested matrix.
