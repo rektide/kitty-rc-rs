@@ -10,7 +10,9 @@ pub struct UploadSource {
 impl UploadSource {
     /// The caller must account for all memory retained by this reader (including
     /// hidden buffers/captured state). Future allocations must fit that declared
-    /// bound. A registry cannot introspect arbitrary reader implementations.
+    /// bound, including owned error causes it can return. The registry retains
+    /// this reservation with a producer error until native take/release. It
+    /// cannot introspect arbitrary reader implementations or hard-preempt them.
     pub fn reader<R: AsyncRead + Unpin + Send + 'static>(reader: R, retained_bytes: usize) -> Self {
         Self {
             reader: Box::new(reader),

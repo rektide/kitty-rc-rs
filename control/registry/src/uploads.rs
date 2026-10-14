@@ -68,10 +68,27 @@ pub struct RefusedUpload<C> {
     pub source: UploadSource,
     pub reason: RefusalReason,
 }
+impl<C> std::fmt::Debug for RefusedUpload<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RefusedUpload")
+            .field("reason", &self.reason)
+            .field("source_retained_bytes", &self.source.retained_bytes())
+            .finish_non_exhaustive()
+    }
+}
 pub struct RejectedUpload {
     pub prepared: PreparedUpload,
     pub source: UploadSource,
     pub max_upload: u64,
+}
+impl std::fmt::Debug for RejectedUpload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RejectedUpload")
+            .field("command", &self.prepared.key())
+            .field("source_retained_bytes", &self.source.retained_bytes())
+            .field("max_upload", &self.max_upload)
+            .finish_non_exhaustive()
+    }
 }
 pub(super) enum Input {
     Finite(Prepared),
@@ -108,8 +125,9 @@ impl Registry {
             .copied()
             .ok_or(LaneError::Unknown)
     }
-    /// Assign a newly registered endpoint as a known alias. Immutable once that
-    /// endpoint has accepted work. Setup/credential changes never alter its group.
+    /// Assign an unused endpoint/group as a known alias. A group's membership
+    /// freezes once ANY member accepts work; setup changes never alter it. New
+    /// aliases may join a used group, but cannot split an existing used group.
     pub fn assign_alias(
         &self,
         endpoint: EndpointId,
@@ -122,7 +140,7 @@ impl Registry {
         {
             return Err(LaneError::Unknown);
         }
-        if s.records.values().any(|r| r.endpoint == endpoint)
+        if s.group_locked.contains(&s.groups[&endpoint])
             || s.lanes
                 .keys()
                 .any(|(g, _)| Some(g) == s.groups.get(&endpoint))

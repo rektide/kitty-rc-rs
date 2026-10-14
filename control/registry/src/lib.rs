@@ -217,6 +217,7 @@ struct Record {
 }
 struct State {
     groups: BTreeMap<EndpointId, CoordinationGroupId>,
+    group_locked: std::collections::BTreeSet<CoordinationGroupId>,
     lanes: BTreeMap<(CoordinationGroupId, kitty_rc_commands::upload::UploadKey), LaneClaim>,
     endpoints: BTreeMap<EndpointId, setup::Entry>,
     records: BTreeMap<Token, Record>,
@@ -303,6 +304,7 @@ impl Registry {
                 limits,
                 state: Mutex::new(State {
                     groups: BTreeMap::new(),
+                    group_locked: std::collections::BTreeSet::new(),
                     lanes: BTreeMap::new(),
                     endpoints: BTreeMap::new(),
                     records: BTreeMap::new(),
@@ -472,7 +474,9 @@ impl Registry {
         }
         let done = Arc::new(Notify::new());
         let input_bytes = input.reservation_bytes();
-        let lane = input.key().map(|key| (state.groups[&endpoint], key));
+        let group = state.groups[&endpoint];
+        let lane = input.key().map(|key| (group, key));
+        state.group_locked.insert(group);
         state.records.insert(
             token,
             Record {
@@ -584,6 +588,17 @@ impl Registry {
         let mut state = self.shared.state.lock().unwrap();
         let r = state.records.get_mut(&token).ok_or(CustodyError::Missing)?;
         let outcome = r.outcome.take().ok_or(CustodyError::Unavailable)?;
+        if matches!(
+            &outcome,
+            Outcome::Interrupted {
+                reason: ExecutionError::Source(_),
+                ..
+            }
+        ) {
+            // The original producer error can own source-declared memory.
+            // Its reservation follows it until this sole native take.
+            r.input_bytes = 0;
+        }
         r.status = Status::Taken;
         r.reservation = 0;
         Ok(outcome)
@@ -765,13 +780,21 @@ fn class_index(c: Class) -> usize {
 }
 fn complete(r: &mut Record, outcome: Outcome) {
     r.unresolved = outcome.unresolved();
+    let retained_source_error = matches!(
+        &outcome,
+        Outcome::Interrupted {
+            reason: ExecutionError::Source(_),
+            ..
+        }
+    );
     match r.input.take() {
         Some(Input::Upload(input)) => {
             // Queued cancellation/deadline retains an unpolled owned source.
             // It is quota-counted until explicit take/release outside this lock.
             r.rejected_upload = Some(input);
         }
-        _ => r.input_bytes = 0,
+        _ if !retained_source_error => r.input_bytes = 0,
+        _ => {}
     }
     r.outcome = Some(outcome);
     r.status = Status::Completed;

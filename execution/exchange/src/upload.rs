@@ -78,15 +78,17 @@ impl PreparedUpload {
     pub fn metadata(&self) -> &[u8] {
         &self.metadata
     }
-    /// Metadata parse/JSON copies + raw chunk + one prepared/protected frame.
+    /// Conservative metadata tree/JSON copies + raw chunk + one protected frame
+    /// and fixed executor future/read-buffer storage. Empty string arrays cost
+    /// much more in serde's Value tree than their compact serialized form.
     /// Source-owned allocations are additional caller-declared reservations.
     pub fn reservation_bytes(&self) -> usize {
         self.metadata
             .capacity()
-            .saturating_mul(8)
+            .saturating_mul(32)
             .saturating_add(self.frame_reservation)
             .saturating_add(self.key.raw_chunk_bytes())
-            .saturating_add(512)
+            .saturating_add(64 * 1024)
     }
     pub fn frame(
         &self,

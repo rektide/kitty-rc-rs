@@ -454,3 +454,16 @@ async fn coalesced_ack_and_early_refusal_are_consumed_before_more_source_demand(
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     task.await.unwrap();
 }
+
+#[tokio::test]
+async fn upload_future_fixed_storage_fits_prepared_reservation_without_polling_source() {
+    let peer = Peer::new();
+    let mut session = peer.session();
+    let prepared = prepare_upload(&run(), &Protection::Plain, 16384).unwrap();
+    let reserved = prepared.reservation_bytes();
+    let (source, calls, _) = probe(vec![], false, true);
+    let future = session.upload_prepared(prepared, source, options(), Evidence::default());
+    assert!(std::mem::size_of_val(&future) <= reserved);
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    drop(future);
+}

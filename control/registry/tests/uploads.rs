@@ -252,3 +252,118 @@ async fn upload_source_and_metadata_quota_and_setup_rejection_are_retained() {
     assert!(rejected.source.retained_bytes() >= 4096);
     registry.release(accepted.token()).unwrap();
 }
+
+#[tokio::test]
+async fn queued_source_drop_runs_outside_lock_and_alias_group_stays_frozen_after_release() {
+    struct Reentrant {
+        registry: Registry,
+        hit: std::sync::Arc<AtomicUsize>,
+    }
+    impl tokio::io::AsyncRead for Reentrant {
+        fn poll_read(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+            _: &mut tokio::io::ReadBuf<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            std::task::Poll::Pending
+        }
+    }
+    impl Drop for Reentrant {
+        fn drop(&mut self) {
+            self.registry.inventory();
+            self.hit.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let registry = Registry::new(Limits::default()).unwrap();
+    let endpoint = || Endpoint {
+        address: Address::Unix("/not/connected".into()),
+        protection: Protection::Plain,
+    };
+    let ep = registry.register(endpoint()).unwrap();
+    let another = registry.register(endpoint()).unwrap();
+    let unused_alias = registry.register(endpoint()).unwrap();
+    registry
+        .assign_alias(unused_alias, registry.coordination_group(ep).unwrap())
+        .unwrap();
+    let hit = std::sync::Arc::new(AtomicUsize::new(0));
+    let op = submit(
+        &registry,
+        ep,
+        UploadSource::reader(
+            Reentrant {
+                registry: registry.clone(),
+                hit: hit.clone(),
+            },
+            0,
+        ),
+    );
+    op.cancel();
+    assert_eq!(hit.load(Ordering::Relaxed), 0);
+    registry.release(op.token()).unwrap();
+    assert_eq!(hit.load(Ordering::Relaxed), 1);
+    assert!(matches!(
+        registry.assign_alias(ep, registry.coordination_group(another).unwrap()),
+        Err(LaneError::Busy)
+    ));
+    assert!(matches!(
+        registry.assign_alias(unused_alias, registry.coordination_group(another).unwrap()),
+        Err(LaneError::Busy)
+    ));
+}
+
+#[tokio::test]
+async fn producer_error_retains_source_budget_until_native_take() {
+    struct ErrorSource;
+    impl tokio::io::AsyncRead for ErrorSource {
+        fn poll_read(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+            _: &mut tokio::io::ReadBuf<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            std::task::Poll::Ready(Err(std::io::Error::other("producer cause")))
+        }
+    }
+    let source = UploadSource::reader(ErrorSource, 8192);
+    let input = kitty_rc_exchange::prepare_upload(&run(), &Protection::Plain, 16384)
+        .unwrap()
+        .reservation_bytes()
+        + source.retained_bytes();
+    let registry = Registry::new(Limits {
+        max_request: 16384,
+        input_bytes: input,
+        input_bytes_per_endpoint: input,
+        ..Limits::default()
+    })
+    .unwrap();
+    let ep = registry
+        .register(Endpoint {
+            address: Address::Unix("/not/connected".into()),
+            protection: Protection::Plain,
+        })
+        .unwrap();
+    let driver = registry.start().unwrap();
+    let op = submit(&registry, ep, source);
+    op.wait().await.unwrap();
+    let refusal = registry
+        .submit(&registry.reserve(), ep, GetText::default(), opts())
+        .err()
+        .unwrap();
+    assert!(matches!(
+        refusal.reason,
+        kitty_rc_registry::RefusalReason::InputCapacity
+    ));
+    assert!(matches!(
+        op.take(),
+        Err(Failure::Interrupted {
+            reason: kitty_rc_exchange::ExecutionError::Source(_),
+            ..
+        })
+    ));
+    let next = registry
+        .submit(&registry.reserve(), ep, GetText::default(), opts())
+        .unwrap();
+    next.cancel();
+    registry.release(next.token()).unwrap();
+    registry.release(op.token()).unwrap();
+    driver.stop().await;
+}
