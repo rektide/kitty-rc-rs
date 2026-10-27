@@ -121,8 +121,11 @@ pub struct Launch {
     pub target: TabTarget,
     pub window_title: Option<String>,
     pub tab_title: Option<String>,
+    #[builder(into)]
     pub cwd: Option<LaunchCwd>,
+    #[builder(into)]
     pub next_to: Option<WindowMatch>,
+    #[builder(into)]
     pub source_window: Option<WindowMatch>,
     #[builder(default)]
     pub env: Vec<Assignment>,

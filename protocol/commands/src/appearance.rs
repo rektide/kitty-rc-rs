@@ -351,6 +351,7 @@ impl Command for SetFontSize {
 
 #[derive(Debug, Clone, Default, bon::Builder)]
 pub struct GetColors {
+    #[builder(into)]
     pub match_spec: Option<WindowMatch>,
     #[builder(default)]
     pub configured: bool,

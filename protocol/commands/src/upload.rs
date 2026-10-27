@@ -43,6 +43,7 @@ pub trait UploadCommand: Command + sealed::Sealed {
 
 #[derive(Debug, Clone, Default, bon::Builder)]
 pub struct BackgroundPng {
+    #[builder(into)]
     pub match_spec: Option<WindowMatch>,
     #[builder(default)]
     pub all: bool,

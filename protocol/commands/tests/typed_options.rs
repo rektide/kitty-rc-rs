@@ -138,7 +138,7 @@ fn launch_cwd_is_typed_and_matches_remain_native_strings() {
     ] {
         let launch = Launch::builder()
             .cwd(cwd)
-            .next_to(WindowMatch::id(WindowId(3)))
+            .next_to(WindowId(3))
             .source_window(WindowMatch::title("^source$"))
             .build();
         let p = payload(&launch);
