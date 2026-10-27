@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         .find_map(|w| w.id)
         .ok_or("no private window")?;
     let target = targets::WindowTarget::Id(targets::WindowId(id));
-    let spec = format!("id:{id}");
+    let spec = targets::WindowMatch::id(targets::WindowId(id));
     let mut failures = 0;
     macro_rules! case {
         ($name:literal, $profile:expr, $body:expr) => {{
@@ -197,9 +197,7 @@ async fn main() -> Result<()> {
                 .submit(
                     &registry.reserve(),
                     ep,
-                    FocusWindow {
-                        match_spec: spec.clone(),
-                    },
+                    FocusWindow::new(spec.clone()),
                     managed_options(),
                 )
                 .map_err(|e| e.reason)?;
@@ -207,10 +205,7 @@ async fn main() -> Result<()> {
                 .submit(
                     &registry.reserve(),
                     ep,
-                    GetText {
-                        match_spec: Some(spec.clone()),
-                        ..GetText::default()
-                    },
+                    GetText::window(spec.clone(), TextExtent::Screen),
                     managed_options(),
                 )
                 .map_err(|e| e.reason)?;
@@ -252,12 +247,7 @@ async fn main() -> Result<()> {
         async {
             let token = session.connection_token();
             let failure = session
-                .execute_with_options(
-                    FocusWindow {
-                        match_spec: "id:18446744073709551615".into(),
-                    },
-                    options(),
-                )
+                .execute_with_options(FocusWindow::id(targets::WindowId(u64::MAX)), options())
                 .await
                 .err()
                 .ok_or("no-match unexpectedly succeeded")?;
@@ -358,16 +348,13 @@ async fn main() -> Result<()> {
         json!({"commands":["set-colors","get-colors","load-config"],"reload_override":"foreground=#223344"}),
         async {
             let colors = BTreeMap::from([(
-                "foreground".into(),
+                appearance::ColorName::Foreground,
                 appearance::ColorValue::Rgb(targets::Rgb::new(0x112233)?),
             )]);
             execute(
                 &mut session,
                 appearance::Appearance {
-                    windows: targets::WindowSet {
-                        match_window: Some(spec.clone()),
-                        ..Default::default()
-                    },
+                    windows: targets::WindowSet::window(spec.clone()),
                     operation: appearance::AppearanceOperation::Colors {
                         colors,
                         configured: false,
@@ -391,7 +378,9 @@ async fn main() -> Result<()> {
                 &mut session,
                 configuration::LoadConfig {
                     paths: vec![],
-                    overrides: vec!["foreground=#223344".into()],
+                    overrides: vec![configuration::ConfigOverride::foreground(
+                        targets::Rgb::new(0x223344)?,
+                    )],
                     ignore_previous_overrides: false,
                 },
             )
@@ -496,12 +485,7 @@ async fn main() -> Result<()> {
         json!({"command":"focus-window","no_response":true}),
         async {
             let result = session
-                .execute_with_options(
-                    Submission(FocusWindow {
-                        match_spec: spec.clone(),
-                    }),
-                    options(),
-                )
+                .execute_with_options(Submission(FocusWindow::new(spec.clone())), options())
                 .await?;
             ensure(
                 matches!(result, Completion::Submitted),
@@ -524,11 +508,7 @@ async fn main() -> Result<()> {
             async {
                 let text = execute(
                     &mut session,
-                    GetText {
-                        match_spec: Some(spec.clone()),
-                        extent: TextExtent::Alternate,
-                        ..Default::default()
-                    },
+                    GetText::window(spec.clone(), TextExtent::Alternate),
                 )
                 .await?;
                 Ok(json!({"text_bytes":text.len(),"no_alternate_content_asserted":true}))
@@ -581,13 +561,7 @@ async fn main() -> Result<()> {
             "screenshot-image-and-server-path",
             json!({"command":"screenshot","profiles":["PNG reply","private server file"]}),
             async {
-                execute(
-                    &mut session,
-                    FocusWindow {
-                        match_spec: spec.clone(),
-                    },
-                )
-                .await?;
+                execute(&mut session, FocusWindow::new(spec.clone())).await?;
                 tokio::time::sleep(Duration::from_millis(150)).await;
                 let image = execute(
                     &mut session,

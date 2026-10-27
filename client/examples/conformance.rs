@@ -1,6 +1,6 @@
 //! Only for a deliberately isolated real kitty fixture. Launches a child.
 use kitty_rc::{
-    commands::{FocusWindow, GetText, LaunchWait, Ls},
+    commands::{FocusWindow, GetText, LaunchWait, Ls, TextExtent, targets::WindowId},
     *,
 };
 use std::time::Duration;
@@ -83,9 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .submit(
             &registry.reserve(),
             ep,
-            LaunchWait {
-                args: vec!["sh".into(), "-c".into(), "sleep 0.5; exit 7".into()],
-            },
+            LaunchWait::new(["sh", "-c", "sleep 0.5; exit 7"]),
             options(),
         )
         .map_err(|e| e.reason)?;
@@ -93,10 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .submit(
             &registry.reserve(),
             ep,
-            GetText {
-                match_spec: Some(format!("id:{id}")),
-                ..GetText::default()
-            },
+            GetText::window(WindowId(id), TextExtent::Screen),
             options(),
         )
         .map_err(|e| e.reason)?;
@@ -104,9 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .submit(
             &registry.reserve(),
             ep,
-            FocusWindow {
-                match_spec: format!("id:{id}"),
-            },
+            FocusWindow::id(WindowId(id)),
             options(),
         )
         .map_err(|e| e.reason)?;

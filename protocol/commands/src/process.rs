@@ -2,7 +2,9 @@
 //! available independently; [`crate::upload::Run`] binds it to a bounded upload
 //! conversation, including the empty-stdin shared-accumulator case.
 use crate::appearance::LogoPosition;
-use crate::targets::{Assignment, Finite, ServerPath, TabId, TabMatch, TabTarget, WindowId, WindowMatch};
+use crate::targets::{
+    Assignment, Finite, ServerPath, TabId, TabMatch, TabTarget, WindowId, WindowMatch,
+};
 use crate::{CanSubmitWithoutReply, Class, Command, DecodeError, Mode, request};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use kitty_rc_schema::PlainRequest;
@@ -206,8 +208,18 @@ impl Command for Launch {
         p["cwd"] = json!(self.cwd);
         p["next_to"] = json!(self.next_to);
         p["source_window"] = json!(self.source_window);
-        p["env"] = json!(self.env.iter().map(Assignment::as_argument).collect::<Vec<_>>());
-        p["var"] = json!(self.user_vars.iter().map(Assignment::as_argument).collect::<Vec<_>>());
+        p["env"] = json!(
+            self.env
+                .iter()
+                .map(Assignment::as_argument)
+                .collect::<Vec<_>>()
+        );
+        p["var"] = json!(
+            self.user_vars
+                .iter()
+                .map(Assignment::as_argument)
+                .collect::<Vec<_>>()
+        );
         p["copy_env"] = json!(self.copy_env);
         p["keep_focus"] = json!(self.keep_focus);
         p["copy_colors"] = json!(self.copy_colors);
@@ -285,7 +297,9 @@ impl RunOutput {
     }
 }
 fn decode_base64(value: &str) -> Result<Vec<u8>, DecodeError> {
-    STANDARD.decode(value).map_err(|e| DecodeError::Custom(Box::new(e)))
+    STANDARD
+        .decode(value)
+        .map_err(|e| DecodeError::Custom(Box::new(e)))
 }
 
 #[derive(Debug, Clone, Default)]

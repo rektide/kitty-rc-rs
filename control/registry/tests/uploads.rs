@@ -1,5 +1,6 @@
 use kitty_rc_commands::{
     FocusWindow, GetText,
+    targets::WindowId,
     upload::{Run, UploadKey},
 };
 use kitty_rc_endpoint::{Address, Endpoint, Protection};
@@ -144,9 +145,7 @@ async fn aliases_empty_run_exclusion_unrelated_progress_cancel_policy_and_stale_
         .submit(
             &registry.reserve(),
             alias,
-            FocusWindow {
-                match_spec: "id:1".into(),
-            },
+            FocusWindow::id(WindowId(1)),
             opts(),
         )
         .unwrap();

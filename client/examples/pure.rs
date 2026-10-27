@@ -1,8 +1,8 @@
-//! Schema/frame/protection leaf entrances: no runtime, files, sockets or facade.
+//! Commands/frame/protection leaf entrances: no runtime, files, sockets or facade.
 use clap::Parser;
+use kitty_rc_commands::{Command, Ls};
 use kitty_rc_crypto::{ServerPublicKey, encrypt_raw_request};
 use kitty_rc_frame::{FrameDecoder, frame};
-use kitty_rc_schema::PlainRequest;
 use rand_core::OsRng;
 
 #[derive(Parser)]
@@ -20,7 +20,7 @@ struct Args {
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let request = PlainRequest::new("ls");
+    let request = Ls::all().request();
     let payload = match (args.key, args.password, args.timestamp_ns) {
         (Some(key), Some(password), Some(timestamp)) => serde_json::to_vec(&encrypt_raw_request(
             serde_json::to_value(request)?,

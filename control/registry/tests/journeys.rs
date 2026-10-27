@@ -1,4 +1,6 @@
-use kitty_rc_commands::{Class, Command, FocusWindow, GetText, LaunchWait, Ls, RawFinite};
+use kitty_rc_commands::{
+    Class, Command, FocusWindow, GetText, LaunchWait, Ls, RawFinite, targets::WindowId,
+};
 use kitty_rc_endpoint::{Address, Endpoint, Protection};
 use kitty_rc_exchange::{Completion, Failure, Outcome, Progress};
 use kitty_rc_registry::{Limits, Options, Registry, Shutdown, Status};
@@ -133,9 +135,7 @@ fn options() -> Options {
     }
 }
 fn focus() -> FocusWindow {
-    FocusWindow {
-        match_spec: "id:1".into(),
-    }
+    FocusWindow::id(WindowId(1))
 }
 
 #[tokio::test]
@@ -544,7 +544,7 @@ async fn admission_custody_byte_budgets_close_and_queued_cancel() {
         .submit(&registry.reserve(), ep, focus(), opts)
         .err()
         .unwrap();
-    assert_eq!(refused.command.match_spec, "id:1");
+    assert_eq!(refused.command.match_spec.as_str(), "id:1");
     assert!(registry.cancel(id));
     assert!(second.cancel());
     registry.wait(id).await.unwrap();

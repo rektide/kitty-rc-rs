@@ -2,7 +2,10 @@
 mod support;
 use clap::Parser;
 use kitty_rc_check::{Condition, Criterion, Freshness, Request, RetainedOriginal};
-use kitty_rc_commands::FocusWindow;
+use kitty_rc_commands::{
+    FocusWindow,
+    targets::{WindowId, WindowMatch},
+};
 use kitty_rc_listing::{Binding, Interpretation, Observer, Scope, Support};
 use kitty_rc_registry::{Limits, Options, Registry, Shutdown};
 use std::time::Duration;
@@ -51,7 +54,7 @@ async fn main() -> Result<(), Error> {
         registry.clone(),
         binding.clone(),
         Scope {
-            match_window: args.match_window,
+            match_window: args.match_window.map(WindowMatch::raw),
             ..Default::default()
         },
         interpretation.clone(),
@@ -79,9 +82,7 @@ async fn main() -> Result<(), Error> {
             .submit(
                 &reservation,
                 endpoint,
-                FocusWindow {
-                    match_spec: format!("id:{id}"),
-                },
+                FocusWindow::id(WindowId(id)),
                 options(),
             )
             .map_err(|e| e.reason)?;
@@ -95,7 +96,7 @@ async fn main() -> Result<(), Error> {
             let input = original.check_input(
                 Request {
                     scope: Scope {
-                        match_window: Some(format!("id:{id}")),
+                        match_window: Some(WindowMatch::id(WindowId(id))),
                         ..Default::default()
                     },
                     interpretation,

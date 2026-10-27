@@ -17,16 +17,18 @@
 //! ```
 //! use kitty_rc_commands::{Command, Submission};
 //! use kitty_rc_commands::actions::{Action, KnownAction};
-//! use kitty_rc_commands::configuration::LoadConfig;
-//! use kitty_rc_commands::targets::{WindowId, WindowTarget};
+//! use kitty_rc_commands::configuration::{ConfigOverride, LoadConfig};
+//! use kitty_rc_commands::targets::WindowId;
 //! let action = Action::builder()
 //!     .action(KnownAction::GotoTab(2))
-//!     .target(WindowTarget::Id(WindowId(7)))
+//!     .target(WindowId(7))
 //!     .build();
 //! assert_eq!(action.request().cmd, "action");
 //! // Deliberate suppression acknowledges only local submission.
-//! let config = Submission(LoadConfig::builder()
-//!     .overrides(vec!["font_size=16".into()]).build());
+//! let config = Submission(LoadConfig {
+//!     overrides: vec![ConfigOverride::font_size(16.0).unwrap()],
+//!     ..LoadConfig::default()
+//! });
 //! assert!(!config.reusable());
 //! ```
 

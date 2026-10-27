@@ -32,7 +32,7 @@ async fn main() -> Result<(), Error> {
                 .submit(
                     &reservation,
                     endpoint,
-                    Ls::default(),
+                    Ls::all(),
                     Options {
                         deadline: Instant::now() + Duration::from_secs(5),
                         max_response: 1024 * 1024,
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Error> {
         .submit(
             &next,
             endpoint,
-            Ls::default(),
+            Ls::all(),
             Options {
                 deadline: Instant::now() + Duration::from_secs(5),
                 max_response: 1024 * 1024,

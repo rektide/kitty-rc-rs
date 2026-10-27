@@ -1,3 +1,4 @@
+use kitty_rc_commands::targets::{TabId, TabMatch, WindowMatch};
 use kitty_rc_endpoint::{Address, Endpoint, Protection};
 use kitty_rc_exchange::{Failure, Progress};
 use kitty_rc_listing::*;
@@ -120,8 +121,8 @@ async fn filtered_coverage_sampled_changes_and_failed_acquisition_preserve_basel
     let (r, ep) = registry(&f);
     let driver = r.start().unwrap();
     let scope = Scope {
-        match_window: Some("title:editor".into()),
-        match_tab: Some("id:2".into()),
+        match_window: Some(WindowMatch::title("editor")),
+        match_tab: Some(TabMatch::id(TabId(2))),
         only_self: true,
         all_env_vars: false,
     };

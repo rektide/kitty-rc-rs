@@ -33,13 +33,19 @@ impl FontChange {
         Self::new(factor, Some('/'))
     }
     fn new(amount: f64, operator: Option<char>) -> Result<Self, InvalidValue> {
-        if !amount.is_finite() || amount < 0.0 || (matches!(operator, Some('*' | '/')) && amount == 0.0) {
+        if !amount.is_finite()
+            || amount < 0.0
+            || (matches!(operator, Some('*' | '/')) && amount == 0.0)
+        {
             return Err(InvalidValue);
         }
         Ok(Self { amount, operator })
     }
     pub fn reset() -> Self {
-        Self { amount: 0.0, operator: None }
+        Self {
+            amount: 0.0,
+            operator: None,
+        }
     }
     pub fn amount(self) -> f64 {
         self.amount
@@ -48,7 +54,11 @@ impl FontChange {
         self.operator
     }
     pub fn argument(self) -> String {
-        format!("{}{}", self.operator.map_or_else(String::new, |c| c.to_string()), self.amount)
+        format!(
+            "{}{}",
+            self.operator.map_or_else(String::new, |c| c.to_string()),
+            self.amount
+        )
     }
 }
 
@@ -197,10 +207,19 @@ impl Appearance {
     }
 
     pub fn opacity(windows: WindowSet, opacity: Opacity) -> Self {
-        Self::new(windows, AppearanceOperation::Opacity { opacity, toggle: false })
+        Self::new(
+            windows,
+            AppearanceOperation::Opacity {
+                opacity,
+                toggle: false,
+            },
+        )
     }
 
-    pub fn colors(windows: WindowSet, colors: impl IntoIterator<Item = (ColorName, ColorValue)>) -> Self {
+    pub fn colors(
+        windows: WindowSet,
+        colors: impl IntoIterator<Item = (ColorName, ColorValue)>,
+    ) -> Self {
         Self::new(
             windows,
             AppearanceOperation::Colors {
@@ -215,7 +234,10 @@ impl Appearance {
         Self::new(WindowSet::default(), AppearanceOperation::ResetColors)
     }
 
-    pub fn spacing(windows: WindowSet, settings: impl IntoIterator<Item = (SpacingEdge, Option<Finite>)>) -> Self {
+    pub fn spacing(
+        windows: WindowSet,
+        settings: impl IntoIterator<Item = (SpacingEdge, Option<Finite>)>,
+    ) -> Self {
         Self::new(
             windows,
             AppearanceOperation::Spacing {
@@ -284,7 +306,10 @@ impl Command for Appearance {
                 p["reset"] = json!(true);
                 "set-colors"
             }
-            AppearanceOperation::Spacing { settings, configured } => {
+            AppearanceOperation::Spacing {
+                settings,
+                configured,
+            } => {
                 p["settings"] = json!(settings);
                 p["configured"] = json!(configured);
                 "set-spacing"
@@ -300,7 +325,10 @@ impl Command for Appearance {
                 p["match"] = json!(self.windows.match_window);
                 p["data"] = json!(data);
                 p["layout"] = json!(layout);
-                p["configured"] = json!(matches!(image, BackgroundImage::Remove { configured: true }));
+                p["configured"] = json!(matches!(
+                    image,
+                    BackgroundImage::Remove { configured: true }
+                ));
                 "set-background-image"
             }
         };
@@ -371,7 +399,10 @@ impl GetColors {
 impl Command for GetColors {
     type Output = String;
     fn request(&self) -> PlainRequest {
-        request("get-colors", json!({"match": self.match_spec, "configured": self.configured}))
+        request(
+            "get-colors",
+            json!({"match": self.match_spec, "configured": self.configured}),
+        )
     }
     fn class(&self) -> Class {
         Class::Observation

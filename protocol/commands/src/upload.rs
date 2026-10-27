@@ -103,7 +103,10 @@ pub struct LogoPng {
 }
 impl LogoPng {
     pub fn new(target: WindowTarget) -> Self {
-        Self { target, ..Self::default() }
+        Self {
+            target,
+            ..Self::default()
+        }
     }
 }
 impl Command for LogoPng {

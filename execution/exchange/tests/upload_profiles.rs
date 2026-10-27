@@ -1,7 +1,7 @@
 use kitty_rc_commands::{
     Command,
-    appearance::BackgroundLayout,
-    targets::{Assignment, Opacity, WindowTarget},
+    appearance::{BackgroundLayout, LogoPosition},
+    targets::{Assignment, Opacity, WindowMatch, WindowTarget},
     upload::{BackgroundPng, LogoPng, Run, UploadKey, UploadSubmission},
 };
 use kitty_rc_endpoint::Protection;
@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 #[test]
 fn pinned_constructor_metadata_chunk_bounds_and_envelopes() {
     let background = BackgroundPng::builder()
-        .match_spec("title:🦀")
+        .match_spec(WindowMatch::title("🦀"))
         .all(true)
         .configured(true)
         .layout(BackgroundLayout::CenteredScaled)
@@ -21,7 +21,7 @@ fn pinned_constructor_metadata_chunk_bounds_and_envelopes() {
     );
     let logo = LogoPng::builder()
         .target(WindowTarget::CallingWindow)
-        .position("bottom-right")
+        .position(LogoPosition::BottomRight)
         .alpha(Opacity::new(0.3).unwrap())
         .build();
     assert_eq!(

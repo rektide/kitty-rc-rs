@@ -1,5 +1,9 @@
 use kitty_rc_check::*;
-use kitty_rc_commands::{Ls, process::Launch};
+use kitty_rc_commands::{
+    Ls,
+    process::Launch,
+    targets::{TabId, TabMatch, WindowId, WindowMatch},
+};
 use kitty_rc_endpoint::{Address, Endpoint, Protection};
 use kitty_rc_exchange::{ExecutionError, Failure, Outcome, Progress};
 use kitty_rc_listing::{Binding, Interpretation, Observer, Scope, Snapshot, Support};
@@ -453,7 +457,7 @@ async fn exact_binding_scope_interpretation_and_conservative_age_are_required() 
         (
             7,
             Scope {
-                match_window: Some("id:1".into()),
+                match_window: Some(WindowMatch::id(WindowId(1))),
                 ..Default::default()
             },
             interpretation(),
@@ -620,8 +624,8 @@ async fn exact_filtered_read_and_native_fact_criteria_remain_scope_local() {
     let original = unknown(&mut f, &registry, endpoint).await;
     let mut asked = request();
     asked.scope = Scope {
-        match_window: Some("title:trial".into()),
-        match_tab: Some("id:22".into()),
+        match_window: Some(WindowMatch::title("trial")),
+        match_tab: Some(TabMatch::id(TabId(22))),
         only_self: true,
         all_env_vars: true,
     };

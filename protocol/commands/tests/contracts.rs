@@ -145,7 +145,10 @@ fn kitten_name_args_and_actual_return_contract() {
 fn config_paths_and_override_are_lists_and_env_is_dictionary() {
     let load = LoadConfig::builder()
         .paths(vec!["relative.conf".into(), "/server/two.conf".into()])
-        .overrides(vec!["font_size=16".into(), "background=#112233".into()])
+        .overrides(vec![
+            ConfigOverride::font_size(16.0).unwrap(),
+            ConfigOverride::background(Rgb::new(0x112233).unwrap()),
+        ])
         .ignore_previous_overrides(true)
         .build();
     assert_eq!(
@@ -332,7 +335,7 @@ fn tab_layout_and_colors_follow_handler_fields() {
 #[test]
 fn input_submissions_retire_and_preserve_literal_utf8() {
     let keys = SendKey::builder()
-        .keys(vec!["ctrl+a".into(), "ctrl+b".into()])
+        .keys(vec![KeyChord::ctrl('a'), KeyChord::ctrl('b')])
         .exclude_active(true)
         .build();
     assert_eq!(
@@ -402,11 +405,7 @@ fn font_opacity_rgb_and_no_nan_null_coercion() {
         json!({"size":0.0,"all":false,"increment_op":null})
     );
     let opacity = Appearance {
-        windows: WindowSet {
-            match_window: Some("id:4".into()),
-            match_tab: None,
-            all: false,
-        },
+        windows: WindowSet::window(WindowId(4)),
         operation: AppearanceOperation::Opacity {
             opacity: Opacity::new(0.4).unwrap(),
             toggle: true,
@@ -531,7 +530,7 @@ fn screenshot_data_and_server_save_are_distinct_deferred_profiles() {
         json!({"match":null,"match_tab":null,"output_path":"~/capture.png"})
     );
     let shot = Screenshot::builder()
-        .target(ScreenshotTarget::Window("id:8".into()))
+        .target(ScreenshotTarget::Window(WindowId(8).into()))
         .build();
     assert_eq!(
         payload(&shot),

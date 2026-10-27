@@ -258,8 +258,12 @@ impl CheckInput {
         }
         let mut bytes = boundary.binding.subject.len();
         for value in [
-            request.scope.match_window.as_deref(),
-            request.scope.match_tab.as_deref(),
+            request
+                .scope
+                .match_window
+                .as_ref()
+                .map(|value| value.as_str()),
+            request.scope.match_tab.as_ref().map(|value| value.as_str()),
             Some(request.interpretation.basis.as_str()),
         ]
         .into_iter()

@@ -1014,7 +1014,7 @@ fn finish_retirement(shared: &Shared, endpoint: EndpointId, count: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kitty_rc_commands::{FocusWindow, GetText, LaunchWait};
+    use kitty_rc_commands::{FocusWindow, GetText, LaunchWait, targets::WindowId};
     use kitty_rc_endpoint::{Address, Protection};
     #[test]
     fn connecting_reservations_are_exclusive_fair_and_class_partitioned() {
@@ -1032,14 +1032,7 @@ mod tests {
         for ep in [a, b] {
             for _ in 0..2 {
                 registry
-                    .submit(
-                        &registry.reserve(),
-                        ep,
-                        FocusWindow {
-                            match_spec: "id:1".into(),
-                        },
-                        opts,
-                    )
+                    .submit(&registry.reserve(), ep, FocusWindow::id(WindowId(1)), opts)
                     .unwrap();
                 registry
                     .submit(&registry.reserve(), ep, GetText::default(), opts)

@@ -2,7 +2,11 @@
 //! No task is started here. Dropping an acquisition detaches, not cancels: save
 //! its receipt and recover its token through the registry. Publication and
 //! baseline advancement require an explicit call on the caller-owned observer.
-use kitty_rc_commands::{Ls, outputs::OsWindow};
+use kitty_rc_commands::{
+    Ls,
+    outputs::OsWindow,
+    targets::{TabMatch, WindowMatch},
+};
 use kitty_rc_exchange::{Completion, Failure};
 use kitty_rc_registry::{CustodyError, EndpointId, Operation, Options, Refused, Registry, Token};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
@@ -18,8 +22,8 @@ pub struct Binding {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Scope {
-    pub match_window: Option<String>,
-    pub match_tab: Option<String>,
+    pub match_window: Option<WindowMatch>,
+    pub match_tab: Option<TabMatch>,
     pub only_self: bool,
     pub all_env_vars: bool,
 }

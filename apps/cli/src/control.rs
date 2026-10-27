@@ -4,7 +4,10 @@ use crate::{
     interface::{Active, Cli, Command, Scope},
     output,
 };
-use kitty_rc_commands::FocusWindow;
+use kitty_rc_commands::{
+    FocusWindow,
+    targets::{TabMatch, WindowId, WindowMatch},
+};
 use kitty_rc_discovery::ProcessEnvironment;
 use kitty_rc_exchange::Completion;
 use kitty_rc_listing::{Binding, Change, Interpretation, Observer, Poller, Snapshot, Support};
@@ -91,8 +94,8 @@ fn observer(registry: &Registry, endpoint: EndpointId, scope: &Scope) -> Observe
             generation: 1,
         },
         kitty_rc_listing::Scope {
-            match_window: scope.match_window.clone(),
-            match_tab: scope.match_tab.clone(),
+            match_window: scope.match_window.clone().map(WindowMatch::raw),
+            match_tab: scope.match_tab.clone().map(TabMatch::raw),
             ..Default::default()
         },
         Interpretation {
@@ -123,9 +126,7 @@ async fn commands(cli: &Cli, registry: &Registry, endpoint: EndpointId) -> Resul
                 .submit(
                     &reservation,
                     endpoint,
-                    FocusWindow {
-                        match_spec: format!("id:{window_id}"),
-                    },
+                    FocusWindow::id(WindowId(*window_id)),
                     options(cli),
                 )
                 .map_err(|e| e.reason)?;

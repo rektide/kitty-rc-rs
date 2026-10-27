@@ -1,6 +1,7 @@
 //! ONLY invoked with the private fixture created by kitty-rc-verify uploads.
 use kitty_rc_commands::{
     GetText, Ls,
+    appearance::LogoPosition,
     targets::{WindowId, WindowTarget},
     upload::{BackgroundPng, LogoPng, Run, UploadSubmission},
 };
@@ -77,9 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let png = std::fs::read(&args[3])?;
     session
         .upload(
-            BackgroundPng::builder()
-                .match_spec(format!("id:{id}"))
-                .build(),
+            BackgroundPng::for_window(WindowId(id)),
             UploadSource::bytes(png.clone()),
             direct(),
         )
@@ -88,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .upload(
             LogoPng::builder()
                 .target(WindowTarget::Id(WindowId(id)))
-                .position("bottom-right")
+                .position(LogoPosition::BottomRight)
                 .build(),
             UploadSource::bytes(png.clone()),
             direct(),

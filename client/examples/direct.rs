@@ -25,7 +25,7 @@ async fn main() -> Result<(), Error> {
         let result = tokio::time::timeout(
             Duration::from_millis(1),
             session.execute_with_options(
-                Ls::default(),
+                Ls::all(),
                 SessionOptions {
                     deadline: Instant::now() + Duration::from_secs(5),
                     max_request: 64 * 1024,
@@ -48,7 +48,7 @@ async fn main() -> Result<(), Error> {
     for _ in 0..2 {
         let completion = session
             .execute_with_options(
-                Ls::default(),
+                Ls::all(),
                 SessionOptions {
                     deadline: Instant::now() + Duration::from_secs(5),
                     max_request: 64 * 1024,
