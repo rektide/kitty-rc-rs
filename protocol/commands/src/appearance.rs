@@ -1,12 +1,13 @@
 //! Finite appearance payloads, not client-side config-file readers or image
 //! uploads. Scope fields follow each native command rather than a fake universal
 //! window selector.
-use crate::targets::{Finite, InvalidValue, Opacity, Rgb, WindowSet};
+use crate::targets::{Finite, InvalidValue, Opacity, Rgb, WindowMatch, WindowSet};
 use crate::{CanSubmitWithoutReply, Class, Command, DecodeError, request};
 use kitty_rc_schema::PlainRequest;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+use std::fmt;
 
 /// Nonnegative, finite font operand. Zero is only valid for absolute reset;
 /// constructing a divide/multiply operation with zero is rejected below.
@@ -32,19 +33,13 @@ impl FontChange {
         Self::new(factor, Some('/'))
     }
     fn new(amount: f64, operator: Option<char>) -> Result<Self, InvalidValue> {
-        if !amount.is_finite()
-            || amount < 0.0
-            || (matches!(operator, Some('*' | '/')) && amount == 0.0)
-        {
+        if !amount.is_finite() || amount < 0.0 || (matches!(operator, Some('*' | '/')) && amount == 0.0) {
             return Err(InvalidValue);
         }
         Ok(Self { amount, operator })
     }
     pub fn reset() -> Self {
-        Self {
-            amount: 0.0,
-            operator: None,
-        }
+        Self { amount: 0.0, operator: None }
     }
     pub fn amount(self) -> f64 {
         self.amount
@@ -53,11 +48,7 @@ impl FontChange {
         self.operator
     }
     pub fn argument(self) -> String {
-        format!(
-            "{}{}",
-            self.operator.map_or_else(String::new, |c| c.to_string()),
-            self.amount
-        )
+        format!("{}{}", self.operator.map_or_else(String::new, |c| c.to_string()), self.amount)
     }
 }
 
@@ -75,6 +66,81 @@ pub enum ColorValue {
     Rgb(Rgb),
     Reset,
     TransparentBackgrounds(String),
+}
+
+/// Native color option names. Palette indices cover all 256 terminal colors;
+/// custom names explicitly opt into kitty's evolving configuration vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ColorName {
+    Foreground,
+    Background,
+    Cursor,
+    CursorTextColor,
+    SelectionForeground,
+    SelectionBackground,
+    ActiveBorderColor,
+    InactiveBorderColor,
+    BellBorderColor,
+    ActiveTabForeground,
+    ActiveTabBackground,
+    InactiveTabForeground,
+    InactiveTabBackground,
+    TabBarBackground,
+    TabBarMarginColor,
+    UrlColor,
+    VisualBellColor,
+    TransparentBackgroundColors,
+    Palette(u8),
+    Custom(String),
+}
+impl fmt::Display for ColorName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Foreground => "foreground",
+            Self::Background => "background",
+            Self::Cursor => "cursor",
+            Self::CursorTextColor => "cursor_text_color",
+            Self::SelectionForeground => "selection_foreground",
+            Self::SelectionBackground => "selection_background",
+            Self::ActiveBorderColor => "active_border_color",
+            Self::InactiveBorderColor => "inactive_border_color",
+            Self::BellBorderColor => "bell_border_color",
+            Self::ActiveTabForeground => "active_tab_foreground",
+            Self::ActiveTabBackground => "active_tab_background",
+            Self::InactiveTabForeground => "inactive_tab_foreground",
+            Self::InactiveTabBackground => "inactive_tab_background",
+            Self::TabBarBackground => "tab_bar_background",
+            Self::TabBarMarginColor => "tab_bar_margin_color",
+            Self::UrlColor => "url_color",
+            Self::VisualBellColor => "visual_bell_color",
+            Self::TransparentBackgroundColors => "transparent_background_colors",
+            Self::Palette(index) => return write!(f, "color{index}"),
+            Self::Custom(name) => name,
+        })
+    }
+}
+impl Serialize for ColorName {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+/// The nine native logo anchors, or the server's configured position.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogoPosition {
+    #[default]
+    #[serde(rename = "")]
+    Configured,
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -115,11 +181,61 @@ pub enum BackgroundImage {
     Increment(i32),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 pub struct Appearance {
+    #[builder(default)]
     pub windows: WindowSet,
     pub operation: AppearanceOperation,
 }
+impl Appearance {
+    pub fn new(windows: WindowSet, operation: AppearanceOperation) -> Self {
+        Self { windows, operation }
+    }
+
+    pub fn ligatures(windows: WindowSet, strategy: LigatureStrategy) -> Self {
+        Self::new(windows, AppearanceOperation::Ligatures(strategy))
+    }
+
+    pub fn opacity(windows: WindowSet, opacity: Opacity) -> Self {
+        Self::new(windows, AppearanceOperation::Opacity { opacity, toggle: false })
+    }
+
+    pub fn colors(windows: WindowSet, colors: impl IntoIterator<Item = (ColorName, ColorValue)>) -> Self {
+        Self::new(
+            windows,
+            AppearanceOperation::Colors {
+                colors: colors.into_iter().collect(),
+                configured: false,
+            },
+        )
+    }
+
+    /// Reset is global in kitty, including the configured colors for new windows.
+    pub fn reset_colors() -> Self {
+        Self::new(WindowSet::default(), AppearanceOperation::ResetColors)
+    }
+
+    pub fn spacing(windows: WindowSet, settings: impl IntoIterator<Item = (SpacingEdge, Option<Finite>)>) -> Self {
+        Self::new(
+            windows,
+            AppearanceOperation::Spacing {
+                settings: settings.into_iter().collect(),
+                configured: false,
+            },
+        )
+    }
+
+    pub fn background_image(windows: WindowSet, image: BackgroundImage) -> Self {
+        Self::new(
+            windows,
+            AppearanceOperation::BackgroundImage {
+                image,
+                layout: BackgroundLayout::Configured,
+            },
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum AppearanceOperation {
     Ligatures(LigatureStrategy),
@@ -128,7 +244,7 @@ pub enum AppearanceOperation {
         toggle: bool,
     },
     Colors {
-        colors: BTreeMap<String, ColorValue>,
+        colors: BTreeMap<ColorName, ColorValue>,
         configured: bool,
     },
     ResetColors,
@@ -168,10 +284,7 @@ impl Command for Appearance {
                 p["reset"] = json!(true);
                 "set-colors"
             }
-            AppearanceOperation::Spacing {
-                settings,
-                configured,
-            } => {
+            AppearanceOperation::Spacing { settings, configured } => {
                 p["settings"] = json!(settings);
                 p["configured"] = json!(configured);
                 "set-spacing"
@@ -187,10 +300,7 @@ impl Command for Appearance {
                 p["match"] = json!(self.windows.match_window);
                 p["data"] = json!(data);
                 p["layout"] = json!(layout);
-                p["configured"] = json!(matches!(
-                    image,
-                    BackgroundImage::Remove { configured: true }
-                ));
+                p["configured"] = json!(matches!(image, BackgroundImage::Remove { configured: true }));
                 "set-background-image"
             }
         };
@@ -215,6 +325,11 @@ pub struct SetFontSize {
     #[builder(default)]
     pub all: bool,
 }
+impl SetFontSize {
+    pub fn new(change: FontChange) -> Self {
+        Self { change, all: false }
+    }
+}
 impl Command for SetFontSize {
     type Output = ();
     fn request(&self) -> PlainRequest {
@@ -235,19 +350,27 @@ impl Command for SetFontSize {
 }
 
 #[derive(Debug, Clone, Default, bon::Builder)]
-#[builder(on(String, into))]
 pub struct GetColors {
-    pub match_spec: Option<String>,
+    pub match_spec: Option<WindowMatch>,
     #[builder(default)]
     pub configured: bool,
+}
+impl GetColors {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn for_window(window: impl Into<WindowMatch>) -> Self {
+        Self {
+            match_spec: Some(window.into()),
+            ..Self::default()
+        }
+    }
 }
 impl Command for GetColors {
     type Output = String;
     fn request(&self) -> PlainRequest {
-        request(
-            "get-colors",
-            json!({"match": self.match_spec, "configured": self.configured}),
-        )
+        request("get-colors", json!({"match": self.match_spec, "configured": self.configured}))
     }
     fn class(&self) -> Class {
         Class::Observation

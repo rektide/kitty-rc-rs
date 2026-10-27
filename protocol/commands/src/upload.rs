@@ -1,8 +1,8 @@
 //! Audited upload metadata. Sources and I/O belong to execution; PNG inputs
 //! are already encoded images, without implicit filesystem reads/conversion.
-use crate::appearance::BackgroundLayout;
+use crate::appearance::{BackgroundLayout, LogoPosition};
 use crate::process::RunOutput;
-use crate::targets::{Assignment, Opacity, WindowTarget};
+use crate::targets::{Assignment, Opacity, WindowMatch, WindowTarget};
 use crate::{Class, Command, DecodeError, Mode, request};
 use kitty_rc_schema::PlainRequest;
 use serde_json::{Value, json};
@@ -42,15 +42,26 @@ pub trait UploadCommand: Command + sealed::Sealed {
 }
 
 #[derive(Debug, Clone, Default, bon::Builder)]
-#[builder(on(String, into))]
 pub struct BackgroundPng {
-    pub match_spec: Option<String>,
+    pub match_spec: Option<WindowMatch>,
     #[builder(default)]
     pub all: bool,
     #[builder(default)]
     pub configured: bool,
     #[builder(default)]
     pub layout: BackgroundLayout,
+}
+impl BackgroundPng {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn for_window(window: impl Into<WindowMatch>) -> Self {
+        Self {
+            match_spec: Some(window.into()),
+            ..Self::default()
+        }
+    }
 }
 impl Command for BackgroundPng {
     type Output = ();
@@ -81,14 +92,18 @@ impl UploadCommand for BackgroundPng {
 }
 
 #[derive(Debug, Clone, Default, bon::Builder)]
-#[builder(on(String, into))]
 pub struct LogoPng {
     #[builder(default)]
     pub target: WindowTarget,
     #[builder(default)]
-    pub position: String,
+    pub position: LogoPosition,
     /// None means native configured alpha (-1).
     pub alpha: Option<Opacity>,
+}
+impl LogoPng {
+    pub fn new(target: WindowTarget) -> Self {
+        Self { target, ..Self::default() }
+    }
 }
 impl Command for LogoPng {
     type Output = ();
@@ -129,6 +144,16 @@ pub struct Run {
     pub allow_remote_control: bool,
     #[builder(default)]
     pub remote_control_passwords: Vec<String>,
+}
+impl Run {
+    pub fn new(cmdline: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            cmdline: cmdline.into_iter().map(Into::into).collect(),
+            env: Vec::new(),
+            allow_remote_control: false,
+            remote_control_passwords: Vec::new(),
+        }
+    }
 }
 impl Command for Run {
     type Output = RunOutput;
