@@ -1,13 +1,17 @@
 ---
 type: UsageGuide
 title: Independent concern entrances and explicit client lifecycles
-description: Representative runnable leaf-crate examples, selected setup, direct cancellation, managed concurrency and finite observation/check-only custody.
+description: Typed command constructors and optional bon builders, runnable leaf-crate examples, selected setup and explicit direct/managed lifecycles.
 resource: /client/README.md
 status: draft
 generated:
-  by: "model:openai/gpt-6.1-sol#medium"
-  at: 2026-10-14
+  by: "model:openai/gpt-6-astra#xhigh"
+  at: 2026-10-27
 sources:
+  - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
+    title: Integrated typed selectors across clients and observation; documented optional bon builders and direct command construction
+  - resource: /protocol/commands/src/targets.rs
+    title: Typed IDs, native match expressions and command-specific target profiles
   - resource: "opencode://ses_ec5dcd3b6ffeofqbiGNfwr1Cf4"
     title: Support-policy selection and runnable independently imported adoption profiles
   - resource: /doc/usage/support.md
@@ -43,6 +47,59 @@ or a repository toolchain pin. Read the [support policy](../doc/usage/support.md
 before selecting a version-sensitive command: the 0.43.1 envelope coordinate is
 not a guarantee that the entire source-audited 0.49.2 catalog works on 0.43.1.
 Recorded isolated live evidence is on 0.48.2, for specified journeys only.
+
+## Constructing commands
+
+`bon` builders provide optional named-argument construction. This example uses a
+typed ID and extent:
+
+```rust
+use kitty_rc_commands::{GetText, TextExtent};
+use kitty_rc_commands::targets::WindowId;
+
+let text = GetText::builder()
+    .match_spec(WindowId(42))
+    .extent(TextExtent::Screen)
+    .ansi(true)
+    .build();
+```
+
+Prefer direct constructors when their defaults fit. Public fields support
+additional options without going through a builder:
+
+```rust
+use kitty_rc_commands::{FocusWindow, GetText, Ls, TextExtent};
+use kitty_rc_commands::process::{Launch, LaunchCwd, LaunchType};
+use kitty_rc_commands::targets::{TabId, WindowId, WindowMatch};
+use kitty_rc_commands::window::WindowCommand;
+
+let listing = Ls::tab(TabId(3));
+let focus = FocusWindow::id(WindowId(42));
+let screen = GetText::window(WindowId(42), TextExtent::Screen);
+let editors = Ls::window(WindowMatch::title("^editor$"));
+let title = WindowCommand::title(WindowId(42), "Build output");
+let terminal = Launch {
+    kind: LaunchType::Tab,
+    cwd: Some(LaunchCwd::Current),
+    ..Launch::new(["bash"])
+};
+```
+
+Target types follow each native command's fields:
+
+- `WindowMatch` / `TabMatch`: typed ID and field expressions for listing, focus,
+  text, screenshot and other match-only fields. Title/cwd/cmdline constructors
+  accept **regular expressions**, preserving their query boundaries.
+- `WindowTarget` / `TabTarget`: active, calling window/tab, typed ID or match
+  selection for commands with native `self` support.
+- `WindowSet`: `window(WindowId(..))`, `tab(TabId(..))` or `all()` for multi-window
+  appearance/input commands. Defaults follow the individual native handler.
+
+The observation `Scope` uses the same typed match fields. Command construction
+does no I/O; the execution entrance supplies connection, protection and bounds.
+The [root examples](../README.md#typed-command-construction) also cover typed key
+chords, layout changes, colors and configuration overrides. `kitty_rc::commands`
+re-exports these same leaf-crate APIs.
 
 ## Concern map
 
@@ -104,7 +161,8 @@ Wrong/malformed/missing credentials fail; they never retry in plaintext.
 
 ### Pure schema, framing and crypto
 
-[pure.rs](examples/pure.rs) constructs a schema `ls` envelope, serializes it,
+[pure.rs](examples/pure.rs) constructs `Ls::all()`, obtains its typed command's
+schema envelope, serializes it,
 frames it and incrementally decodes seven-byte fragments without any runtime or
 server. The optional offline specimen accepts `--key`, `--password` and
 `--timestamp-ns` together, using explicit caller timestamp plus OS randomness.
@@ -204,7 +262,7 @@ cursor. Unknown/missing/unsupported facts remain distinct. No polling task start
 unless the caller drives one; there is no automatic reconciliation.
 
 The optional `--focus-window-id ID` is a **mutation opt-in** against the explicit
-endpoint. It uses stable `id:ID`, not a changing active selector. If that native
+endpoint. It uses `FocusWindow::id(WindowId(id))` for stable selection. If that native
 operation completes unresolved, the example keeps its original result, selects
 a fresh read-only `CheckInput` for that exact ID and focused fact, reports the
 assessment, then transfers/releases the original separately. The ordinary

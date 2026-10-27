@@ -1,13 +1,19 @@
 ---
 type: ProjectOverview
 title: Kitty remote-control typed execution and managed registry
-description: Independently usable protocol, explicit access, finite execution and bounded concurrent operation custody.
+description: Typed command constructors and optional bon builders, independently usable protocol, explicit access and bounded concurrent execution.
 resource: /README.md
 status: active
 generated:
-  by: "model:openai/gpt-6-astra#medium"
-  at: 2026-10-14
+  by: "model:openai/gpt-6-astra#xhigh"
+  at: 2026-10-27
 sources:
+  - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
+    title: Commissioned two f agents for typed command options and bon builders; integrated callers, verified contracts and rewrote examples around direct constructors
+  - resource: /protocol/commands/src/targets.rs
+    title: Typed match selectors, IDs, keys, modifiers and signals
+  - resource: /protocol/commands/src/lib.rs
+    title: Typed command constructors and optional bon builders
   - resource: "opencode://ses_ec71e81e3ffercjuzWSBbKFI5w"
     title: Preserved teardown foundation and preceding overview
   - resource: "opencode://ses_ec7004672ffeAbyzuSmd4Cov2i"
@@ -37,6 +43,93 @@ sources:
 > Rust crates for the kitty terminal emulator's remote-control (RC) protocol,
 > rebuilt around typed exchanges and a concurrent registry. Under active
 > redesign, with independently usable protocol, access, execution and observation crates.
+
+## Typed command construction
+
+Commands expose typed options, ordinary public structs and associated constructors.
+`bon` builders are an optional convenience for named arguments; they use the same
+types. For example:
+
+```rust
+use kitty_rc::commands::{GetText, TextExtent};
+use kitty_rc::commands::process::{Launch, LaunchCwd, LaunchType};
+use kitty_rc::commands::targets::WindowId;
+
+let screen = GetText::builder()
+    .match_spec(WindowId(42))
+    .extent(TextExtent::Screen)
+    .ansi(true)
+    .build();
+
+let terminal = Launch::builder()
+    .kind(LaunchType::Tab)
+    .cwd(LaunchCwd::Current)
+    .args(vec!["bash".into()])
+    .build();
+```
+
+For everyday commands, use the constructors directly:
+
+```rust
+use kitty_rc::commands::{FocusWindow, GetText, Ls, TextExtent};
+use kitty_rc::commands::actions::{Action, SimpleAction};
+use kitty_rc::commands::tab::TabCommand;
+use kitty_rc::commands::targets::{Key, KeyChord, Layout, TabId, WindowId, WindowSet};
+use kitty_rc::commands::window::{ScrollAmount, SendKey, WindowCommand};
+
+let window = WindowId(42);
+let listing = Ls::all();
+let tab_listing = Ls::tab(TabId(3));
+let focus = FocusWindow::id(window);
+let text = GetText::window(window, TextExtent::Selection);
+let title = WindowCommand::title(window, "Editor");
+let scroll = WindowCommand::scroll(window, ScrollAmount::End);
+let layout = TabCommand::layout(TabId(3), Layout::Stack);
+let next_tab = Action::new(SimpleAction::NextTab);
+
+// Set additional options directly with ordinary struct-update syntax.
+let keys = SendKey {
+    windows: WindowSet::window(window),
+    ..SendKey::new([KeyChord::ctrl('a'), KeyChord::new(Key::Enter)])
+};
+```
+
+Appearance, configuration and process commands follow the same approach:
+
+```rust
+use kitty_rc::commands::appearance::{Appearance, ColorName, ColorValue, FontChange, SetFontSize};
+use kitty_rc::commands::configuration::{ConfigOverride, LoadConfig};
+use kitty_rc::commands::process::{Launch, LaunchCwd, LaunchType};
+use kitty_rc::commands::targets::{Rgb, WindowId, WindowSet};
+
+let font = SetFontSize::new(FontChange::increase(1.0).unwrap());
+let foreground = Rgb::new(0x88c0d0).unwrap();
+let colors = Appearance::colors(
+    WindowSet::window(WindowId(42)),
+    [(ColorName::Foreground, ColorValue::Rgb(foreground))],
+);
+let config = LoadConfig {
+    overrides: vec![ConfigOverride::foreground(foreground)],
+    ..LoadConfig::default()
+};
+let terminal = Launch {
+    kind: LaunchType::Tab,
+    cwd: Some(LaunchCwd::Current),
+    ..Launch::new(["bash"])
+};
+```
+
+Constructing a command performs no I/O. Pass it to `Session::execute_with_options`
+or `Registry::submit`; upload commands use the dedicated upload entrances.
+The same types are available directly from the `kitty-rc-commands` crate.
+
+`WindowId` and `TabId` keep identities distinct. `WindowMatch` and `TabMatch`
+provide typed field constructors; their title/cwd/cmdline patterns are native
+regular expressions with query boundaries preserved. Complete custom expressions
+use explicit `raw` constructors. Titles, text, paths and argv remain string data;
+`ActionSpec::Raw`, `KeyChord::raw` and `RawFinite` expose deliberate grammar
+extensions. See the [client guide](client/README.md#constructing-commands) for
+target selection and [command modules](protocol/commands/src) for the full surface.
 
 ## Current standing
 
@@ -163,7 +256,7 @@ unresolved remote work can consume it; local quotas cannot prevent their evictio
 cargo build --workspace
 cargo nextest run      # test suite (or: cargo test)
 cargo clippy --workspace --all-targets
-cargo fmt --check
+cargo fmt --all -- --config max_width=100 --check
 mise exec -- cargo run -p kitty-rc-verify -- finite
 mise exec -- cargo run -p kitty-rc-verify -- uploads
 mise exec -- cargo run -p kitty-rc-verify -- matrix --cli-smoke
