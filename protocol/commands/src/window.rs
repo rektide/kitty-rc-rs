@@ -1,7 +1,10 @@
 //! Finite window operations. Acknowledgment does not observe eventual removal,
 //! layout redraw, child delivery or window-manager compliance.
 
-use crate::targets::{Assignment, Finite, TabId, TabTarget, WindowId, WindowSet, WindowTarget};
+use crate::targets::{
+    Assignment, Finite, KeyChord, Signal, TabId, TabMatch, TabTarget, WindowId, WindowSet,
+    WindowTarget,
+};
 use crate::{CanSubmitWithoutReply, Class, Command, DecodeError, Mode, request};
 use kitty_rc_schema::PlainRequest;
 use serde::Serialize;
@@ -77,6 +80,9 @@ pub enum DetachDestination {
     Match(String),
 }
 impl DetachDestination {
+    pub fn tab(tab: impl Into<TabMatch>) -> Self {
+        Self::Match(tab.into().to_string())
+    }
     fn wire(&self) -> Option<String> {
         match self {
             Self::NewOsWindow => None,
@@ -128,10 +134,80 @@ impl ScrollAmount {
 }
 
 /// One grouped finite acknowledgment family, not one marker wrapper per method.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 pub struct WindowCommand {
+    #[builder(default, into)]
     pub target: WindowTarget,
     pub operation: WindowOperation,
+}
+impl WindowCommand {
+    pub fn new(target: impl Into<WindowTarget>, operation: WindowOperation) -> Self {
+        Self {
+            target: target.into(),
+            operation,
+        }
+    }
+    pub fn close(target: impl Into<WindowTarget>) -> Self {
+        Self::new(
+            target,
+            WindowOperation::Close {
+                ignore_no_match: false,
+            },
+        )
+    }
+    pub fn title(target: impl Into<WindowTarget>, title: impl Into<String>) -> Self {
+        Self::new(
+            target,
+            WindowOperation::Title {
+                title: Some(title.into()),
+                temporary: false,
+            },
+        )
+    }
+    pub fn reset_title(target: impl Into<WindowTarget>) -> Self {
+        Self::new(
+            target,
+            WindowOperation::Title {
+                title: None,
+                temporary: false,
+            },
+        )
+    }
+    pub fn os_title(target: impl Into<WindowTarget>, title: impl Into<String>) -> Self {
+        Self::new(
+            target,
+            WindowOperation::OsTitle {
+                title: Some(title.into()),
+            },
+        )
+    }
+    pub fn scroll(target: impl Into<WindowTarget>, amount: ScrollAmount) -> Self {
+        Self::new(target, WindowOperation::Scroll(amount))
+    }
+    pub fn signal(
+        target: impl Into<WindowTarget>,
+        signals: impl IntoIterator<Item = Signal>,
+    ) -> Self {
+        Self::new(
+            target,
+            WindowOperation::Signal(signals.into_iter().collect()),
+        )
+    }
+    pub fn detach(target: impl Into<WindowTarget>, destination: DetachDestination) -> Self {
+        Self::new(
+            target,
+            WindowOperation::Detach {
+                destination,
+                stay_in_tab: false,
+            },
+        )
+    }
+    pub fn create_marker(target: impl Into<WindowTarget>, spec: MarkerSpec) -> Self {
+        Self::new(target, WindowOperation::CreateMarker(spec))
+    }
+    pub fn remove_marker(target: impl Into<WindowTarget>) -> Self {
+        Self::new(target, WindowOperation::RemoveMarker)
+    }
 }
 #[derive(Debug, Clone)]
 pub enum WindowOperation {
@@ -152,7 +228,7 @@ pub enum WindowOperation {
         stay_in_tab: bool,
     },
     Scroll(ScrollAmount),
-    Signal(Vec<String>),
+    Signal(Vec<Signal>),
     RemoveLogo,
     OsWindow {
         action: OsWindowAction,
@@ -203,11 +279,11 @@ impl Command for WindowCommand {
                 "scroll-window"
             }
             WindowOperation::Signal(signals) => {
-                p["signals"] = json!(if signals.is_empty() {
-                    vec!["SIGINT".into()]
+                p["signals"] = if signals.is_empty() {
+                    json!([Signal::Int])
                 } else {
-                    signals.iter().map(|s| s.to_uppercase()).collect()
-                });
+                    json!(signals)
+                };
                 "signal-child"
             }
             WindowOperation::RemoveLogo => {
@@ -260,10 +336,19 @@ pub enum ResizeAxis {
 
 #[derive(Debug, Clone, bon::Builder)]
 pub struct ResizeWindow {
-    #[builder(default)]
+    #[builder(default, into)]
     pub target: WindowTarget,
     pub axis: ResizeAxis,
     pub increment: i32,
+}
+impl ResizeWindow {
+    pub fn new(axis: ResizeAxis, increment: i32) -> Self {
+        Self {
+            target: WindowTarget::Active,
+            axis,
+            increment,
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResizeResult {
@@ -303,13 +388,21 @@ impl Command for ResizeWindow {
 #[derive(Debug, Clone, Default, bon::Builder)]
 #[builder(on(String, into))]
 pub struct SelectWindow {
-    #[builder(default)]
+    #[builder(default, into)]
     pub target: TabTarget,
     pub title: Option<String>,
     #[builder(default)]
     pub exclude_active: bool,
     #[builder(default)]
     pub reactivate_previous_tab: bool,
+}
+impl SelectWindow {
+    pub fn new(target: impl Into<TabTarget>) -> Self {
+        Self {
+            target: target.into(),
+            ..Self::default()
+        }
+    }
 }
 impl Command for SelectWindow {
     type Output = WindowId;
@@ -359,6 +452,14 @@ pub struct SendText {
     #[builder(default)]
     pub bracketed_paste: BracketedPaste,
 }
+impl SendText {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            ..Self::default()
+        }
+    }
+}
 impl Command for SendText {
     type Output = ();
     fn request(&self) -> PlainRequest {
@@ -380,11 +481,19 @@ impl Command for SendText {
 
 #[derive(Debug, Clone, Default, bon::Builder)]
 pub struct SendKey {
-    pub keys: Vec<String>,
+    pub keys: Vec<KeyChord>,
     #[builder(default)]
     pub windows: WindowSet,
     #[builder(default)]
     pub exclude_active: bool,
+}
+impl SendKey {
+    pub fn new(keys: impl IntoIterator<Item = impl Into<KeyChord>>) -> Self {
+        Self {
+            keys: keys.into_iter().map(Into::into).collect(),
+            ..Self::default()
+        }
+    }
 }
 impl Command for SendKey {
     type Output = ();
@@ -406,11 +515,25 @@ impl Command for SendKey {
 
 #[derive(Debug, Clone, Default, bon::Builder)]
 pub struct UserVars {
-    #[builder(default)]
+    #[builder(default, into)]
     pub target: WindowTarget,
     /// Empty operations query variables; assignments/removals otherwise.
     #[builder(default)]
     pub operations: Vec<Assignment>,
+}
+impl UserVars {
+    pub fn new(operations: impl IntoIterator<Item = Assignment>) -> Self {
+        Self {
+            operations: operations.into_iter().collect(),
+            ..Self::default()
+        }
+    }
+    pub fn query(target: impl Into<WindowTarget>) -> Self {
+        Self {
+            target: target.into(),
+            ..Self::default()
+        }
+    }
 }
 impl Command for UserVars {
     type Output = String;

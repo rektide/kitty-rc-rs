@@ -1,8 +1,9 @@
 //! Open match expressions and semantic finite argument types.
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use serde_json::{Value, json};
 use std::fmt;
+use std::ops::{BitOr, BitOrAssign};
 
 /// A kitty window ID, not an OS/platform window ID or process ID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -118,7 +119,11 @@ impl fmt::Display for TabMatch {
 // original regex, including its backslashes; this is not shell quoting.
 fn match_field(field: &str, query: &str) -> String {
     let escaped = query.replace('\\', "\\\\").replace('"', "\\\"");
-    if query.is_empty() || query.chars().any(|c| c.is_whitespace() || matches!(c, '"' | '(' | ')')) {
+    if query.is_empty()
+        || query
+            .chars()
+            .any(|c| c.is_whitespace() || matches!(c, '"' | '(' | ')'))
+    {
         format!("{field}:\"{escaped}\"")
     } else {
         format!("{field}:{escaped}")
@@ -243,7 +248,10 @@ impl WindowSet {
         }
     }
     pub fn all() -> Self {
-        Self { all: true, ..Self::default() }
+        Self {
+            all: true,
+            ..Self::default()
+        }
     }
     pub(crate) fn payload(&self) -> Value {
         json!({"match_window": self.match_window, "match_tab": self.match_tab, "all": self.all})
@@ -269,6 +277,304 @@ impl Direction {
             Self::Top => "top",
             Self::Bottom => "bottom",
         }
+    }
+}
+
+/// Symbolic signals accepted by kitty's server-side Python `signal` module.
+/// Availability depends on the server platform. Custom names retain the
+/// existing uppercasing behavior and must include their native `SIG` prefix.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Signal {
+    Hup,
+    Int,
+    Quit,
+    Ill,
+    Trap,
+    Abrt,
+    Bus,
+    Fpe,
+    Kill,
+    Usr1,
+    Segv,
+    Usr2,
+    Pipe,
+    Alrm,
+    Term,
+    Chld,
+    Cont,
+    Stop,
+    Tstp,
+    Ttin,
+    Ttou,
+    Urg,
+    Xcpu,
+    Xfsz,
+    Vtalrm,
+    Prof,
+    Winch,
+    Custom(String),
+}
+impl Signal {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Hup => "SIGHUP",
+            Self::Int => "SIGINT",
+            Self::Quit => "SIGQUIT",
+            Self::Ill => "SIGILL",
+            Self::Trap => "SIGTRAP",
+            Self::Abrt => "SIGABRT",
+            Self::Bus => "SIGBUS",
+            Self::Fpe => "SIGFPE",
+            Self::Kill => "SIGKILL",
+            Self::Usr1 => "SIGUSR1",
+            Self::Segv => "SIGSEGV",
+            Self::Usr2 => "SIGUSR2",
+            Self::Pipe => "SIGPIPE",
+            Self::Alrm => "SIGALRM",
+            Self::Term => "SIGTERM",
+            Self::Chld => "SIGCHLD",
+            Self::Cont => "SIGCONT",
+            Self::Stop => "SIGSTOP",
+            Self::Tstp => "SIGTSTP",
+            Self::Ttin => "SIGTTIN",
+            Self::Ttou => "SIGTTOU",
+            Self::Urg => "SIGURG",
+            Self::Xcpu => "SIGXCPU",
+            Self::Xfsz => "SIGXFSZ",
+            Self::Vtalrm => "SIGVTALRM",
+            Self::Prof => "SIGPROF",
+            Self::Winch => "SIGWINCH",
+            Self::Custom(name) => name,
+        }
+    }
+}
+impl fmt::Display for Signal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Custom(name) => f.write_str(&name.to_uppercase()),
+            _ => f.write_str(self.as_str()),
+        }
+    }
+}
+impl Serialize for Signal {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+/// Common kitty shortcut key names. Character keys follow kitty's shortcut
+/// parser (ASCII letters are case-insensitive; use SHIFT for shifted keys).
+/// `Raw` names future/less common keys without pretending to validate them.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Key {
+    Character(char),
+    Enter,
+    Tab,
+    Escape,
+    Backspace,
+    Insert,
+    Delete,
+    Left,
+    Right,
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+    Space,
+    Plus,
+    CapsLock,
+    ScrollLock,
+    NumLock,
+    PrintScreen,
+    Pause,
+    Menu,
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    Raw(String),
+}
+impl Key {
+    pub fn raw(name: impl Into<String>) -> Self {
+        Self::Raw(name.into())
+    }
+}
+impl From<char> for Key {
+    fn from(value: char) -> Self {
+        Self::Character(value)
+    }
+}
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Character('+') | Self::Plus => "plus",
+            Self::Character(' ') | Self::Space => "space",
+            Self::Character(c) => return write!(f, "{c}"),
+            Self::Enter => "enter",
+            Self::Tab => "tab",
+            Self::Escape => "escape",
+            Self::Backspace => "backspace",
+            Self::Insert => "insert",
+            Self::Delete => "delete",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::PageUp => "page_up",
+            Self::PageDown => "page_down",
+            Self::Home => "home",
+            Self::End => "end",
+            Self::CapsLock => "caps_lock",
+            Self::ScrollLock => "scroll_lock",
+            Self::NumLock => "num_lock",
+            Self::PrintScreen => "print_screen",
+            Self::Pause => "pause",
+            Self::Menu => "menu",
+            Self::F1 => "f1",
+            Self::F2 => "f2",
+            Self::F3 => "f3",
+            Self::F4 => "f4",
+            Self::F5 => "f5",
+            Self::F6 => "f6",
+            Self::F7 => "f7",
+            Self::F8 => "f8",
+            Self::F9 => "f9",
+            Self::F10 => "f10",
+            Self::F11 => "f11",
+            Self::F12 => "f12",
+            Self::Raw(name) => name,
+        })
+    }
+}
+impl Serialize for Key {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+/// A set of native shortcut modifiers; compose with `|`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Modifiers(u16);
+impl Modifiers {
+    pub const NONE: Self = Self(0);
+    pub const CTRL: Self = Self(1);
+    pub const SHIFT: Self = Self(2);
+    pub const ALT: Self = Self(4);
+    pub const SUPER: Self = Self(8);
+    pub const HYPER: Self = Self(16);
+    pub const META: Self = Self(32);
+    pub const CAPS_LOCK: Self = Self(64);
+    pub const NUM_LOCK: Self = Self(128);
+    /// Resolved by kitty using the server's configured `kitty_mod` value.
+    pub const KITTY_MOD: Self = Self(256);
+
+    pub fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+impl BitOr for Modifiers {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
+}
+impl BitOrAssign for Modifiers {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
+    }
+}
+impl fmt::Display for Modifiers {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut separator = "";
+        for (modifier, name) in [
+            (Self::CTRL, "ctrl"),
+            (Self::SHIFT, "shift"),
+            (Self::ALT, "alt"),
+            (Self::SUPER, "super"),
+            (Self::HYPER, "hyper"),
+            (Self::META, "meta"),
+            (Self::CAPS_LOCK, "caps_lock"),
+            (Self::NUM_LOCK, "num_lock"),
+            (Self::KITTY_MOD, "kitty_mod"),
+        ] {
+            if self.contains(modifier) {
+                write!(f, "{separator}{name}")?;
+                separator = "+";
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One native send-key shortcut. Raw preserves an entire shortcut expression;
+/// native key codes and unrecognized extensions can still be rejected by kitty.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum KeyChord {
+    Key { key: Key, modifiers: Modifiers },
+    Raw(String),
+}
+impl KeyChord {
+    pub fn new(key: impl Into<Key>) -> Self {
+        Self::modified(Modifiers::NONE, key)
+    }
+    pub fn modified(modifiers: Modifiers, key: impl Into<Key>) -> Self {
+        Self::Key {
+            key: key.into(),
+            modifiers,
+        }
+    }
+    pub fn ctrl(key: impl Into<Key>) -> Self {
+        Self::modified(Modifiers::CTRL, key)
+    }
+    pub fn alt(key: impl Into<Key>) -> Self {
+        Self::modified(Modifiers::ALT, key)
+    }
+    pub fn shift(key: impl Into<Key>) -> Self {
+        Self::modified(Modifiers::SHIFT, key)
+    }
+    pub fn raw(shortcut: impl Into<String>) -> Self {
+        Self::Raw(shortcut.into())
+    }
+}
+impl From<Key> for KeyChord {
+    fn from(key: Key) -> Self {
+        Self::new(key)
+    }
+}
+impl From<char> for KeyChord {
+    fn from(key: char) -> Self {
+        Self::new(key)
+    }
+}
+impl fmt::Display for KeyChord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Key { key, modifiers } => {
+                if !modifiers.is_empty() {
+                    write!(f, "{modifiers}+")?;
+                }
+                write!(f, "{key}")
+            }
+            Self::Raw(shortcut) => f.write_str(shortcut),
+        }
+    }
+}
+impl Serialize for KeyChord {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
     }
 }
 
@@ -327,7 +633,11 @@ impl ServerPath {
 pub struct Finite(pub(crate) f64);
 impl Finite {
     pub fn new(value: f64) -> Result<Self, InvalidValue> {
-        if value.is_finite() { Ok(Self(value)) } else { Err(InvalidValue) }
+        if value.is_finite() {
+            Ok(Self(value))
+        } else {
+            Err(InvalidValue)
+        }
     }
     pub fn get(self) -> f64 {
         self.0
@@ -355,7 +665,11 @@ impl Opacity {
 pub struct Rgb(u32);
 impl Rgb {
     pub fn new(value: u32) -> Result<Self, InvalidValue> {
-        if value <= 0xffffff { Ok(Self(value)) } else { Err(InvalidValue) }
+        if value <= 0xffffff {
+            Ok(Self(value))
+        } else {
+            Err(InvalidValue)
+        }
     }
     pub fn get(self) -> u32 {
         self.0

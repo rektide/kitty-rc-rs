@@ -101,7 +101,9 @@ impl Command for Ls {
         Class::Observation
     }
     fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, DecodeError> {
-        Ok(outputs::parse_ls_data(&data.ok_or(DecodeError::MissingData)?)?)
+        Ok(outputs::parse_ls_data(
+            &data.ok_or(DecodeError::MissingData)?,
+        )?)
     }
 }
 
@@ -157,7 +159,10 @@ pub struct GetText {
 }
 impl GetText {
     pub fn new(extent: TextExtent) -> Self {
-        Self { extent, ..Self::default() }
+        Self {
+            extent,
+            ..Self::default()
+        }
     }
     pub fn window(window: impl Into<WindowMatch>, extent: TextExtent) -> Self {
         Self {
@@ -199,7 +204,9 @@ pub struct FocusWindow {
 }
 impl FocusWindow {
     pub fn new(window: impl Into<WindowMatch>) -> Self {
-        Self { match_spec: window.into() }
+        Self {
+            match_spec: window.into(),
+        }
     }
     pub fn id(id: WindowId) -> Self {
         Self::new(id)
@@ -243,7 +250,9 @@ impl Command for LaunchWait {
     type Output = String;
     fn request(&self) -> PlainRequest {
         let mut r = PlainRequest::new("launch");
-        r.payload = Some(serde_json::json!({"args": self.args, "wait_for_child_to_exit": true, "type": "window"}));
+        r.payload = Some(
+            serde_json::json!({"args": self.args, "wait_for_child_to_exit": true, "type": "window"}),
+        );
         r
     }
     fn class(&self) -> Class {
@@ -302,7 +311,10 @@ pub struct SessionText;
 impl Command for SessionText {
     type Output = String;
     fn request(&self) -> PlainRequest {
-        request("ls", serde_json::json!({"output_format": "session", "all_env_vars": false}))
+        request(
+            "ls",
+            serde_json::json!({"output_format": "session", "all_env_vars": false}),
+        )
     }
     fn class(&self) -> Class {
         Class::Observation
@@ -335,7 +347,11 @@ impl Command for RawFinite {
         self.class
     }
     fn mode(&self) -> Mode {
-        if self.submission_only { Mode::SubmissionOnly } else { Mode::Reply }
+        if self.submission_only {
+            Mode::SubmissionOnly
+        } else {
+            Mode::Reply
+        }
     }
     fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, DecodeError> {
         Ok(data)
@@ -413,12 +429,21 @@ impl Ls {
     /// version.
     pub fn to_request(&self) -> PlainRequest {
         let mut payload = serde_json::Map::new();
-        payload.insert("all_env_vars".to_string(), serde_json::Value::Bool(self.all_env_vars));
+        payload.insert(
+            "all_env_vars".to_string(),
+            serde_json::Value::Bool(self.all_env_vars),
+        );
         if let Some(value) = &self.match_spec {
-            payload.insert("match".to_string(), serde_json::Value::String(value.to_string()));
+            payload.insert(
+                "match".to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
         if let Some(value) = &self.match_tab {
-            payload.insert("match_tab".to_string(), serde_json::Value::String(value.to_string()));
+            payload.insert(
+                "match_tab".to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
         if self.only_self {
             payload.insert("self".to_string(), serde_json::Value::Bool(true));
@@ -436,7 +461,9 @@ pub fn ls_from_response(envelope: &ResponseEnvelope) -> Result<Vec<OsWindow>, Ls
         Ok(ResponseKind::Failure { error }) => Err(LsError::RemoteFailure {
             error: error.unwrap_or_default(),
         }),
-        Ok(ResponseKind::StreamAcknowledged) | Ok(ResponseKind::Success { data: None }) => Err(LsError::MissingData),
+        Ok(ResponseKind::StreamAcknowledged) | Ok(ResponseKind::Success { data: None }) => {
+            Err(LsError::MissingData)
+        }
         Ok(ResponseKind::Success { data: Some(data) }) => Ok(outputs::parse_ls_data(&data)?),
         Err(error) => Err(LsError::InvalidEnvelope(error)),
     }
@@ -460,9 +487,14 @@ mod tests {
         assert_eq!(wait.mode(), Mode::Deferred);
         assert_eq!(
             wait.request().payload,
-            Some(json!({"args": ["sh", "-c", "exit 7"], "wait_for_child_to_exit": true, "type": "window"}))
+            Some(
+                json!({"args": ["sh", "-c", "exit 7"], "wait_for_child_to_exit": true, "type": "window"})
+            )
         );
-        assert_eq!(LaunchWait::decode(Some(json!("SIGTERM"))).unwrap(), "SIGTERM");
+        assert_eq!(
+            LaunchWait::decode(Some(json!("SIGTERM"))).unwrap(),
+            "SIGTERM"
+        );
         assert!(GetText::decode(None).is_err());
     }
 
@@ -547,7 +579,8 @@ mod tests {
         }])
         .to_string();
 
-        let response: ResponseEnvelope = serde_json::from_value(json!({"ok": true, "data": listing})).unwrap();
+        let response: ResponseEnvelope =
+            serde_json::from_value(json!({"ok": true, "data": listing})).unwrap();
         let instances = ls_from_response(&response).unwrap();
 
         assert_eq!(instances.len(), 1);
@@ -561,10 +594,16 @@ mod tests {
         assert_eq!(window.id, Some(3));
         assert_eq!(window.pid, Some(4242));
         assert_eq!(window.cmdline, vec!["/usr/bin/zsh".to_string()]);
-        assert_eq!(window.env.get("TERM").map(String::as_str), Some("xterm-kitty"));
+        assert_eq!(
+            window.env.get("TERM").map(String::as_str),
+            Some("xterm-kitty")
+        );
         let process = &window.foreground_processes[0];
         assert_eq!(process.pid, Some(4243));
-        assert_eq!(process.cmdline, vec!["ls".to_string(), "--color".to_string()]);
+        assert_eq!(
+            process.cmdline,
+            vec!["ls".to_string(), "--color".to_string()]
+        );
         // Additive fields present in newer servers (neighbors,
         // title_overridden, session_name) are tolerated without modeling.
     }
@@ -572,7 +611,8 @@ mod tests {
     /// A remote failure surfaces as RemoteFailure, not an empty listing.
     #[test]
     fn remote_failure_is_not_empty_success() {
-        let response: ResponseEnvelope = serde_json::from_value(json!({"ok": false, "error": "Permission denied"})).unwrap();
+        let response: ResponseEnvelope =
+            serde_json::from_value(json!({"ok": false, "error": "Permission denied"})).unwrap();
         match ls_from_response(&response) {
             Err(LsError::RemoteFailure { error }) => assert_eq!(error, "Permission denied"),
             other => panic!("expected remote failure, got {other:?}"),
@@ -583,6 +623,9 @@ mod tests {
     #[test]
     fn missing_data_is_not_empty_success() {
         let response: ResponseEnvelope = serde_json::from_value(json!({"ok": true})).unwrap();
-        assert!(matches!(ls_from_response(&response), Err(LsError::MissingData)));
+        assert!(matches!(
+            ls_from_response(&response),
+            Err(LsError::MissingData)
+        ));
     }
 }

@@ -4,7 +4,7 @@
 //! not proof of downstream effects or replay safety, even for typed grammar.
 //! Aliases and configuration may change actual dispatch behavior.
 use crate::appearance::FontChange;
-use crate::targets::{Direction, Layout, Opacity, WindowTarget};
+use crate::targets::{Direction, Layout, Opacity, Signal, WindowTarget};
 use crate::window::{MarkerGroup, MarkerSpec};
 use crate::{CanSubmitWithoutReply, Class, Command, DecodeError, request};
 use kitty_rc_schema::PlainRequest;
@@ -231,7 +231,7 @@ pub enum KnownAction {
     },
     LoadConfigFiles(Vec<String>),
     SetColors(Vec<String>),
-    SignalChild(Vec<String>),
+    SignalChild(Vec<Signal>),
     ShowKittyDoc(String),
 }
 impl KnownAction {
@@ -295,7 +295,7 @@ impl KnownAction {
                 "signal_child {}",
                 signals
                     .iter()
-                    .map(|s| s.to_uppercase())
+                    .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -316,6 +316,11 @@ impl From<KnownAction> for ActionSpec {
         Self::Known(value)
     }
 }
+impl From<SimpleAction> for ActionSpec {
+    fn from(value: SimpleAction) -> Self {
+        Self::Known(KnownAction::Simple(value))
+    }
+}
 impl ActionSpec {
     pub fn wire(&self) -> String {
         match self {
@@ -329,8 +334,16 @@ impl ActionSpec {
 pub struct Action {
     #[builder(into)]
     pub action: ActionSpec,
-    #[builder(default)]
+    #[builder(default, into)]
     pub target: WindowTarget,
+}
+impl Action {
+    pub fn new(action: impl Into<ActionSpec>) -> Self {
+        Self {
+            action: action.into(),
+            target: WindowTarget::Active,
+        }
+    }
 }
 impl Command for Action {
     type Output = ();
