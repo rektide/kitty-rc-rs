@@ -43,6 +43,7 @@ pub mod window;
 
 use kitty_rc_schema::{PlainRequest, ResponseEnvelope, ResponseKind};
 use outputs::OsWindow;
+use targets::{TabMatch, WindowId, WindowMatch};
 
 /// Scheduling class, not a claim about parallel server CPU execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -100,9 +101,7 @@ impl Command for Ls {
         Class::Observation
     }
     fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, DecodeError> {
-        Ok(outputs::parse_ls_data(
-            &data.ok_or(DecodeError::MissingData)?,
-        )?)
+        Ok(outputs::parse_ls_data(&data.ok_or(DecodeError::MissingData)?)?)
     }
 }
 
@@ -140,9 +139,9 @@ impl TextExtent {
 }
 
 #[derive(Debug, Clone, Default, bon::Builder)]
-#[builder(on(String, into))]
 pub struct GetText {
-    pub match_spec: Option<String>,
+    #[builder(into)]
+    pub match_spec: Option<WindowMatch>,
     #[builder(default)]
     pub extent: TextExtent,
     #[builder(default)]
@@ -155,6 +154,23 @@ pub struct GetText {
     pub clear_selection: bool,
     #[builder(default)]
     pub only_self: bool,
+}
+impl GetText {
+    pub fn new(extent: TextExtent) -> Self {
+        Self { extent, ..Self::default() }
+    }
+    pub fn window(window: impl Into<WindowMatch>, extent: TextExtent) -> Self {
+        Self {
+            match_spec: Some(window.into()),
+            ..Self::new(extent)
+        }
+    }
+    pub fn calling_window(extent: TextExtent) -> Self {
+        Self {
+            only_self: true,
+            ..Self::new(extent)
+        }
+    }
 }
 impl Command for GetText {
     fn reusable(&self) -> bool {
@@ -177,9 +193,17 @@ impl Command for GetText {
 }
 
 #[derive(Debug, Clone, bon::Builder)]
-#[builder(on(String, into))]
 pub struct FocusWindow {
-    pub match_spec: String,
+    #[builder(into)]
+    pub match_spec: WindowMatch,
+}
+impl FocusWindow {
+    pub fn new(window: impl Into<WindowMatch>) -> Self {
+        Self { match_spec: window.into() }
+    }
+    pub fn id(id: WindowId) -> Self {
+        Self::new(id)
+    }
 }
 impl Command for FocusWindow {
     fn reusable(&self) -> bool {
@@ -205,6 +229,13 @@ impl Command for FocusWindow {
 pub struct LaunchWait {
     pub args: Vec<String>,
 }
+impl LaunchWait {
+    pub fn new(args: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            args: args.into_iter().map(Into::into).collect(),
+        }
+    }
+}
 impl Command for LaunchWait {
     fn reusable(&self) -> bool {
         true
@@ -212,9 +243,7 @@ impl Command for LaunchWait {
     type Output = String;
     fn request(&self) -> PlainRequest {
         let mut r = PlainRequest::new("launch");
-        r.payload = Some(
-            serde_json::json!({"args": self.args, "wait_for_child_to_exit": true, "type": "window"}),
-        );
+        r.payload = Some(serde_json::json!({"args": self.args, "wait_for_child_to_exit": true, "type": "window"}));
         r
     }
     fn class(&self) -> Class {
@@ -273,10 +302,7 @@ pub struct SessionText;
 impl Command for SessionText {
     type Output = String;
     fn request(&self) -> PlainRequest {
-        request(
-            "ls",
-            serde_json::json!({"output_format": "session", "all_env_vars": false}),
-        )
+        request("ls", serde_json::json!({"output_format": "session", "all_env_vars": false}))
     }
     fn class(&self) -> Class {
         Class::Observation
@@ -309,11 +335,7 @@ impl Command for RawFinite {
         self.class
     }
     fn mode(&self) -> Mode {
-        if self.submission_only {
-            Mode::SubmissionOnly
-        } else {
-            Mode::Reply
-        }
+        if self.submission_only { Mode::SubmissionOnly } else { Mode::Reply }
     }
     fn decode(data: Option<serde_json::Value>) -> Result<Self::Output, DecodeError> {
         Ok(data)
@@ -349,41 +371,54 @@ pub enum LsError {
 /// **string** (unless `output_format: session` was requested, which is a
 /// separate result interpretation this type does not claim).
 #[derive(Debug, Clone, Default, bon::Builder)]
-#[builder(on(String, into))]
 pub struct Ls {
     /// Send every window's full environment instead of only differing
     /// variables.
     #[builder(default)]
     pub all_env_vars: bool,
     /// Restrict the listing to windows matching a kitty window expression.
-    pub match_spec: Option<String>,
+    #[builder(into)]
+    pub match_spec: Option<WindowMatch>,
     /// Restrict the listing to tabs matching a kitty tab expression.
-    pub match_tab: Option<String>,
+    #[builder(into)]
+    pub match_tab: Option<TabMatch>,
     /// List only the window the command runs in.
     #[builder(default)]
     pub only_self: bool,
 }
 
 impl Ls {
+    pub fn all() -> Self {
+        Self::default()
+    }
+    pub fn window(window: impl Into<WindowMatch>) -> Self {
+        Self {
+            match_spec: Some(window.into()),
+            ..Self::default()
+        }
+    }
+    pub fn tab(tab: impl Into<TabMatch>) -> Self {
+        Self {
+            match_tab: Some(tab.into()),
+            ..Self::default()
+        }
+    }
+    pub fn calling_window() -> Self {
+        Self {
+            only_self: true,
+            ..Self::default()
+        }
+    }
     /// The outbound request for this command at the declared supported
     /// version.
     pub fn to_request(&self) -> PlainRequest {
         let mut payload = serde_json::Map::new();
-        payload.insert(
-            "all_env_vars".to_string(),
-            serde_json::Value::Bool(self.all_env_vars),
-        );
+        payload.insert("all_env_vars".to_string(), serde_json::Value::Bool(self.all_env_vars));
         if let Some(value) = &self.match_spec {
-            payload.insert(
-                "match".to_string(),
-                serde_json::Value::String(value.clone()),
-            );
+            payload.insert("match".to_string(), serde_json::Value::String(value.to_string()));
         }
         if let Some(value) = &self.match_tab {
-            payload.insert(
-                "match_tab".to_string(),
-                serde_json::Value::String(value.clone()),
-            );
+            payload.insert("match_tab".to_string(), serde_json::Value::String(value.to_string()));
         }
         if self.only_self {
             payload.insert("self".to_string(), serde_json::Value::Bool(true));
@@ -401,9 +436,7 @@ pub fn ls_from_response(envelope: &ResponseEnvelope) -> Result<Vec<OsWindow>, Ls
         Ok(ResponseKind::Failure { error }) => Err(LsError::RemoteFailure {
             error: error.unwrap_or_default(),
         }),
-        Ok(ResponseKind::StreamAcknowledged) | Ok(ResponseKind::Success { data: None }) => {
-            Err(LsError::MissingData)
-        }
+        Ok(ResponseKind::StreamAcknowledged) | Ok(ResponseKind::Success { data: None }) => Err(LsError::MissingData),
         Ok(ResponseKind::Success { data: Some(data) }) => Ok(outputs::parse_ls_data(&data)?),
         Err(error) => Err(LsError::InvalidEnvelope(error)),
     }
@@ -419,10 +452,7 @@ mod tests {
         let text = GetText::default().request();
         assert_eq!(text.cmd, "get-text");
         assert_eq!(text.payload.unwrap()["extent"], "screen");
-        let focus = FocusWindow {
-            match_spec: "id:7".into(),
-        }
-        .request();
+        let focus = FocusWindow::id(WindowId(7)).request();
         assert_eq!(focus.payload, Some(json!({"match": "id:7"})));
         let wait = LaunchWait {
             args: vec!["sh".into(), "-c".into(), "exit 7".into()],
@@ -430,14 +460,9 @@ mod tests {
         assert_eq!(wait.mode(), Mode::Deferred);
         assert_eq!(
             wait.request().payload,
-            Some(
-                json!({"args": ["sh", "-c", "exit 7"], "wait_for_child_to_exit": true, "type": "window"})
-            )
+            Some(json!({"args": ["sh", "-c", "exit 7"], "wait_for_child_to_exit": true, "type": "window"}))
         );
-        assert_eq!(
-            LaunchWait::decode(Some(json!("SIGTERM"))).unwrap(),
-            "SIGTERM"
-        );
+        assert_eq!(LaunchWait::decode(Some(json!("SIGTERM"))).unwrap(), "SIGTERM");
         assert!(GetText::decode(None).is_err());
     }
 
@@ -446,8 +471,8 @@ mod tests {
     fn request_payload_uses_upstream_field_names() {
         let request = Ls::builder()
             .all_env_vars(true)
-            .match_spec("id:1")
-            .match_tab("title:work")
+            .match_spec(WindowId(1))
+            .match_tab(TabMatch::title("work"))
             .only_self(true)
             .build()
             .to_request();
@@ -522,8 +547,7 @@ mod tests {
         }])
         .to_string();
 
-        let response: ResponseEnvelope =
-            serde_json::from_value(json!({"ok": true, "data": listing})).unwrap();
+        let response: ResponseEnvelope = serde_json::from_value(json!({"ok": true, "data": listing})).unwrap();
         let instances = ls_from_response(&response).unwrap();
 
         assert_eq!(instances.len(), 1);
@@ -537,16 +561,10 @@ mod tests {
         assert_eq!(window.id, Some(3));
         assert_eq!(window.pid, Some(4242));
         assert_eq!(window.cmdline, vec!["/usr/bin/zsh".to_string()]);
-        assert_eq!(
-            window.env.get("TERM").map(String::as_str),
-            Some("xterm-kitty")
-        );
+        assert_eq!(window.env.get("TERM").map(String::as_str), Some("xterm-kitty"));
         let process = &window.foreground_processes[0];
         assert_eq!(process.pid, Some(4243));
-        assert_eq!(
-            process.cmdline,
-            vec!["ls".to_string(), "--color".to_string()]
-        );
+        assert_eq!(process.cmdline, vec!["ls".to_string(), "--color".to_string()]);
         // Additive fields present in newer servers (neighbors,
         // title_overridden, session_name) are tolerated without modeling.
     }
@@ -554,8 +572,7 @@ mod tests {
     /// A remote failure surfaces as RemoteFailure, not an empty listing.
     #[test]
     fn remote_failure_is_not_empty_success() {
-        let response: ResponseEnvelope =
-            serde_json::from_value(json!({"ok": false, "error": "Permission denied"})).unwrap();
+        let response: ResponseEnvelope = serde_json::from_value(json!({"ok": false, "error": "Permission denied"})).unwrap();
         match ls_from_response(&response) {
             Err(LsError::RemoteFailure { error }) => assert_eq!(error, "Permission denied"),
             other => panic!("expected remote failure, got {other:?}"),
@@ -566,9 +583,6 @@ mod tests {
     #[test]
     fn missing_data_is_not_empty_success() {
         let response: ResponseEnvelope = serde_json::from_value(json!({"ok": true})).unwrap();
-        assert!(matches!(
-            ls_from_response(&response),
-            Err(LsError::MissingData)
-        ));
+        assert!(matches!(ls_from_response(&response), Err(LsError::MissingData)));
     }
 }
