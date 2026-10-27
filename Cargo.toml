@@ -44,7 +44,7 @@ kitty-rc-listing = { path = "observation/listing", version = "0.2" }
 kitty-rc-check = { path = "observation/check", version = "0.1" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
 futures-util = "0.3"
-kitty-rc-key-store = { path = "access/key-store" }
+kitty-rc-key-store = { path = "access/key-store", version = "0.1" }
 rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
