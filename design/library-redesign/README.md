@@ -9,11 +9,15 @@ generated:
   at: 2026-10-28
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
-    title: Human commissions send-text implementation with Sol xhigh; Astra reviews native escape/action boundaries and maintains follow-on navigation
+    title: Human commissions send-text implementation with Sol xhigh; Astra reviews both built slices, native escape/action boundaries and prospective ticket scope
   - resource: /design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md
     title: Native escape/paste corrections and core-first implementation direction
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
     title: Built finite text/raw-byte core, migration and independent handler/preparation checks
+  - resource: /design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md
+    title: Built finite broadcast messages, native lifecycle evidence and 248-test workspace convergence
+  - resource: /design/library-redesign/capabilities/sendtext-followthrough0.gpt6a.md
+    title: Post-build epic and ticket scope proposed for human discussion before creation
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
     title: Human redesign direction, research review and corrections, accepted managed-operation direction, and post-discussion draft
   - resource: /design/library-redesign/draft0.gpt6a.md
@@ -88,6 +92,17 @@ tickets, including uncovered work, before creating them.
   `SendTextData`, literal/byte constructors and builders, honest submission-only
   outcomes, public migration, and 11 native handler cases at each named revision.
   [Usage](../../client/README.md#finite-text-and-byte-input) shows the public API.
+- [Explicit broadcast implementation](capabilities/sendtext-broadcast0.sol61xh.md):
+  validated identity, optional ID-bearing data and required-ID start/end controls;
+  three fresh native lifecycle scenarios at each revision and **248 workspace
+  tests**, eight doctests, strict Clippy and formatting passed. The parent reviewed
+  the types, preparation checks and native oracle boundary. The
+  [broadcast guide](../../client/README.md#explicit-broadcast-messages) explains
+  caller-owned lifecycle and the absence of remote receipt/order evidence.
+- [Post-build ticket discussion](capabilities/sendtext-followthrough0.gpt6a.md):
+  one candidate epic, completed-work representation, isolated live input evidence,
+  B/C fork scope and optional grammar/nested-action inquiries. No native work
+  items have been created by this implementation session.
 
 ## Preserved initial position
 

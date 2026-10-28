@@ -14,6 +14,8 @@ sources:
     title: Prior Slice-A sketch under review, preserved as its author's proposal
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
     title: Reviewed finite implementation and Sol's recommendation; native parent findings favor broadcast before selecting an escape grammar
+  - resource: /design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md
+    title: Reviewed required-ID finite broadcast controls and independently executed lifecycle evidence after the second implementation slice
   - resource: /protocol/commands/src/window.rs
     title: Existing literal finite send-text entrance and submission-only contract
   - resource: /protocol/commands/src/actions.rs
@@ -53,6 +55,15 @@ candidate. The parent selects explicit broadcast messages next instead:
 the native findings below make grammar choice material, while broadcast adds
 an independent native capability. This is a scoped implementation decision;
 the broader grammar alternatives remain for human discussion.
+
+**Second checkpoint:** [broadcast messages](sendtext-broadcast0.sol61xh.md) are
+built and reviewed. `BroadcastId`, optional `SendText.broadcast` and separate
+`BroadcastControl` start/end messages preserve the content/lifecycle distinction.
+Native lifecycle scenarios establish the stateful effects under explicit
+injected boundaries. Final convergence passed 248 workspace tests, eight
+doctests, strict Clippy and formatting. The next action is human discussion of
+prospective tracking, rather than automatically implementing the rest of the
+sketch.
 
 Recommended order:
 
@@ -218,3 +229,5 @@ human: completed finite types, selected broadcast surface, B's bounded
 conversation, C's source acquisition, targeted live evidence, and optional
 escape/nested-action research. Establish which are worth tracking before
 creating work items; an uncovered possibility is not automatically a task.
+The [post-build discussion](sendtext-followthrough0.gpt6a.md) now supplies that
+concrete scope and the choices for the human.

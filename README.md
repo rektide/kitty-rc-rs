@@ -12,6 +12,8 @@ sources:
     title: Directed Sol xhigh send-text implementation, reviewed native grammar boundaries and integrated public usage and API-version markers
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
     title: Finite literal text and raw bytes, public field/builder migration and pinned-source evidence
+  - resource: /design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md
+    title: Explicit finite broadcast start/data/end messages with caller-owned lifecycle
   - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
     title: Commissioned two f agents for typed command options and bon builders; integrated callers, verified contracts and rewrote examples around direct constructors
   - resource: /protocol/commands/src/targets.rs
@@ -142,6 +144,11 @@ bracketed-paste options can wrap/sanitize input on the server. The public
 `text` field and builder `.text(...)` have become `data` and `.data(...)`.
 See [text and byte input](client/README.md#finite-text-and-byte-input) for scope,
 migration and evidence.
+
+`BroadcastId`, `BroadcastControl::start/end` and `SendText.broadcast` expose
+explicit finite broadcast messages with caller-owned lifecycle. See the
+[broadcast guide](client/README.md#explicit-broadcast-messages) for construction,
+membership and submission-order boundaries.
 
 `WindowId` and `TabId` keep identities distinct. `WindowMatch` and `TabMatch`
 provide typed field constructors; their title/cwd/cmdline patterns are native

@@ -9,9 +9,11 @@ generated:
   at: 2026-10-28
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
-    title: Reviewed Sol xhigh finite send-text implementation and integrated literal/byte examples, migration and API-version guidance
+    title: Reviewed Sol xhigh finite data and broadcast implementation; integrated usage, lifecycle boundaries, migration and API-version guidance
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
     title: Literal text/raw-byte contracts, preparation tests and pinned handler evidence
+  - resource: /design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md
+    title: Required broadcast identity, optional ID-bearing data, explicit lifecycle messages and source evidence
   - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
     title: Integrated typed selectors across clients and observation; documented optional bon builders and direct command construction
   - resource: /protocol/commands/src/targets.rs
@@ -144,6 +146,8 @@ to a separate execution conversation.
 **API migration:** `kitty-rc-commands` 0.3 and facade `kitty-rc` 0.8 replace
 the public `text: String` field with `data: SendTextData`; use
 `data: old_text.into()` in struct literals and `.data(old_text)` in builders.
+Full struct literals also supply `broadcast: None` for ordinary data, or use
+`..SendText::default()`.
 Direct `SendText::new(old_text)` calls retain their behavior. The source
 revision advances the command-dependent execution/registry/observation/CLI
 packages alongside these markers; use that coherent dependency set.
@@ -153,6 +157,48 @@ records source-handler and preparation evidence. The
 [native boundary review](../design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md)
 explains why an escaped-text convenience and nested paste need separate
 grammar decisions.
+
+### Explicit broadcast messages
+
+`BroadcastId` names native broadcast bookkeeping. Choose a nonempty ID for the
+intended broadcast; the constructor preserves it exactly. Data may carry that
+ID, and `BroadcastControl` requires it for explicit start/end messages:
+
+```rust
+use kitty_rc_commands::targets::{TabId, WindowSet};
+use kitty_rc_commands::window::{BroadcastControl, BroadcastId, SendText};
+
+let id = BroadcastId::new("caller-chosen-unique-id").unwrap();
+let recipients = WindowSet::tab(TabId(3));
+let start = BroadcastControl {
+    windows: recipients.clone(),
+    ..BroadcastControl::start(id.clone())
+};
+let data = SendText::builder()
+    .data("hello\n")
+    .broadcast(id.clone())
+    .windows(recipients.clone())
+    .build();
+let end = BroadcastControl {
+    windows: recipients,
+    ..BroadcastControl::end(id)
+};
+// These are command values; construction has submitted nothing.
+```
+
+Each is an independent finite, submission-only command using ordinary execution.
+The caller owns explicit end attempts. Awaiting submissions on separate sockets
+does not establish remote effect order or cleanup; dropping a value sends
+nothing. A running ordered broadcast conversation remains a separate capability.
+
+ID-bearing data can enroll recipients even without start. End affects the ID's
+accumulated membership beyond its current match/exclusion scope, and selection
+failure can prevent cleanup. Origin-window callbacks are distinct from recipient
+selection and socket lifetime; end leaves those callbacks installed, so reusing
+an old ID can reconnect them to new membership. Distinct IDs also do not isolate
+the shared per-window cursor-render flag. See the
+[broadcast report](../design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md)
+for exact native behavior and evidence.
 
 ## Concern map
 
