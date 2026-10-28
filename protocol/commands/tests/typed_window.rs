@@ -102,7 +102,7 @@ fn focus_and_text_constructors_keep_distinct_payload_profiles() {
 #[test]
 fn window_sets_keep_input_match_field_and_explicit_all_flag() {
     let send = |windows| SendText {
-        text: "hello".into(),
+        data: "hello".into(),
         windows,
         ..SendText::default()
     };

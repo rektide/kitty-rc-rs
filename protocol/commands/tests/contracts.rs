@@ -343,7 +343,7 @@ fn input_submissions_retire_and_preserve_literal_utf8() {
         json!({"keys":["ctrl+a","ctrl+b"],"match":null,"match_tab":null,"all":false,"exclude_active":true})
     );
     let text = SendText::builder()
-        .text("\\e[31m 🌊")
+        .data("\\e[31m 🌊")
         .bracketed_paste(BracketedPaste::Auto)
         .build();
     assert_eq!(payload(&text)["data"], "text:\\e[31m 🌊"); // literal backslash, not CLI Python escape parsing
@@ -351,6 +351,10 @@ fn input_submissions_retire_and_preserve_literal_utf8() {
     for (mode, reusable) in [
         (keys.mode(), keys.reusable()),
         (text.mode(), text.reusable()),
+        (
+            SendText::bytes([0, 0xff]).mode(),
+            SendText::bytes([0, 0xff]).reusable(),
+        ),
     ] {
         assert_eq!(mode, Mode::SubmissionOnly);
         assert!(!reusable);
@@ -358,6 +362,50 @@ fn input_submissions_retire_and_preserve_literal_utf8() {
     let submission = Submission(LoadConfig::default());
     assert_eq!(submission.mode(), Mode::SubmissionOnly);
     assert!(!submission.reusable());
+}
+
+#[test]
+fn send_text_distinguishes_unicode_from_arbitrary_bytes_without_interpretation() {
+    // Handler facts: text's U+00FF is UTF-8 C3 BF, not the single byte FF.
+    assert_eq!(payload(&SendText::new("\0ÿ"))["data"], "text:\0ÿ");
+    assert_eq!(payload(&SendText::bytes([0, 0xff]))["data"], "base64:AP8=");
+    assert_eq!(
+        payload(&SendText::bytes("\0ÿ".as_bytes()))["data"],
+        "base64:AMO/"
+    );
+    assert_eq!(payload(&SendText::bytes(br"\n"))["data"], "base64:XG4=");
+    assert_eq!(payload(&SendText::default())["data"], "text:");
+    assert_eq!(payload(&SendText::bytes([]))["data"], "base64:");
+}
+
+#[test]
+fn send_text_builder_accepts_owned_and_borrowed_data_and_keeps_options() {
+    let windows = WindowSet::builder()
+        .match_window(WindowId(7))
+        .match_tab(TabId(3))
+        .all(true)
+        .build();
+    let binary = SendText::builder()
+        .data(vec![0, 0xff])
+        .windows(windows)
+        .exclude_active(true)
+        .bracketed_paste(BracketedPaste::Enable)
+        .build();
+    assert_eq!(
+        payload(&binary),
+        json!({
+            "data": "base64:AP8=", "match": "id:7", "match_tab": "id:3", "all": true,
+            "exclude_active": true, "bracketed_paste": "enable"
+        })
+    );
+    let borrowed = SendText::builder().data(&[0, 0xff][..]).build();
+    assert_eq!(borrowed.data, binary.data);
+    let owned = SendText::builder().data(String::from("hello")).build();
+    assert_eq!(owned.data, SendTextData::Text("hello".into()));
+    let explicit = SendText::builder()
+        .data(SendTextData::Bytes(vec![]))
+        .build();
+    assert_eq!(payload(&explicit)["data"], "base64:");
 }
 
 #[test]

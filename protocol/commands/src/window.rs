@@ -6,6 +6,7 @@ use crate::targets::{
     WindowTarget,
 };
 use crate::{CanSubmitWithoutReply, Class, Command, DecodeError, Mode, request};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use kitty_rc_schema::PlainRequest;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -439,12 +440,69 @@ pub enum BracketedPaste {
     Enable,
 }
 
-/// One finite text submission, not a file/stdin/broadcast conversation. Text
-/// is literal UTF-8; Python escapes are NOT interpreted by this constructor.
+/// Finite send-text content, with an explicit distinction between Unicode text
+/// and arbitrary bytes. Neither variant interprets backslash escapes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SendTextData {
+    /// Literal text, sent as `text:` and UTF-8-encoded by kitty.
+    Text(String),
+    /// Raw bytes, sent as standard `base64:` without a UTF-8 requirement.
+    Bytes(Vec<u8>),
+}
+impl Default for SendTextData {
+    fn default() -> Self {
+        Self::Text(String::new())
+    }
+}
+impl From<String> for SendTextData {
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+impl From<&str> for SendTextData {
+    fn from(value: &str) -> Self {
+        Self::Text(value.into())
+    }
+}
+impl From<Vec<u8>> for SendTextData {
+    fn from(value: Vec<u8>) -> Self {
+        Self::Bytes(value)
+    }
+}
+impl From<&[u8]> for SendTextData {
+    fn from(value: &[u8]) -> Self {
+        Self::Bytes(value.into())
+    }
+}
+
+/// One finite text or byte submission, not a file/stdin/broadcast conversation.
+/// Construction performs no I/O or chunking. Completion proves local submission
+/// only, not delivery to a child; execution suppresses replies and retires the
+/// transport. Normal execution request-size limits still apply.
+///
+/// `new` remains literal: Python/ANSI-C escapes are NOT interpreted. Bracketed
+/// paste can wrap and sanitize the data on the server when selected.
+///
+/// # Migration
+///
+/// The former public `text: String` field is now `data: SendTextData`;
+/// builder `.text(value)` becomes `.data(value)`. Direct `new(text)` calls retain
+/// their literal behavior. Strings select text; byte vectors/slices select bytes.
+///
+/// ```
+/// use kitty_rc_commands::window::{SendText, SendTextData};
+/// let literal = SendText::new(r"literal \n");
+/// let binary = SendText::bytes(vec![0, 0xff]);
+/// let built = SendText::builder().data("literal text").build();
+/// let bytes = SendText::builder().data(vec![0, 0xff]).build();
+/// assert_eq!(literal.data, SendTextData::Text(r"literal \n".into()));
+/// assert_eq!(binary.data, bytes.data);
+/// assert_eq!(built.data, SendTextData::Text("literal text".into()));
+/// ```
 #[derive(Debug, Clone, Default, bon::Builder)]
-#[builder(on(String, into))]
 pub struct SendText {
-    pub text: String,
+    #[builder(into)]
+    pub data: SendTextData,
     #[builder(default)]
     pub windows: WindowSet,
     #[builder(default)]
@@ -453,9 +511,17 @@ pub struct SendText {
     pub bracketed_paste: BracketedPaste,
 }
 impl SendText {
+    /// Literal Unicode text; backslash escapes are left untouched.
     pub fn new(text: impl Into<String>) -> Self {
         Self {
-            text: text.into(),
+            data: SendTextData::Text(text.into()),
+            ..Self::default()
+        }
+    }
+    /// Arbitrary bytes, including NUL and invalid UTF-8, in one request.
+    pub fn bytes(bytes: impl Into<Vec<u8>>) -> Self {
+        Self {
+            data: SendTextData::Bytes(bytes.into()),
             ..Self::default()
         }
     }
@@ -464,7 +530,10 @@ impl Command for SendText {
     type Output = ();
     fn request(&self) -> PlainRequest {
         let mut p = self.windows.input_payload(self.exclude_active);
-        p["data"] = json!(format!("text:{}", self.text));
+        p["data"] = json!(match &self.data {
+            SendTextData::Text(text) => format!("text:{text}"),
+            SendTextData::Bytes(bytes) => format!("base64:{}", STANDARD.encode(bytes)),
+        });
         p["bracketed_paste"] = json!(self.bracketed_paste);
         request("send-text", p)
     }
