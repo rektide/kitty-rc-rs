@@ -5,13 +5,15 @@ description: Clean-slate API and crate design with a post-discussion registry-fi
 resource: /design/library-redesign/README.md
 status: draft
 generated:
-  by: "model:openai/gpt-6-astra#medium"
-  at: 2026-10-14
+  by: "model:openai/gpt-6-astra#xhigh"
+  at: 2026-10-28
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
     title: Human commissions send-text implementation with Sol xhigh; Astra reviews native escape/action boundaries and maintains follow-on navigation
   - resource: /design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md
     title: Native escape/paste corrections and core-first implementation direction
+  - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
+    title: Built finite text/raw-byte core, migration and independent handler/preparation checks
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
     title: Human redesign direction, research review and corrections, accepted managed-operation direction, and post-discussion draft
   - resource: /design/library-redesign/draft0.gpt6a.md
@@ -82,6 +84,10 @@ tickets, including uncovered work, before creating them.
   the sketch's double-expanded paste, ordinary-octal and API-compatibility claims
   using native kitty 0.43.1/0.49.2 evidence; prioritizes literal text/bytes and
   explicit broadcast messages before choosing escape and nested-action contracts.
+- [Finite text/raw-byte implementation](capabilities/sendtext-core0.sol61xh.md):
+  `SendTextData`, literal/byte constructors and builders, honest submission-only
+  outcomes, public migration, and 11 native handler cases at each named revision.
+  [Usage](../../client/README.md#finite-text-and-byte-input) shows the public API.
 
 ## Preserved initial position
 

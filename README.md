@@ -6,8 +6,12 @@ resource: /README.md
 status: active
 generated:
   by: "model:openai/gpt-6-astra#xhigh"
-  at: 2026-10-27
+  at: 2026-10-28
 sources:
+  - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
+    title: Directed Sol xhigh send-text implementation, reviewed native grammar boundaries and integrated public usage and API-version markers
+  - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
+    title: Finite literal text and raw bytes, public field/builder migration and pinned-source evidence
   - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
     title: Commissioned two f agents for typed command options and bon builders; integrated callers, verified contracts and rewrote examples around direct constructors
   - resource: /protocol/commands/src/targets.rs
@@ -122,6 +126,22 @@ let terminal = Launch {
 Constructing a command performs no I/O. Pass it to `Session::execute_with_options`
 or `Registry::submit`; upload commands use the dedicated upload entrances.
 The same types are available directly from the `kitty-rc-commands` crate.
+
+Finite text input distinguishes literal Unicode from arbitrary bytes:
+
+```rust
+use kitty_rc::commands::window::SendText;
+
+let literal = SendText::new(r"literal \n"); // backslash and n stay literal
+let binary = SendText::bytes([0, 0xff]);   // no UTF-8 requirement
+let named = SendText::builder().data("hello\n").build();
+```
+
+Each is one bounded submission. Completion reports local outbound progress;
+bracketed-paste options can wrap/sanitize input on the server. The public
+`text` field and builder `.text(...)` have become `data` and `.data(...)`.
+See [text and byte input](client/README.md#finite-text-and-byte-input) for scope,
+migration and evidence.
 
 `WindowId` and `TabId` keep identities distinct. `WindowMatch` and `TabMatch`
 provide typed field constructors; their title/cwd/cmdline patterns are native

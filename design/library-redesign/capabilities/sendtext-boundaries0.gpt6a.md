@@ -12,6 +12,8 @@ sources:
     title: Human commissions Sol xhigh implementation under Astra stewardship, requests ticket discussion after building; parent verifies native escape and nested-action boundaries
   - resource: /design/library-redesign/capabilities/sendtext0.glm53m.md
     title: Prior Slice-A sketch under review, preserved as its author's proposal
+  - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
+    title: Reviewed finite implementation and Sol's recommendation; native parent findings favor broadcast before selecting an escape grammar
   - resource: /protocol/commands/src/window.rs
     title: Existing literal finite send-text entrance and submission-only contract
   - resource: /protocol/commands/src/actions.rs
@@ -43,6 +45,14 @@ The human asked Astra to drive Sol xhigh through useful work and clarified:
 left uncovered. The first commissioned implementation is the finite literal
 text/raw-bytes command core. The earlier [GLM sketch](sendtext0.glm53m.md) is
 input to that work, with the corrections below.
+
+**First checkpoint:** Sol's [finite core](sendtext-core0.sol61xh.md) is built
+and reviewed: literal text/raw bytes, builder migration and preparation/source
+evidence. Sol proposed a characterized escaped-text convenience as the next
+candidate. The parent selects explicit broadcast messages next instead:
+the native findings below make grammar choice material, while broadcast adds
+an independent native capability. This is a scoped implementation decision;
+the broader grammar alternatives remain for human discussion.
 
 Recommended order:
 

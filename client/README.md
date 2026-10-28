@@ -6,8 +6,12 @@ resource: /client/README.md
 status: draft
 generated:
   by: "model:openai/gpt-6-astra#xhigh"
-  at: 2026-10-27
+  at: 2026-10-28
 sources:
+  - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
+    title: Reviewed Sol xhigh finite send-text implementation and integrated literal/byte examples, migration and API-version guidance
+  - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
+    title: Literal text/raw-byte contracts, preparation tests and pinned handler evidence
   - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
     title: Integrated typed selectors across clients and observation; documented optional bon builders and direct command construction
   - resource: /protocol/commands/src/targets.rs
@@ -100,6 +104,55 @@ does no I/O; the execution entrance supplies connection, protection and bounds.
 The [root examples](../README.md#typed-command-construction) also cover typed key
 chords, layout changes, colors and configuration overrides. `kitty_rc::commands`
 re-exports these same leaf-crate APIs.
+
+### Finite text and byte input
+
+`SendText::new` accepts literal Unicode; `SendText::bytes` accepts arbitrary
+bytes. Both construct one command without I/O or escape interpretation:
+
+```rust
+use kitty_rc_commands::targets::{WindowId, WindowSet};
+use kitty_rc_commands::window::{BracketedPaste, SendText, SendTextData};
+
+let literal = SendText::new(r"literal \n"); // two characters: backslash and n
+let binary = SendText {
+    windows: WindowSet::window(WindowId(42)),
+    ..SendText::bytes([0, 0xff])
+};
+let paste = SendText::builder()
+    .data("hello\n") // an actual newline, supplied by Rust
+    .windows(WindowSet::window(WindowId(42)))
+    .bracketed_paste(BracketedPaste::Auto)
+    .build();
+let explicit = SendText::builder()
+    .data(SendTextData::Bytes(vec![0, 0xff]))
+    .build();
+```
+
+Text uses native `text:` encoding; bytes use standard `base64:`. A Unicode
+`ÿ` therefore supplies UTF-8 bytes `c3 bf`, whereas the byte constructor can
+supply the single byte `ff`. Bracketed-paste wrapping/sanitization remains
+server behavior when that option is selected.
+
+Pass these commands to the ordinary direct or managed execution entrance.
+They suppress replies and retire the transport; `Completion::Submitted`
+means local submission, not child delivery. Existing request-size bounds
+apply to the complete request. A 1024-byte reference-client chunk size does
+not impose a limit on these finite constructors. File/stdin chunking belongs
+to a separate execution conversation.
+
+**API migration:** `kitty-rc-commands` 0.3 and facade `kitty-rc` 0.8 replace
+the public `text: String` field with `data: SendTextData`; use
+`data: old_text.into()` in struct literals and `.data(old_text)` in builders.
+Direct `SendText::new(old_text)` calls retain their behavior. The source
+revision advances the command-dependent execution/registry/observation/CLI
+packages alongside these markers; use that coherent dependency set.
+
+The [finite-core report](../design/library-redesign/capabilities/sendtext-core0.sol61xh.md)
+records source-handler and preparation evidence. The
+[native boundary review](../design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md)
+explains why an escaped-text convenience and nested paste need separate
+grammar decisions.
 
 ## Concern map
 
