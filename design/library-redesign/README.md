@@ -8,6 +8,10 @@ generated:
   by: "model:openai/gpt-6-astra#medium"
   at: 2026-10-14
 sources:
+  - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
+    title: Human commissions send-text implementation with Sol xhigh; Astra reviews native escape/action boundaries and maintains follow-on navigation
+  - resource: /design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md
+    title: Native escape/paste corrections and core-first implementation direction
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
     title: Human redesign direction, research review and corrections, accepted managed-operation direction, and post-discussion draft
   - resource: /design/library-redesign/draft0.gpt6a.md
@@ -65,6 +69,19 @@ API stability or acceptance of every future possibility in the research.
   managed coordination with retained outcomes first. Exact kubeless integration
   remains subject to a native workflow comparison. Reconciliation is separately
   usable; no current consumer constrains the new API.
+
+## Send-text follow-on
+
+After the first public release, the human selected the deferred send-text
+surface for further work. Build the useful core first, then discuss epics and
+tickets, including uncovered work, before creating them.
+
+- [Slice-A sketch](capabilities/sendtext0.glm53m.md): the initial finite-data,
+  escape, broadcast and paste proposal, with B/C conversation and CLI directions.
+- [Native boundary review](capabilities/sendtext-boundaries0.gpt6a.md): corrects
+  the sketch's double-expanded paste, ordinary-octal and API-compatibility claims
+  using native kitty 0.43.1/0.49.2 evidence; prioritizes literal text/bytes and
+  explicit broadcast messages before choosing escape and nested-action contracts.
 
 ## Preserved initial position
 
