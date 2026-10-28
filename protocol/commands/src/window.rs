@@ -440,6 +440,117 @@ pub enum BracketedPaste {
     Enable,
 }
 
+/// Caller-chosen identity for kitty's server-global broadcast bookkeeping, not
+/// a transport session, delivery receipt or running conversation owner.
+///
+/// Only empty strings are rejected, to avoid the server's empty-name slot.
+/// No trimming, normalization, random generation or other grammar is imposed.
+/// Reusing an ID on the same server shares its accumulated membership.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
+pub struct BroadcastId(String);
+impl BroadcastId {
+    pub fn new(value: impl Into<String>) -> Result<Self, EmptyBroadcastId> {
+        let value = value.into();
+        if value.is_empty() {
+            Err(EmptyBroadcastId)
+        } else {
+            Ok(Self(value))
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("broadcast identifier must not be empty")]
+pub struct EmptyBroadcastId;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BroadcastOperation {
+    Start,
+    End,
+}
+
+/// One explicit finite `send-text` broadcast control message, not an owned
+/// broadcast conversation. Its required identity is shared with data messages.
+///
+/// Start marks selected recipients and, only when kitty receives an origin
+/// window, installs that origin's removal/focus callbacks. Ordinary socket
+/// closure is not origin-window removal and provides no callback cleanup.
+/// End attempts to clear both selected recipients and ALL accumulated members
+/// of this ID, even members outside the current match/exclusion scope.
+///
+/// Both operations are submission-only and retire their transport. Completion
+/// cannot establish remote receipt/effect. Awaiting successive submissions on
+/// separate sockets does NOT establish remote effect ordering. The caller owns
+/// lifecycle and explicit end attempts; there is no Drop cleanup or follow-on.
+///
+/// ```
+/// use kitty_rc_commands::window::{BroadcastControl, BroadcastId, BroadcastOperation, SendText};
+/// let id = BroadcastId::new("caller-chosen").unwrap();
+/// let start = BroadcastControl::start(id.clone());
+/// let data = SendText::builder().data(vec![0, 0xff]).broadcast(id.clone()).build();
+/// let end = BroadcastControl::builder()
+///     .broadcast(id)
+///     .operation(BroadcastOperation::End)
+///     .build();
+/// // These values construct messages only; no command has been submitted.
+/// ```
+///
+/// An identity is mandatory, including through the builder:
+/// ```compile_fail
+/// use kitty_rc_commands::window::{BroadcastControl, BroadcastOperation};
+/// let unnamed = BroadcastControl::builder().operation(BroadcastOperation::Start).build();
+/// ```
+#[derive(Debug, Clone, bon::Builder)]
+pub struct BroadcastControl {
+    pub broadcast: BroadcastId,
+    pub operation: BroadcastOperation,
+    #[builder(default)]
+    pub windows: WindowSet,
+    #[builder(default)]
+    pub exclude_active: bool,
+}
+impl BroadcastControl {
+    pub fn new(broadcast: BroadcastId, operation: BroadcastOperation) -> Self {
+        Self {
+            broadcast,
+            operation,
+            windows: WindowSet::default(),
+            exclude_active: false,
+        }
+    }
+    pub fn start(broadcast: BroadcastId) -> Self {
+        Self::new(broadcast, BroadcastOperation::Start)
+    }
+    pub fn end(broadcast: BroadcastId) -> Self {
+        Self::new(broadcast, BroadcastOperation::End)
+    }
+}
+impl Command for BroadcastControl {
+    type Output = ();
+    fn request(&self) -> PlainRequest {
+        let mut p = self.windows.input_payload(self.exclude_active);
+        p["session_id"] = json!(self.broadcast);
+        p["data"] = json!(match self.operation {
+            BroadcastOperation::Start => "session:start",
+            BroadcastOperation::End => "session:end",
+        });
+        request("send-text", p)
+    }
+    fn class(&self) -> Class {
+        Class::Short
+    }
+    fn mode(&self) -> Mode {
+        Mode::SubmissionOnly
+    }
+    fn decode(_: Option<Value>) -> Result<(), DecodeError> {
+        Ok(())
+    }
+}
+
 /// Finite send-text content, with an explicit distinction between Unicode text
 /// and arbitrary bytes. Neither variant interprets backslash escapes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -503,6 +614,11 @@ impl From<&[u8]> for SendTextData {
 pub struct SendText {
     #[builder(into)]
     pub data: SendTextData,
+    /// Optional server-global broadcast bookkeeping. ID-bearing data creates
+    /// or updates membership even without start; it installs no origin hooks.
+    /// No lifecycle or remote ordering/cleanup guarantee is implied. Use
+    /// [`BroadcastControl`] for explicit start/end attempts.
+    pub broadcast: Option<BroadcastId>,
     #[builder(default)]
     pub windows: WindowSet,
     #[builder(default)]
@@ -535,6 +651,9 @@ impl Command for SendText {
             SendTextData::Bytes(bytes) => format!("base64:{}", STANDARD.encode(bytes)),
         });
         p["bracketed_paste"] = json!(self.bracketed_paste);
+        if let Some(broadcast) = &self.broadcast {
+            p["session_id"] = json!(broadcast);
+        }
         request("send-text", p)
     }
     fn class(&self) -> Class {

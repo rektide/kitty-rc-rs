@@ -205,7 +205,7 @@ pub const CAPABILITIES: &[Capability] = &[
         "send-text",
         FiniteSubsetUploadDeferred,
         Submission,
-        "One literal UTF-8 or raw-byte submission; no escape expansion, chunked/file/stdin/broadcast conversation or kitty-key encoding"
+        "Finite literal text/raw bytes plus explicit broadcast ID/start/end; caller-owned submission-only lifecycle, no remote ordering/cleanup proof; chunked/file/stdin conversation, escapes and kitty-key deferred"
     ),
     stable!(
         "set-background-image",
