@@ -377,6 +377,120 @@ fn send_text_handler_cases() -> Vec<(&'static str, Value, Value)> {
         .collect()
 }
 
+/// Scenario goldens record native state after each message/injected callback.
+/// The helpers only format requests/observations; they implement no lifecycle.
+fn broadcast_cases() -> Vec<(&'static str, Value, Value)> {
+    let send = |payload: Value, selected: Value, origin: Option<u64>| json!({"kind": "send", "payload": payload, "selected": selected, "origin": origin});
+    let state = |members: Value, cursors: Value, writes: Value, callbacks: Value| json!({"members": members, "cursors": cursors, "writes": writes, "callbacks": callbacks});
+    let callbacks_a = json!({"99": {
+        "removal": [["ClearSession", "a"]], "focus": [["FocusChangedSession", "a"]]
+    }});
+    let callbacks_ab = json!({"99": {
+        "removal": [["ClearSession", "a"], ["ClearSession", "b"]],
+        "focus": [["FocusChangedSession", "a"], ["FocusChangedSession", "b"]]
+    }});
+    let callbacks_ba = json!({"99": {
+        "removal": [["ClearSession", "b"], ["ClearSession", "a"]],
+        "focus": [["FocusChangedSession", "b"], ["FocusChangedSession", "a"]]
+    }});
+    let writes_ab = json!({"7": [[65]], "8": [[65]], "9": [[0, 255]]});
+    let writes_abz = json!({"7": [[65]], "8": [[65], [90]], "9": [[0, 255]]});
+    vec![
+        (
+            "broadcast-data-enrolls-and-end-clears-unselected-and-excluded-members",
+            json!({"kind": "send-text-broadcast", "steps": [
+                send(json!({"data": "text:A", "session_id": "caller", "exclude_active": false, "bracketed_paste": "disable"}), json!([7, 8]), None),
+                send(json!({"data": "base64:AP8=", "session_id": "caller", "exclude_active": true, "bracketed_paste": "disable"}), json!([7, 9]), None),
+                send(json!({"data": "text:Z", "exclude_active": false, "bracketed_paste": "disable"}), json!([8]), None),
+                send(json!({"data": "session:end", "session_id": "caller", "exclude_active": true}), json!([7, 8]), None),
+            ]}),
+            json!([
+                state(
+                    json!({"caller": [7, 8]}),
+                    json!([7, 8]),
+                    json!({"7": [[65]], "8": [[65]]}),
+                    json!({})
+                ),
+                state(
+                    json!({"caller": [7, 8, 9]}),
+                    json!([7, 8, 9]),
+                    writes_ab,
+                    json!({})
+                ),
+                state(
+                    json!({"caller": [7, 8, 9]}),
+                    json!([7, 8, 9]),
+                    writes_abz.clone(),
+                    json!({})
+                ),
+                state(json!({}), json!([]), writes_abz, json!({})),
+            ]),
+        ),
+        (
+            "broadcast-start-without-origin-installs-no-hooks-or-implicit-end",
+            json!({"kind": "send-text-broadcast", "steps": [
+                send(json!({"data": "session:start", "session_id": "caller", "exclude_active": false}), json!([8]), None),
+                send(json!({"data": "session:start", "session_id": "caller", "exclude_active": false}), json!([9]), None),
+            ]}),
+            json!([
+                state(json!({"caller": [8]}), json!([8]), json!({}), json!({})),
+                state(
+                    json!({"caller": [8, 9]}),
+                    json!([8, 9]),
+                    json!({}),
+                    json!({})
+                ),
+            ]),
+        ),
+        (
+            "broadcast-origin-hook-replacement-focus-and-removal",
+            json!({"kind": "send-text-broadcast", "steps": [
+                send(json!({"data": "session:start", "session_id": "a", "exclude_active": false}), json!([8]), Some(99)),
+                send(json!({"data": "session:start", "session_id": "b", "exclude_active": false}), json!([9]), Some(99)),
+                send(json!({"data": "session:start", "session_id": "a", "exclude_active": false}), json!([7]), Some(99)),
+                {"kind": "focus", "origin": 99, "focused": false},
+                {"kind": "focus", "origin": 99, "focused": true},
+                send(json!({"data": "session:end", "session_id": "a", "exclude_active": true}), json!([7]), Some(99)),
+                {"kind": "remove", "origin": 99},
+            ]}),
+            json!([
+                state(json!({"a": [8]}), json!([8]), json!({}), callbacks_a),
+                state(
+                    json!({"a": [8], "b": [9]}),
+                    json!([8, 9]),
+                    json!({}),
+                    callbacks_ab
+                ),
+                state(
+                    json!({"a": [7, 8], "b": [9]}),
+                    json!([7, 8, 9]),
+                    json!({}),
+                    callbacks_ba.clone()
+                ),
+                state(
+                    json!({"a": [7, 8], "b": [9]}),
+                    json!([]),
+                    json!({}),
+                    callbacks_ba.clone()
+                ),
+                state(
+                    json!({"a": [7, 8], "b": [9]}),
+                    json!([7, 8, 9]),
+                    json!({}),
+                    callbacks_ba.clone()
+                ),
+                state(
+                    json!({"b": [9]}),
+                    json!([9]),
+                    json!({}),
+                    callbacks_ba.clone()
+                ),
+                state(json!({}), json!([]), json!({}), callbacks_ba),
+            ]),
+        ),
+    ]
+}
+
 /// Scan the modeled catalog for command names, mirroring the retired
 /// verifier's extraction: `name: "…"` and `stable!("…")` occurrences.
 pub fn modeled_catalog_names(catalog_text: &str) -> BTreeSet<String> {
@@ -435,6 +549,7 @@ pub fn verify(options: &SourceOptions) -> Result<String, SourceError> {
     let image_upload = image_upload_requests();
     let run_upload = run_upload_request();
     let send_text = send_text_handler_cases();
+    let broadcasts = broadcast_cases();
 
     let mut requests = vec![json!({"kind": "inventory", "path": "kitty/rc"})];
     for (name, opts, args, _) in &constructors {
@@ -454,10 +569,12 @@ pub fn verify(options: &SourceOptions) -> Result<String, SourceError> {
     }
     requests.push(run_upload.0);
     for revision in [STABLE_REVISION, HEAD_REVISION] {
-        for (_, request, _) in &send_text {
-            let mut request = request.clone();
-            request["revision"] = json!(revision);
-            requests.push(request);
+        for cases in [&send_text, &broadcasts] {
+            for (_, request, _) in cases {
+                let mut request = request.clone();
+                request["revision"] = json!(revision);
+                requests.push(request);
+            }
         }
     }
 
@@ -521,16 +638,18 @@ pub fn verify(options: &SourceOptions) -> Result<String, SourceError> {
     index += 1;
     verify_run_frames(&run_frames, &run_upload.1)?;
     for revision in [STABLE_REVISION, HEAD_REVISION] {
-        for (name, _, expected) in &send_text {
-            let case = format!("send-text {name} at {revision}");
-            let actual = oracle.value(index, &case)?;
-            index += 1;
-            if actual != expected {
-                return Err(SourceError::Mismatch {
-                    case,
-                    expected: expected.to_string(),
-                    actual: actual.to_string(),
-                });
+        for cases in [&send_text, &broadcasts] {
+            for (name, _, expected) in cases {
+                let case = format!("send-text {name} at {revision}");
+                let actual = oracle.value(index, &case)?;
+                index += 1;
+                if actual != expected {
+                    return Err(SourceError::Mismatch {
+                        case,
+                        expected: expected.to_string(),
+                        actual: actual.to_string(),
+                    });
+                }
             }
         }
     }
@@ -538,10 +657,11 @@ pub fn verify(options: &SourceOptions) -> Result<String, SourceError> {
     assert_eq!(index, requests.len(), "oracle request/result misalignment");
 
     Ok(format!(
-        "Pinned source verified: {native_count} commands, {} constructor cases, {} nested parsers, upload image/run chunk contracts; {} finite send-text handler cases at each of stable {STABLE_REVISION} and inspected HEAD {HEAD_REVISION}",
+        "Pinned source verified: {native_count} commands, {} constructor cases, {} nested parsers, upload image/run chunk contracts; {} finite send-text handler cases and {} broadcast lifecycle scenarios at each of stable {STABLE_REVISION} and inspected HEAD {HEAD_REVISION}",
         constructors.len(),
         parsers.len(),
         send_text.len(),
+        broadcasts.len(),
     ))
 }
 

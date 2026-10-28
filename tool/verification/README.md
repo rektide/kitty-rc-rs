@@ -9,7 +9,7 @@ generated:
   at: 2026-10-14
 sources:
   - resource: "opencode://ses_e7b57d91bffeto158h8GVlMvHn"
-    title: Added finite send-text handler oracles at stable and inspected HEAD, with explicit synthetic-window and non-live limits
+    title: Added finite text/byte and fresh-state broadcast handler/class oracles at stable and inspected HEAD, with explicit injected-boundary and non-live limits
   - resource: "opencode://ses_ec5bc3061ffeQLd390Klwo3Esr"
     title: Commissioned Rust replacement of the Python verification runners, fixtures and matrix orchestration
   - resource: /design/library-redesign/verification/live0.sol61xh.md
@@ -50,7 +50,7 @@ endpoint is ever selected.
 | `matrix` | Opt-in supported-version matrix: selected executables × protection modes, prebuilt examples, JSON evidence report. `--download`, `--kitty` (repeat), `--mode` (repeat), `--finite-only`, `--cli-smoke`, `--no-build`, `--report`, `--deadline`. |
 | `download` | Acquire pinned upstream releases (0.43.1, 0.49.2) into ignored `.test-agent/supported-kitty` with digest verification, safe extraction and provenance JSON. Already-acquired matching archives are reused without network access. |
 | `cli-smoke SOCKET KEY PASSWORD` | Standalone `kitty-rc` CLI journeys (list, explicit-tab active, goto, two finite watch samples) against one existing private fixture. |
-| `source CHECKOUT` | Pinned upstream source contracts at revision `b2cb871254…`: catalog inventory, 15 constructor golden cases, 7 nested parsers, upload chunking contracts; 11 finite send-text handler cases each at that revision and inspected HEAD `5bf3c2dc67…`. |
+| `source CHECKOUT` | Pinned upstream source contracts at revision `b2cb871254…`: catalog inventory, 15 constructor golden cases, 7 nested parsers, upload chunking contracts; 11 finite send-text handler cases and 3 broadcast lifecycle scenarios each at that revision and inspected HEAD `5bf3c2dc67…`. |
 | `kubeless-compare KUBELESS_DIR` | The design comparison probe (disposable scratch package only). |
 
 Typical matrix usage (cached release binaries are reused, not re-downloaded):
@@ -105,20 +105,30 @@ is made — see the [support policy](../../doc/usage/support.md).
    each private fixture and exercises the native string/bool/argv kitten
    boundary; a Rust executable cannot test that boundary.
 2. [`fixtures/source_oracle.py`](fixtures/source_oracle.py) — the minimal
-    executor that extracts and runs upstream constructors/parsers and finite
-    send-text handlers at named revisions. Executing upstream GPL code is what makes upstream a
+   executor that extracts and runs upstream constructors/parsers, finite
+   send-text handlers and broadcast classes at named revisions. Executing
+   upstream GPL code is what makes upstream a
    *semantic* oracle; translating its algorithms into this repository would
    be both a licensing and a methodology error. Every case, comparison and
-    report lives in Rust (`src/source.rs`).
+   report lives in Rust (`src/source.rs`).
 
 The send-text oracle uses synthetic, already-selected windows and records the
 handler's write calls; it executes upstream's actual UTF-8/base64, exclusion and
 bracketed-paste paths (including the native sanitizer). It does not exercise
-matching, real child/TTY delivery, dispatcher reply suppression, broadcast
-sessions or `kitty-key`. A 1025-byte case distinguishes the client's 1024-byte
+matching, real child/TTY delivery, dispatcher reply suppression or `kitty-key`.
+A 1025-byte case distinguishes the client's 1024-byte
 generator choice from the handler; it establishes no transport/frame ceiling.
 See the [finite-core report](../../design/library-redesign/capabilities/sendtext-core0.sol61xh.md)
 for the paired Rust payload/preparation checks and public API migration.
+
+Broadcast scenarios additionally execute native `Session`, `SessionAction`,
+`ClearSession` and `FocusChangedSession`, with fresh classes/global state for
+each scenario. They establish ID-bearing data enrollment, exclusion versus
+recorded membership, end clearing beyond current scope, no hooks without an
+origin, repeated-start callback replacement, focus updates and removal cleanup.
+The boss, selected recipients, optional origin and callback invocations are
+injected: this does not prove real origin events, socket/TTY receipt, ordering
+or cleanup. See the [broadcast report](../../design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md).
 
 ## Tests
 

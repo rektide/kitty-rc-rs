@@ -9,7 +9,7 @@ generated:
   at: 2026-10-14
 sources:
   - resource: "opencode://ses_e7b57d91bffeto158h8GVlMvHn"
-    title: Distinguished finite literal text and raw bytes from deferred conversations without expanding live or oldest-release claims
+    title: Distinguished finite literal text/raw bytes and explicit broadcast messages from managed conversations, without expanding live or oldest-release claims
   - resource: "opencode://ses_ec5dcd3b6ffeofqbiGNfwr1Cf4"
     title: Commissioned support boundary separating user Rust, wire baseline, audited features and exercised servers
   - resource: /protocol/schema/src/version.rs
@@ -101,6 +101,13 @@ remote errors remain errors, not silent downgraded success.
   Submission completion is not child delivery, even for binary data. The
   [finite-core report](../../design/library-redesign/capabilities/sendtext-core0.sol61xh.md)
   records the source-oracle scope and the public `text`/builder-to-`data` migration.
+- Optional broadcast IDs on data and explicit start/end messages have additional
+  source-executed membership/callback evidence at those two revisions, not live
+  delivery or cleanup evidence. They retire like ordinary finite submissions.
+  Caller-owned IDs are server-global; end can clear accumulated members outside
+  its current match/exclusion scope. Awaiting local submissions on separate
+  sockets does not prove remote effect ordering, and socket closure is not
+  origin-window removal. See the [broadcast report](../../design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md).
 - Server configuration, permissions, installed kittens, visible targets, shell
   integration and window-manager cooperation can constrain a version-present
   feature. A successful RC acknowledgment need not prove the later UI/child

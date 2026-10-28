@@ -16,8 +16,12 @@ Request:
       "opts": {...}, "args": [...], "stdin": "<optional base64>"},
       {"kind": "parser", "path": "kitty/options/utils.py", "name": "goto_tab_parse",
        "action": "...", "rest": "..."},
-      {"kind": "send-text-handler", "payload": {...}, "bracketed_modes": [false],
-       "revision": "<optional per-request override>"}]}
+       {"kind": "send-text-handler", "payload": {...}, "bracketed_modes": [false],
+        "revision": "<optional per-request override>"},
+       {"kind": "send-text-broadcast", "steps": [
+         {"kind": "send", "payload": {...}, "selected": [8], "origin": null},
+         {"kind": "focus", "origin": 99, "focused": false},
+         {"kind": "remove", "origin": 99}]}]}
 
 Response: a JSON array aligned with the requests; each element is
   {"ok": true, "value": <json value>} or {"ok": false, "error": "..."}.
@@ -137,6 +141,69 @@ def run_request(checkout, revision, request):
             payload.get,
         )
         return {"result": result, "writes": [[list(data) for data in output] for output in writes], **selection}
+    if kind == "send-text-broadcast":
+        # Each scenario gets fresh upstream classes/globals. Only window
+        # selection, the boss and invocation of origin callbacks are injected;
+        # ALL membership/cursor/hook/cleanup behavior is upstream code, not a
+        # fixture implementation of that lifecycle. No socket/TTY is exercised.
+        source = read_source(checkout, revision, "kitty/rc/send_text.py")
+        class_names = {"Session", "SessionAction", "ClearSession", "FocusChangedSession"}
+        classes = [node for node in ast.parse(source).body if isinstance(node, ast.ClassDef) and node.name in class_names]
+        if {node.name for node in classes} != class_names:
+            raise AssertionError("missing native broadcast classes")
+        writes = {wid: [] for wid in (7, 8, 9, 99)}
+        windows = {
+            wid: SimpleNamespace(
+                id=wid,
+                screen=SimpleNamespace(in_bracketed_paste_mode=False, render_unfocused_cursor=False),
+                write_to_child=output.append,
+                actions_on_removal=[],
+                actions_on_focus_change=[],
+            )
+            for wid, output in writes.items()
+        }
+        boss = SimpleNamespace(active_window=windows[7], window_id_map=windows)
+        scope = {"sessions_map": {}, "get_boss": lambda: boss}
+        module = ast.Module(body=[
+            ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+            *classes,
+        ], type_ignores=[])
+        ast.fix_missing_locations(module)
+        exec(compile(module, "<pinned upstream broadcast classes>", "exec"), scope)
+        handler = extract_method(source, "response_from_kitty")
+        handler.__globals__.update(scope)
+        handler.__globals__["WindowSystemKeyEvent"] = type("WindowSystemKeyEvent", (), {})
+        handler.__globals__["sanitize_for_bracketed_paste"] = extract_method(
+            read_source(checkout, revision, "kitty/utils.py"), "sanitize_for_bracketed_paste"
+        )
+        states = []
+        for step in request["steps"]:
+            origin = windows[step["origin"]] if step.get("origin") is not None else None
+            if step["kind"] == "send":
+                selected = [None, *(windows[wid] for wid in step["selected"])]
+                receiver = SimpleNamespace(windows_for_payload=lambda *args, **kwargs: selected)
+                handler(receiver, boss, origin, step["payload"].get)
+            elif step["kind"] == "focus":
+                for callback in list(origin.actions_on_focus_change):
+                    callback(origin, step["focused"])
+            elif step["kind"] == "remove":
+                for callback in list(origin.actions_on_removal):
+                    callback(origin)
+            else:
+                raise AssertionError(f"unknown broadcast fixture event: {step['kind']}")
+            states.append({
+                "members": {sid: sorted(session.window_ids) for sid, session in scope["sessions_map"].items()},
+                "cursors": [wid for wid, window in windows.items() if window.screen.render_unfocused_cursor],
+                "writes": {str(wid): [list(data) for data in output] for wid, output in writes.items() if output},
+                "callbacks": {
+                    str(wid): {
+                        "removal": [[type(callback).__name__, callback.sid] for callback in window.actions_on_removal],
+                        "focus": [[type(callback).__name__, callback.sid] for callback in window.actions_on_focus_change],
+                    }
+                    for wid, window in windows.items() if window.actions_on_removal or window.actions_on_focus_change
+                },
+            })
+        return states
     raise AssertionError(f"unknown request kind: {kind}")
 
 

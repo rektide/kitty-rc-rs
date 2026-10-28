@@ -481,6 +481,7 @@ pub enum BroadcastOperation {
 /// closure is not origin-window removal and provides no callback cleanup.
 /// End attempts to clear both selected recipients and ALL accumulated members
 /// of this ID, even members outside the current match/exclusion scope.
+/// Target selection can fail before any cleanup occurs.
 ///
 /// Both operations are submission-only and retire their transport. Completion
 /// cannot establish remote receipt/effect. Awaiting successive submissions on

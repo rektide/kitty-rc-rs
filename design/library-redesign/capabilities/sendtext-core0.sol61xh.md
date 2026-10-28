@@ -175,6 +175,11 @@ live journeys were not rerun merely to confirm earlier results.
 
 ## Architectural checkpoint and next candidate
 
+**Follow-on:** the parent selected [explicit finite broadcast messages](sendtext-broadcast0.sol61xh.md)
+after its [native grammar assessment](sendtext-boundaries0.gpt6a.md). The
+recommendation and exclusions below are preserved as this earlier checkpoint,
+not the current selection; no local escape decoder was commissioned.
+
 Still excluded: ANSI-C decoding, escaped constructors, nested `paste`, nested
 `send_text`, broadcast `session_id`/start/end, `kitty-key`, chunked execution,
 CLI and automatic cleanup. Slice B execution and Slice C CLI remain separate
