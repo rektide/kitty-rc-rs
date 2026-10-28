@@ -8,7 +8,9 @@
 //! algorithms into this repository is legally and methodologically wrong.
 //! Therefore the minimal executor boundary stays Python
 //! ([`fixtures/source_oracle.py`](../fixtures/source_oracle.py)); every case,
-//! comparison, structural check and report below is Rust.
+//! comparison, structural check and report below is Rust. Finite send-text
+//! handler cases additionally exercise literal UTF-8/raw-byte semantics at the
+//! stable and inspected HEAD revisions with synthetic selected-window sinks.
 
 use base64::Engine as _;
 use serde_json::{Value, json};
@@ -17,6 +19,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 pub const STABLE_REVISION: &str = "b2cb871254fbdac19a085188813c8dfb258b95cd";
+const HEAD_REVISION: &str = "5bf3c2dc676efd5c4b4526eb135c922701565707";
 const ORACLE: &str = include_str!("../fixtures/source_oracle.py");
 
 #[derive(Debug, Error)]
@@ -259,6 +262,121 @@ fn parser_cases() -> Vec<(&'static str, &'static str, &'static str, Value)> {
     ]
 }
 
+/// Independent wire/child-byte facts, not this library's own encoder/decoder
+/// round trip. Window selection is a fixture; the real upstream handler owns
+/// encoding dispatch, exclusion, paste wrapping/sanitizing and the write calls.
+fn send_text_handler_cases() -> Vec<(&'static str, Value, Value)> {
+    let wrapped = b"\x1b[200~\0\xff\x1b[201~";
+    let long = vec![0xff; 1025];
+    let cases = vec![
+        (
+            "literal-utf8-backslashes-colon",
+            "text:\0ÿ\\n:base64".into(),
+            false,
+            "disable",
+            vec![false],
+            json!([["\0ÿ\\n:base64".as_bytes()]]),
+        ),
+        (
+            "binary-nul-ff",
+            "base64:AP8=".into(),
+            false,
+            "disable",
+            vec![false],
+            json!([[[0, 255]]]),
+        ),
+        (
+            "utf8-via-base64",
+            "base64:AMO/".into(),
+            false,
+            "disable",
+            vec![false],
+            json!([[[0, 195, 191]]]),
+        ),
+        (
+            "binary-backslashes",
+            "base64:XG4=".into(),
+            false,
+            "disable",
+            vec![false],
+            json!([[[92, 110]]]),
+        ),
+        (
+            "empty-text",
+            "text:".into(),
+            false,
+            "disable",
+            vec![false],
+            json!([[[]]]),
+        ),
+        (
+            "empty-bytes",
+            "base64:".into(),
+            false,
+            "disable",
+            vec![false],
+            json!([[[]]]),
+        ),
+        // 1024 is a reference-client generator choice, not this handler's
+        // limit. This case makes no claim about dispatcher/transport ceilings.
+        (
+            "over-client-chunk-size",
+            format!(
+                "base64:{}",
+                base64::engine::general_purpose::STANDARD.encode(&long)
+            ),
+            false,
+            "disable",
+            vec![false],
+            json!([[long]]),
+        ),
+        (
+            "exclude-active",
+            "base64:AP8=".into(),
+            true,
+            "disable",
+            vec![false, false],
+            json!([[], [[0, 255]]]),
+        ),
+        (
+            "auto-paste-off",
+            "base64:AP8=".into(),
+            false,
+            "auto",
+            vec![false],
+            json!([[[0, 255]]]),
+        ),
+        (
+            "auto-paste-on",
+            "base64:AP8=".into(),
+            false,
+            "auto",
+            vec![true],
+            json!([[wrapped]]),
+        ),
+        (
+            "forced-paste-sanitizes",
+            "text:\u{1b}[201~X".into(),
+            false,
+            "enable",
+            vec![false],
+            json!([[b"\x1b[200~X\x1b[201~"]]),
+        ),
+    ];
+    cases
+        .into_iter()
+        .map(|(name, data, exclude_active, bracketed_paste, bracketed_modes, writes)| {
+            let request = json!({
+                "kind": "send-text-handler",
+                "payload": {"data": data, "exclude_active": exclude_active, "bracketed_paste": bracketed_paste},
+                "bracketed_modes": bracketed_modes,
+            });
+            let expected = json!({"result": null, "writes": writes, "window_match_name": "match"});
+            (name, request, expected)
+        })
+        .collect()
+}
+
 /// Scan the modeled catalog for command names, mirroring the retired
 /// verifier's extraction: `name: "…"` and `stable!("…")` occurrences.
 pub fn modeled_catalog_names(catalog_text: &str) -> BTreeSet<String> {
@@ -309,12 +427,14 @@ fn constructor_request(name: &str, opts: &Value, args: &[&str]) -> Value {
     })
 }
 
-/// Verify both profiles against the pinned revision; returns a summary line.
+/// Verify stable constructors/parsers/uploads plus finite send-text handlers
+/// at stable and inspected HEAD; returns the evidence summary.
 pub fn verify(options: &SourceOptions) -> Result<String, SourceError> {
     let constructors = constructor_cases();
     let parsers = parser_cases();
     let image_upload = image_upload_requests();
     let run_upload = run_upload_request();
+    let send_text = send_text_handler_cases();
 
     let mut requests = vec![json!({"kind": "inventory", "path": "kitty/rc"})];
     for (name, opts, args, _) in &constructors {
@@ -333,6 +453,13 @@ pub fn verify(options: &SourceOptions) -> Result<String, SourceError> {
         requests.push(request.clone());
     }
     requests.push(run_upload.0);
+    for revision in [STABLE_REVISION, HEAD_REVISION] {
+        for (_, request, _) in &send_text {
+            let mut request = request.clone();
+            request["revision"] = json!(revision);
+            requests.push(request);
+        }
+    }
 
     let oracle = Oracle::run(options, &requests)?;
     let mut index = 0;
@@ -393,13 +520,28 @@ pub fn verify(options: &SourceOptions) -> Result<String, SourceError> {
     let run_frames = oracle.value(index, "run message_to_kitty")?.clone();
     index += 1;
     verify_run_frames(&run_frames, &run_upload.1)?;
+    for revision in [STABLE_REVISION, HEAD_REVISION] {
+        for (name, _, expected) in &send_text {
+            let case = format!("send-text {name} at {revision}");
+            let actual = oracle.value(index, &case)?;
+            index += 1;
+            if actual != expected {
+                return Err(SourceError::Mismatch {
+                    case,
+                    expected: expected.to_string(),
+                    actual: actual.to_string(),
+                });
+            }
+        }
+    }
     // Every request must have been consumed: guards request/result drift.
     assert_eq!(index, requests.len(), "oracle request/result misalignment");
 
     Ok(format!(
-        "Pinned source verified: {native_count} commands, {} constructor cases, {} nested parsers, upload image/run chunk contracts",
+        "Pinned source verified: {native_count} commands, {} constructor cases, {} nested parsers, upload image/run chunk contracts; {} finite send-text handler cases at each of stable {STABLE_REVISION} and inspected HEAD {HEAD_REVISION}",
         constructors.len(),
-        parsers.len()
+        parsers.len(),
+        send_text.len(),
     ))
 }
 

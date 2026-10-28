@@ -8,6 +8,8 @@ generated:
   by: "model:openai/gpt-6-astra#medium"
   at: 2026-10-14
 sources:
+  - resource: "opencode://ses_e7b57d91bffeto158h8GVlMvHn"
+    title: Distinguished finite literal text and raw bytes from deferred conversations without expanding live or oldest-release claims
   - resource: "opencode://ses_ec5dcd3b6ffeofqbiGNfwr1Cf4"
     title: Commissioned support boundary separating user Rust, wire baseline, audited features and exercised servers
   - resource: /protocol/schema/src/version.rs
@@ -89,10 +91,16 @@ remote errors remain errors, not silent downgraded success.
   integration; selection clearing is an effect, not a universally pure read.
 - Other stable catalog entries are observed at the pinned stable revision unless
   their metadata says more. Oldest availability remains unasserted. Coverage
-  applies to the exact typed profile: e.g. literal text submission is not a
+  applies to the exact typed profile: e.g. finite literal text/raw-byte submission is not a
   file/stdin/broadcast conversation; PNG uploads and buffered run have their own
   conversation/exclusion requirements. Read the current catalog and upload
   contracts instead of treating one familiar command name as complete support.
+- Finite `SendText` literal text and raw bytes have handler-source evidence at
+  stable 0.49.2 and the named inspected HEAD, not a new live-matrix claim.
+  Backslashes stay literal; bracketed paste can wrap/sanitize on the server.
+  Submission completion is not child delivery, even for binary data. The
+  [finite-core report](../../design/library-redesign/capabilities/sendtext-core0.sol61xh.md)
+  records the source-oracle scope and the public `text`/builder-to-`data` migration.
 - Server configuration, permissions, installed kittens, visible targets, shell
   integration and window-manager cooperation can constrain a version-present
   feature. A successful RC acknowledgment need not prove the later UI/child
