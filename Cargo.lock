@@ -618,7 +618,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "kitty-rc"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "clap",
  "kitty-rc-check",
@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "kitty-rc-check"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kitty-rc-commands",
  "kitty-rc-endpoint",
@@ -655,7 +655,7 @@ dependencies = [
 
 [[package]]
 name = "kitty-rc-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base85",
  "clap",
@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "kitty-rc-commands"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "bon",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "kitty-rc-exchange"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "base85",
@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "kitty-rc-listing"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "kitty-rc-commands",
  "kitty-rc-endpoint",
@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "kitty-rc-registry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base85",
  "futures-util",
@@ -809,7 +809,7 @@ dependencies = [
 
 [[package]]
 name = "kitty-rc-tokio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "kitty-rc-commands",
