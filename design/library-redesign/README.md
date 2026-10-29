@@ -6,10 +6,10 @@ resource: /design/library-redesign/README.md
 status: draft
 generated:
   by: "model:openai/gpt-6-astra#xhigh"
-  at: 2026-10-28
+  at: 2026-10-29
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
-    title: Human commissions send-text implementation with Sol xhigh; Astra reviews both built slices, native escape/action boundaries and prospective ticket scope
+    title: Human commissions send-text implementation, then redirects toward ordinary unfinished conversions; Astra reviews built slices and restores current coverage navigation
   - resource: /design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md
     title: Native escape/paste corrections and core-first implementation direction
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
@@ -18,6 +18,8 @@ sources:
     title: Built finite broadcast messages, native lifecycle evidence and 248-test workspace convergence
   - resource: /design/library-redesign/capabilities/sendtext-followthrough0.gpt6a.md
     title: Post-build epic and ticket scope proposed for human discussion before creation
+  - resource: /design/library-redesign/capabilities/conversion-coverage0.gpt6a.md
+    title: Native action inventory, representative conversion gaps and listing/embedded-option catch-up after human reprioritization
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
     title: Human redesign direction, research review and corrections, accepted managed-operation direction, and post-discussion draft
   - resource: /design/library-redesign/draft0.gpt6a.md
@@ -76,11 +78,20 @@ API stability or acceptance of every future possibility in the research.
   remains subject to a native workflow comparison. Reconciliation is separately
   usable; no current consumer constrains the new API.
 
+## Remaining conversion work
+
+The human selected literal nested `paste`/`send_text` next and redirected
+attention toward unfinished ordinary conversions. CLI expansion and bounded
+streaming are not current priorities. The
+[coverage review](capabilities/conversion-coverage0.gpt6a.md) distinguishes the
+outer RC catalog from the much larger nested-action surface, and identifies
+clipboard, key, window/tab, output-model and embedded-option candidates.
+
 ## Send-text follow-on
 
 After the first public release, the human selected the deferred send-text
-surface for further work. Build the useful core first, then discuss epics and
-tickets, including uncovered work, before creating them.
+surface for further work. These reports preserve the two completed finite
+slices and the native-contract corrections that informed them.
 
 - [Slice-A sketch](capabilities/sendtext0.glm53m.md): the initial finite-data,
   escape, broadcast and paste proposal, with B/C conversation and CLI directions.
@@ -100,9 +111,9 @@ tickets, including uncovered work, before creating them.
   [broadcast guide](../../client/README.md#explicit-broadcast-messages) explains
   caller-owned lifecycle and the absence of remote receipt/order evidence.
 - [Post-build ticket discussion](capabilities/sendtext-followthrough0.gpt6a.md):
-  one candidate epic, completed-work representation, isolated live input evidence,
-  B/C fork scope and optional grammar/nested-action inquiries. No native work
-  items have been created by this implementation session.
+  preserved earlier proposal. The human subsequently dropped tracking discussion
+  and deprioritized its B/C sequence; current direction is the conversion work
+  above. No native work items were created by this implementation session.
 
 ## Preserved initial position
 

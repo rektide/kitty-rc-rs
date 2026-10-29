@@ -3,13 +3,13 @@ type: WorkProposal
 title: Send-text after the finite build — epic and ticket discussion
 description: Completed finite data and broadcast work, proposed follow-on scope and dependencies, and choices for the human before native tracker items are created.
 resource: /design/library-redesign/capabilities/sendtext-followthrough0.gpt6a.md
-status: proposed
+status: historical
 generated:
   by: "model:openai/gpt-6-astra#xhigh"
-  at: 2026-10-28
+  at: 2026-10-29
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
-    title: Human directs building before ticketing and discussion before creation; Astra reviews both Sol xhigh slices and proposes bounded follow-through
+    title: Human initially requests post-build discussion, then drops ticket planning and deprioritizes CLI/streaming in favor of unfinished command conversions
   - resource: /design/library-redesign/capabilities/sendtext0.glm53m.md
     title: Original A/B/C decomposition and proposed epic name
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
@@ -27,6 +27,12 @@ sources:
 ---
 
 # Send-text after the finite build
+
+**Later direction, 2026-10-29:** the human dropped ticket planning, selected
+literal nested `paste`/`send_text`, and clarified that CLI and bounded streaming
+are not current priorities. The [conversion coverage review](conversion-coverage0.gpt6a.md)
+restores the broader ordinary library backlog. The proposal below is preserved
+as the earlier discussion, not the selected work sequence.
 
 **For discussion, not created tracker items.** The human requested implementation
 first, then discussion of epics/tickets before creating any. The two selected
