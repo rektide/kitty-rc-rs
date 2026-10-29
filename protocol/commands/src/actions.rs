@@ -9,6 +9,7 @@ use crate::window::{MarkerGroup, MarkerSpec};
 use crate::{CanSubmitWithoutReply, Class, Command, DecodeError, request};
 use kitty_rc_schema::PlainRequest;
 use serde_json::{Value, json};
+use std::fmt::Write as _;
 
 /// Known zero-argument actions grouped in one vocabulary. UI/clipboard/child
 /// outcomes can differ from successful consumption of the action.
@@ -173,9 +174,82 @@ impl DetachWindow {
     }
 }
 
+/// Nonempty literal Unicode for nested [`KnownAction::Paste`] and
+/// [`KnownAction::SendText`], not caller-authored escape source.
+///
+/// Only the empty string is rejected: whitespace, NUL, backslashes and every
+/// Rust Unicode scalar are preserved. Private storage and the absence of
+/// `Default`/`Deserialize` keep the invariant intact even in public variants.
+///
+/// ```compile_fail
+/// use kitty_rc_commands::actions::ActionText;
+/// let invalid = ActionText(String::new()); // storage is private
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ActionText(String);
+impl ActionText {
+    pub fn new(literal: impl Into<String>) -> Result<Self, EmptyActionText> {
+        let literal = literal.into();
+        if literal.is_empty() {
+            Err(EmptyActionText)
+        } else {
+            Ok(Self(literal))
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("nested action text must not be empty")]
+pub struct EmptyActionText;
+
+/// Keyboard-mode gate for nested `send_text`, not RC `send-text` targeting.
+/// Every choice is nonempty; combinations have canonical normal/application/
+/// kitty order. Normal/application refer to DECCKM; kitty is the extended
+/// keyboard protocol and takes precedence when enabled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SendTextModes {
+    All,
+    Normal,
+    Application,
+    Kitty,
+    NormalApplication,
+    NormalKitty,
+    ApplicationKitty,
+    NormalApplicationKitty,
+}
+impl SendTextModes {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Normal => "normal",
+            Self::Application => "application",
+            Self::Kitty => "kitty",
+            Self::NormalApplication => "normal,application",
+            Self::NormalKitty => "normal,kitty",
+            Self::ApplicationKitty => "application,kitty",
+            Self::NormalApplicationKitty => "normal,application,kitty",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum KnownAction {
     Simple(SimpleAction),
+    /// Literal text decoded once by kitty, then passed to configured paste
+    /// actions. Filters, confirmations, newline/bracketed-paste handling and
+    /// aliases can change or delay effects; this is not byte-exact child input.
+    Paste(ActionText),
+    /// Literal text decoded once to UTF-8 and gated by keyboard mode. Mode
+    /// mismatch returns passthrough; RC action can then report "Unknown action".
+    /// Dispatch acknowledgment is not a child receipt. Unlike RC `send-text`,
+    /// this uses the outer action's single dispatch target and accepts no bytes.
+    SendText {
+        modes: SendTextModes,
+        text: ActionText,
+    },
     /// Native wire argument; negative values have upstream backwards-compatible
     /// parsing (the parser adds one), not a Rust zero-based tab ID.
     GotoTab(i32),
@@ -235,9 +309,45 @@ pub enum KnownAction {
     ShowKittyDoc(String),
 }
 impl KnownAction {
+    /// Encode literal Unicode for kitty's native paste parser, not escape
+    /// source. Empty input is rejected rather than emitting a missing argument.
+    ///
+    /// ```
+    /// use kitty_rc_commands::actions::{Action, KnownAction};
+    /// let paste = Action::new(KnownAction::paste(r" \n ")?);
+    /// # Ok::<(), kitty_rc_commands::actions::EmptyActionText>(())
+    /// ```
+    pub fn paste(literal: impl Into<String>) -> Result<Self, EmptyActionText> {
+        ActionText::new(literal).map(Self::Paste)
+    }
+
+    /// Encode literal Unicode for nested `send_text`. No local escape decoding
+    /// occurs: `r"\n"` remains backslash plus n, while `"\n"` is a newline.
+    ///
+    /// ```
+    /// use kitty_rc_commands::actions::{Action, KnownAction, SendTextModes};
+    /// let send = Action::new(KnownAction::send_text(
+    ///     SendTextModes::NormalApplication, "hello\n",
+    /// )?);
+    /// # Ok::<(), kitty_rc_commands::actions::EmptyActionText>(())
+    /// ```
+    pub fn send_text(
+        modes: SendTextModes,
+        literal: impl Into<String>,
+    ) -> Result<Self, EmptyActionText> {
+        Ok(Self::SendText {
+            modes,
+            text: ActionText::new(literal)?,
+        })
+    }
+
     pub fn wire(&self) -> String {
         match self {
             Self::Simple(action) => action.as_str().into(),
+            Self::Paste(text) => format!("paste {}", encode_action_text(text)),
+            Self::SendText { modes, text } => {
+                format!("send_text {} {}", modes.as_str(), encode_action_text(text))
+            }
             Self::GotoTab(n) => format!("goto_tab {n}"),
             Self::NthWindow(n) => format!("nth_window {n}"),
             Self::NextLayout(n) => format!("next_layout {n}"),
@@ -362,6 +472,17 @@ impl Command for Action {
     }
 }
 impl CanSubmitWithoutReply for Action {}
+
+// Fixed-width Unicode escapes protect ALL whitespace from the outer parser's
+// strip/split and protect backslashes from a second interpretation. Kitty does
+// the only decoding. Do not replace this with local decoding or octal escapes.
+fn encode_action_text(text: &ActionText) -> String {
+    let mut encoded = String::new();
+    for scalar in text.as_str().chars() {
+        write!(encoded, "\\U{:08x}", scalar as u32).expect("writing to String cannot fail");
+    }
+    encoded
+}
 
 /// POSIX shell token quoting preserves token boundaries, not freedom from
 /// upstream to_cmdline's subsequent tilde/environment expansion. It is not
