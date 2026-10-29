@@ -18,6 +18,13 @@ pub enum SimpleAction {
     Quit,
     CloseTab,
     CloseWindow,
+    /// Closes every window in the dispatch window's tab except that tab's
+    /// active window (`tabs.py` method; dispatch scope, not a chosen tab ID).
+    CloseOtherWindowsInTab,
+    /// Closes every other tab in the OS window holding the dispatch window;
+    /// without a dispatch window it targets the active OS window
+    /// (`active_tab_manager_with_dispatch`).
+    CloseOtherTabsInOsWindow,
     NextTab,
     PreviousTab,
     MoveTabForward,
@@ -26,11 +33,22 @@ pub enum SimpleAction {
     PreviousWindow,
     MoveWindowForward,
     MoveWindowBackward,
+    /// Moves the active window of its tab to the first position; a window
+    /// already first stays put.
+    MoveWindowToTop,
     FirstWindow,
     ResetWindowSizes,
     ToggleFullscreen,
     ToggleMaximized,
     CopyToClipboard,
+    /// Copies the dispatch window's selection to the system clipboard with
+    /// ANSI formatting codes; an empty selection copies nothing.
+    CopyAnsiToClipboard,
+    /// Copies the last non-empty command output to the system clipboard.
+    /// Shell integration must have reported the command output; otherwise
+    /// there is nothing to copy. Registered upstream by kitty 0.49.2 but not
+    /// 0.43.1, where dispatch of this name would fail.
+    CopyLastCommandOutput,
     PasteFromClipboard,
     PasteSelection,
     ClearSelection,
@@ -43,6 +61,9 @@ pub enum SimpleAction {
     ScrollHome,
     ScrollEnd,
     ShowScrollback,
+    /// Shows the last-run command output in a pager like less. Requires
+    /// shell integration to have reported command output.
+    ShowLastCommandOutput,
     RemoveMarker,
     CreateMarker,
     DebugConfig,
@@ -54,6 +75,8 @@ impl SimpleAction {
             Self::Quit => "quit",
             Self::CloseTab => "close_tab",
             Self::CloseWindow => "close_window",
+            Self::CloseOtherWindowsInTab => "close_other_windows_in_tab",
+            Self::CloseOtherTabsInOsWindow => "close_other_tabs_in_os_window",
             Self::NextTab => "next_tab",
             Self::PreviousTab => "previous_tab",
             Self::MoveTabForward => "move_tab_forward",
@@ -62,11 +85,14 @@ impl SimpleAction {
             Self::PreviousWindow => "previous_window",
             Self::MoveWindowForward => "move_window_forward",
             Self::MoveWindowBackward => "move_window_backward",
+            Self::MoveWindowToTop => "move_window_to_top",
             Self::FirstWindow => "first_window",
             Self::ResetWindowSizes => "reset_window_sizes",
             Self::ToggleFullscreen => "toggle_fullscreen",
             Self::ToggleMaximized => "toggle_maximized",
             Self::CopyToClipboard => "copy_to_clipboard",
+            Self::CopyAnsiToClipboard => "copy_ansi_to_clipboard",
+            Self::CopyLastCommandOutput => "copy_last_command_output",
             Self::PasteFromClipboard => "paste_from_clipboard",
             Self::PasteSelection => "paste_selection",
             Self::ClearSelection => "clear_selection",
@@ -79,6 +105,7 @@ impl SimpleAction {
             Self::ScrollHome => "scroll_home",
             Self::ScrollEnd => "scroll_end",
             Self::ShowScrollback => "show_scrollback",
+            Self::ShowLastCommandOutput => "show_last_command_output",
             Self::RemoveMarker => "remove_marker",
             Self::CreateMarker => "create_marker",
             Self::DebugConfig => "debug_config",
@@ -129,12 +156,18 @@ impl ResizeQuality {
         }
     }
 }
+/// Server-side process creation kinds sharing one shlex-split argv grammar.
+/// The `*_with_cwd` kinds source the child working directory from the
+/// dispatch/fallback window via OSC 7 shell-integration reporting; without it
+/// kitty falls back to its process-cwd heuristics.
 #[derive(Debug, Clone, Copy)]
 pub enum NewProcess {
     Window,
     WindowWithCwd,
     Tab,
+    TabWithCwd,
     OsWindow,
+    OsWindowWithCwd,
     Launch,
 }
 impl NewProcess {
@@ -143,7 +176,9 @@ impl NewProcess {
             Self::Window => "new_window",
             Self::WindowWithCwd => "new_window_with_cwd",
             Self::Tab => "new_tab",
+            Self::TabWithCwd => "new_tab_with_cwd",
             Self::OsWindow => "new_os_window",
+            Self::OsWindowWithCwd => "new_os_window_with_cwd",
             Self::Launch => "launch",
         }
     }
@@ -205,6 +240,63 @@ impl ActionText {
 #[error("nested action text must not be empty")]
 pub struct EmptyActionText;
 
+/// Validated buffer name for nested [`KnownAction::CopyToBuffer`] and
+/// [`KnownAction::PasteFromBuffer`], stored verbatim in the native raw
+/// remainder grammar — never shell-quoted and never escape-encoded.
+///
+/// The native parser keeps everything after the action name as a single
+/// argument, so internal spaces, tabs, newlines and backslashes stay literal.
+/// Its outer `strip`/`split` still alters edge characters: a leading
+/// whitespace run joins the separator, and trailing whitespace (including the
+/// `\u{1c}`–`\u{1f}` separator controls and NEL) is stripped. Names that
+/// would not parse back identically are rejected rather than silently
+/// addressing a different buffer.
+///
+/// The special names `clipboard` and `primary` reach the system clipboard
+/// and primary selection instead of kitty's named in-memory buffers. That
+/// distinction belongs to the native handlers and stays a documented string
+/// choice rather than a typed split: the wire grammar is identical, and typed
+/// recognition would duplicate the existing `CopyToClipboard`/`PasteSelection`
+/// vocabulary for what upstream models as plain argument data.
+///
+/// ```compile_fail
+/// use kitty_rc_commands::actions::BufferName;
+/// let invalid = BufferName(String::new()); // storage is private
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BufferName(String);
+impl BufferName {
+    pub fn new(name: impl Into<String>) -> Result<Self, InvalidBufferName> {
+        let name = name.into();
+        let alters_edge = |c: Option<char>| c.is_some_and(is_native_edge_whitespace);
+        match (name.chars().next(), name.chars().last()) {
+            (None, _) => Err(InvalidBufferName::Empty),
+            (first, last) if alters_edge(first) || alters_edge(last) => {
+                Err(InvalidBufferName::EdgeWhitespace)
+            }
+            _ => Ok(Self(name)),
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidBufferName {
+    #[error("clipboard buffer name must not be empty")]
+    Empty,
+    #[error("clipboard buffer name must not start or end with whitespace")]
+    EdgeWhitespace,
+}
+
+// Python's str.strip() removes its isspace() set at the edges: Unicode
+// White_Space plus the \u{1c}–\u{1f} separator controls Rust's is_whitespace
+// does not cover. Either alters the raw remainder's first/last characters.
+fn is_native_edge_whitespace(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '\u{1c}'..='\u{1f}')
+}
+
 /// Keyboard-mode gate for nested `send_text`, not RC `send-text` targeting.
 /// Every choice is nonempty; combinations have canonical normal/application/
 /// kitty order. Normal/application refer to DECCKM; kitty is the extended
@@ -250,6 +342,15 @@ pub enum KnownAction {
         modes: SendTextModes,
         text: ActionText,
     },
+    /// Copies the dispatch window's selection to the named buffer. The names
+    /// `clipboard` and `primary` reach the system clipboard/selection; every
+    /// other name addresses kitty's in-memory named buffers. Acknowledgment
+    /// is not proof a nonempty selection existed.
+    CopyToBuffer(BufferName),
+    /// Pastes from the named buffer through the configured paste actions,
+    /// so filtering, confirmations and newline handling still apply. The
+    /// names `clipboard` and `primary` read the system clipboard/selection.
+    PasteFromBuffer(BufferName),
     /// Native wire argument; negative values have upstream backwards-compatible
     /// parsing (the parser adds one), not a Rust zero-based tab ID.
     GotoTab(i32),
@@ -341,6 +442,31 @@ impl KnownAction {
         })
     }
 
+    /// Name a buffer for nested `copy_to_buffer`. The name travels as the raw
+    /// remainder — internal spaces and backslashes stay literal — while empty
+    /// names and edges the native parser would alter are rejected.
+    ///
+    /// ```
+    /// use kitty_rc_commands::actions::{Action, KnownAction};
+    /// let copy = Action::new(KnownAction::copy_to_buffer("my buffer")?);
+    /// # Ok::<(), kitty_rc_commands::actions::InvalidBufferName>(())
+    /// ```
+    pub fn copy_to_buffer(name: impl Into<String>) -> Result<Self, InvalidBufferName> {
+        BufferName::new(name).map(Self::CopyToBuffer)
+    }
+
+    /// Name a buffer for nested `paste_from_buffer`, sharing the raw remainder
+    /// grammar and validation of [`Self::copy_to_buffer`].
+    ///
+    /// ```
+    /// use kitty_rc_commands::actions::{Action, KnownAction};
+    /// let paste = Action::new(KnownAction::paste_from_buffer("scratch")?);
+    /// # Ok::<(), kitty_rc_commands::actions::InvalidBufferName>(())
+    /// ```
+    pub fn paste_from_buffer(name: impl Into<String>) -> Result<Self, InvalidBufferName> {
+        BufferName::new(name).map(Self::PasteFromBuffer)
+    }
+
     pub fn wire(&self) -> String {
         match self {
             Self::Simple(action) => action.as_str().into(),
@@ -348,6 +474,8 @@ impl KnownAction {
             Self::SendText { modes, text } => {
                 format!("send_text {} {}", modes.as_str(), encode_action_text(text))
             }
+            Self::CopyToBuffer(name) => format!("copy_to_buffer {}", name.as_str()),
+            Self::PasteFromBuffer(name) => format!("paste_from_buffer {}", name.as_str()),
             Self::GotoTab(n) => format!("goto_tab {n}"),
             Self::NthWindow(n) => format!("nth_window {n}"),
             Self::NextLayout(n) => format!("next_layout {n}"),
