@@ -31,17 +31,17 @@ base64 = "0.22"
 bon = "3.5"
 clap = { version = "4.0", features = ["derive"] }
 kitty-rc-schema = { path = "protocol/schema", version = "0.1" }
-kitty-rc-commands = { path = "protocol/commands", version = "0.3" }
+kitty-rc-commands = { path = "protocol/commands", version = "0.4" }
 kitty-rc-crypto = { path = "access/crypto", version = "0.1" }
 kitty-rc-frame = { path = "protocol/frame", version = "0.1" }
 kitty-rc-endpoint = { path = "access/endpoint", version = "0.1" }
 kitty-rc-discovery = { path = "access/discovery", version = "0.1" }
 kitty-rc-credentials = { path = "access/credentials", version = "0.1" }
-kitty-rc-exchange = { path = "execution/exchange", version = "0.2" }
-kitty-rc-tokio = { path = "execution/tokio", version = "0.2" }
-kitty-rc-registry = { path = "control/registry", version = "0.2" }
-kitty-rc-listing = { path = "observation/listing", version = "0.3" }
-kitty-rc-check = { path = "observation/check", version = "0.2" }
+kitty-rc-exchange = { path = "execution/exchange", version = "0.3" }
+kitty-rc-tokio = { path = "execution/tokio", version = "0.3" }
+kitty-rc-registry = { path = "control/registry", version = "0.3" }
+kitty-rc-listing = { path = "observation/listing", version = "0.4" }
+kitty-rc-check = { path = "observation/check", version = "0.3" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
 futures-util = "0.3"
 kitty-rc-key-store = { path = "access/key-store", version = "0.1" }
