@@ -10,6 +10,8 @@ generated:
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
     title: Human commissions send-text implementation, then redirects toward ordinary unfinished conversions; Astra reviews built slices and restores current coverage navigation
+  - resource: "opencode://ses_e79b8beeaffeJKwxQA8AlDHWiu"
+    title: Human-selected window/tab helper and clipboard buffer conversion implemented with native grammar verification
   - resource: /design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md
     title: Native escape/paste corrections and core-first implementation direction
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
@@ -22,6 +24,8 @@ sources:
     title: Native action inventory, representative conversion gaps and listing/embedded-option catch-up after human reprioritization
   - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
     title: Implemented selected literal nested text pair, with 255-test convergence and native full-parser verification
+  - resource: /design/library-redesign/capabilities/window-tab-actions0.glm53fx.md
+    title: Implemented window/tab helpers, cwd process kinds and named clipboard buffers with edge-validating remainder grammar
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
     title: Human redesign direction, research review and corrections, accepted managed-operation direction, and post-discussion draft
   - resource: /design/library-redesign/draft0.gpt6a.md
@@ -96,6 +100,25 @@ variants, preparation semantics and native fixture. **255 workspace tests**, 11
 doctests, strict Clippy and formatting passed; 2,970 native full-parser
 round-trips passed across kitty 0.43.1/0.49.2. Public
 [usage](../../client/README.md#literal-nested-text-actions) shows the constructors.
+
+The human subsequently selected the window/tab helper plus clipboard buffer
+families, now [implemented](capabilities/window-tab-actions0.glm53fx.md):
+six zero-argument `SimpleAction` helpers, `NewProcess::TabWithCwd`/
+`OsWindowWithCwd` sharing the shlex argv grammar, and
+`KnownAction::CopyToBuffer`/`PasteFromBuffer` over a validated `BufferName`
+whose raw-remainder encoding stays literal while empty names and edges the
+native parser would alter are rejected. Ordinal `second_window`-style
+wrappers were deliberately not added (`KnownAction::NthWindow` covers them).
+**274 workspace tests**, 14 doctests, strict Clippy and formatting passed;
+38 library-generated wire strings and 49 scratch-oracle checks (wire,
+registry membership, edge shapes) passed against the cached kitty 0.43.1 and
+0.49.2 parsers, with `copy_last_command_output` recorded as absent from
+0.43.1's documented-action registry. Public
+[usage](../../client/README.md#named-clipboard-buffers-and-window-helpers)
+shows the constructors. Remaining conventional families (nested keys,
+`scroll_prompt_to_top` options, output-model catch-up, embedded launch-option
+grammars) stay catalogued in the
+[coverage review](capabilities/conversion-coverage0.gpt6a.md).
 
 ## Send-text follow-on
 

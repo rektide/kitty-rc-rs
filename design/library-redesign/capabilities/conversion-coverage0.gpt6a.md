@@ -14,6 +14,8 @@ sources:
     title: Outer command coverage labels and exact supported-profile notes
   - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
     title: Reviewed completion of the selected literal paste/send_text conversion after the baseline inventory
+  - resource: "opencode://ses_e79b8beeaffeJKwxQA8AlDHWiu"
+    title: Appends the second implementation update recording the window/tab and clipboard buffer family landing
   - resource: https://github.com/rektide/kitty-rc-rs/blob/36866a00d3e3/protocol/commands/src/actions.rs
     title: Frozen pre-nested-text Rust mapping used for the discovery comparison
   - resource: /protocol/commands/src/process.rs
@@ -134,3 +136,12 @@ has landed and passed review. The 61-name discovery count above deliberately
 remains bound to its earlier snapshot; the two literal actions now have typed
 entrances. Next selection can return to the remaining conventional families
 rather than implicitly advancing to streaming or CLI work.
+
+**Second update:** the window/tab helpers and named clipboard buffers have
+also landed ([report](window-tab-actions0.glm53fx.md)): six zero-argument
+helpers, the two `_with_cwd` process kinds, and `CopyToBuffer`/
+`PasteFromBuffer` with a `BufferName` validated to survive the native raw
+remainder verbatim. The ordinal window rows stay deliberately unconverted —
+`KnownAction::NthWindow` already expresses them. Conventional candidates
+remaining from the table above: nested keys, `scroll_prompt_to_top` option
+modeling, the output-model catch-up and embedded launch-option grammars.

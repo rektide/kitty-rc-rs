@@ -140,6 +140,41 @@ Both use the existing retiring action execution path. The
 [implementation report](../design/library-redesign/capabilities/nested-text0.sol61xh.md)
 records the full-parser evidence and effect boundaries.
 
+### Named clipboard buffers and window helpers
+
+`KnownAction::copy_to_buffer` / `KnownAction::paste_from_buffer` name a kitty
+buffer; `NewProcess` gained `TabWithCwd` / `OsWindowWithCwd` kinds, and
+`SimpleAction` gained the zero-argument window/tab and clipboard helpers:
+
+```rust
+use kitty_rc_commands::actions::{Action, KnownAction, NewProcess, SimpleAction};
+
+let copy = Action::new(KnownAction::copy_to_buffer("my buffer").unwrap());
+let spawn = Action::new(KnownAction::NewProcess {
+    kind: NewProcess::OsWindowWithCwd,
+    args: vec!["ssh host".into()],
+});
+let tidy = Action::new(SimpleAction::CloseOtherWindowsInTab);
+```
+
+Buffer names travel as the raw remainder — internal spaces, tabs, newlines
+and backslashes stay one literal name, unlike the shell-quoted `new_*` argv
+or the escape-encoded nested text actions. `BufferName::new` rejects empty
+names and names starting/ending with whitespace the native parser would
+alter (`InvalidBufferName`); interior whitespace is accepted verbatim. The
+names `clipboard` and `primary` reach the system clipboard/selection instead
+of kitty's in-memory buffers — a documented string choice, not a typed split.
+
+The `_with_cwd` kinds inherit the working directory from the dispatch
+window's shell-integration (OSC 7) reporting. Helper effects depend on
+dispatch scope and integration: `close_other_tabs_in_os_window` targets the
+dispatch window's OS window (the active one without a target), the
+command-output helpers require shell integration, and
+`copy_last_command_output` is registered by kitty 0.49.2 but not 0.43.1.
+Acknowledgment still establishes dispatch, not selection or child effects.
+The [implementation report](../design/library-redesign/capabilities/window-tab-actions0.glm53fx.md)
+records the grammar distinctions and native verification.
+
 ### Finite text and byte input
 
 `SendText::new` accepts literal Unicode; `SendText::bytes` accepts arbitrary
