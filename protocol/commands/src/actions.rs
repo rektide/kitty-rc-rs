@@ -21,9 +21,14 @@ pub enum SimpleAction {
     /// Closes every window in the dispatch window's tab except that tab's
     /// active window (`tabs.py` method; dispatch scope, not a chosen tab ID).
     CloseOtherWindowsInTab,
-    /// Closes every other tab in the OS window holding the dispatch window;
-    /// without a dispatch window it targets the active OS window
-    /// (`active_tab_manager_with_dispatch`).
+    /// Closes other tabs in the OS window holding the dispatch window (the
+    /// active one without a dispatch target), but the preserved tab is the
+    /// **globally active** tab of the focused OS window — not the dispatch
+    /// window's tab and not the selected OS window's active tab. If that
+    /// globally active tab lives outside the selected OS window, for example
+    /// when targeting a nonfocused one, kitty attempts `close_tab` on every
+    /// tab there, subject to its close-confirmation policies. A manager with
+    /// a single tab is left untouched.
     CloseOtherTabsInOsWindow,
     NextTab,
     PreviousTab,

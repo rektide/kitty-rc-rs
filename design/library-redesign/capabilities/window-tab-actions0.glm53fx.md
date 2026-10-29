@@ -9,7 +9,7 @@ generated:
   at: 2026-10-29
 sources:
   - resource: "opencode://ses_e79b8beeaffeJKwxQA8AlDHWiu"
-    title: Implements the human-selected window/tab helper and clipboard buffer conversion slice with native grammar verification and workspace gates
+    title: Implements the human-selected window/tab helper and clipboard buffer conversion slice; follow-up after parent review corrected the close_other_tabs_in_os_window handler-selection scope, added its fake-self oracle and fixed the NEL edge note
   - resource: /design/library-redesign/capabilities/conversion-coverage0.gpt6a.md
     title: Commissioning review whose conventional-candidate table selected this family
   - resource: /protocol/commands/src/actions.rs
@@ -23,7 +23,7 @@ sources:
   - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/tabs.py
     title: Inspected close_other_windows_in_tab and move_window_to_top implementations
   - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/boss.py
-    title: Inspected close_other_tabs_in_os_window, new_tab_with_cwd, new_os_window_with_cwd, copy_to_buffer and paste_from_buffer handlers plus dispatch_action ordering
+    title: Inspected close_other_tabs_in_os_window with its split manager/active-tab selection, new_tab_with_cwd, new_os_window_with_cwd, copy_to_buffer and paste_from_buffer handlers plus dispatch_action ordering
   - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/options/utils.py
     title: Inspected remainder parsers, shlex_parse membership and parse_key_action strip/split
   - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/window.py
@@ -33,9 +33,9 @@ sources:
   - resource: https://github.com/kovidgoyal/kitty/blob/b2cb871254fbdac19a085188813c8dfb258b95cd/kitty/rc/action.py
     title: Inspected the RC action command's single-string combine dispatch
 verification:
-  scope: Independent Rust wire goldens, actual native full parser and documented-action registry on cached kitty 0.43.1/0.49.2, and workspace gates
-  evidence: 274 workspace tests plus 14 doctests passed with strict all-target Clippy and 100-column formatting; 38 library-generated strings and 49 scratch-oracle checks (32 wire, 10 registry membership, 7 edge shapes) passed against the native parser
-  limits: Parser execution and registry enumeration are not alias dispatch, UI, clipboard, process-creation or child-effect conformance; no live-support range or minimum release asserted
+  scope: Independent Rust wire goldens, actual native full parser, documented-action registry and unbound handler selection on fake state across cached kitty 0.43.1/0.49.2, plus workspace gates
+  evidence: 274 workspace tests plus 14 doctests passed with strict all-target Clippy and 100-column formatting; 38 library-generated strings and 49 scratch-oracle checks (32 wire, 10 registry membership, 7 edge shapes) passed against the native parser, and 4 handler-selection checks passed on both releases
+  limits: Parser execution, registry enumeration and fake-state handler selection are not alias dispatch, UI, clipboard, process-creation, focus, confirmation-policy or child-effect conformance; no live-support range or minimum release asserted
 ---
 
 # Window/tab helpers and named clipboard buffers
@@ -46,7 +46,10 @@ cwd-inheriting process kinds and the named clipboard buffer pair. No ordinal
 `second_window`..`tenth_window` wrappers (existing `KnownAction::NthWindow`
 already expresses them), no `scroll_prompt_to_top` option modeling, no nested
 `send_key`, launch-option grammars or output/listing fields. Implementation
-checkpoint: `f7831240`.
+checkpoint: `f7831240`. A parent-review correction sharpened the
+`close_other_tabs_in_os_window` scope contract (see the dispatch-scope
+section), added its fake-self handler oracle and fixed this report's NEL
+edge note; no library behavior changed.
 
 ## What was converted
 
@@ -92,9 +95,12 @@ risk the types prevent:
 
 The full parser applies `strip()` to the action string and `split(None, 1)`
 for the remainder. A leading whitespace run in the name joins the separator;
-trailing whitespace — including the `\u{1c}`–`\u{1f}` separator controls and
-NEL, which Rust's `char::is_whitespace` does not cover — is stripped. A name
-with either would parse back as a **different** buffer than the caller named.
+trailing whitespace — NEL included — is stripped. Of that edge set only the
+`\u{1c}`–`\u{1f}` separator controls fall outside Rust's
+`char::is_whitespace`, which does cover NEL; the `is_native_edge_whitespace`
+helper adds exactly those four controls. A name
+with either edge would parse back as a **different** buffer than the caller
+named.
 `BufferName` rejects empty names and such edges (`InvalidBufferName`) instead
 of silently addressing another buffer; interior characters of every one of
 those classes remain accepted and literal. This mirrors `ActionText`'s
@@ -114,11 +120,20 @@ vocabulary for what upstream models as plain argument data.
 set from the RC action's single matched window), then the tab and window of
 that window. Consequences audited from source:
 
-- `close_other_tabs_in_os_window` is a Boss method using
-  `active_tab_manager_with_dispatch`: with an RC target window it closes
-  other tabs in **that window's OS window**; without one, the active OS
-  window. The commissioning note ("acts on the active OS window") is the
-  no-target case.
+- `close_other_tabs_in_os_window` is a Boss method with a split notion of
+  "current": it selects the tab manager via `active_tab_manager_with_dispatch`
+  (the dispatch window's OS window with an RC target, else the active one),
+  but the preserved tab comes from `self.active_tab` — the **globally
+  active** tab of the focused OS window chain
+  (`current_focused_os_window_id`/`last_focused_os_window_id`), with no
+  dispatch involvement. Targeting an inactive tab of the focused OS window
+  still preserves the globally active tab, not the target's. If the globally
+  active tab lives outside the selected manager — for example when
+  targeting a nonfocused OS window — the loop attempts `close_tab` on
+  **every** tab there, subject to the native close-confirmation policies;
+  a single-tab manager is left untouched. The commissioning note ("acts on
+  the active OS window") described only manager selection. The
+  handler-selection oracle below exercises exactly this on fake state.
 - `close_other_windows_in_tab` and `move_window_to_top` are Tab methods
   operating on the dispatch window's tab.
 - `copy_ansi_to_clipboard`, `copy_last_command_output` and
@@ -149,7 +164,15 @@ rejection with interior acceptance, all outer target forms and the unchanged
 dispatch-only contract. The opt-in native test sends **Rust-generated**
 strings to kitty's `+runpy` through the tiny
 [fixture](/protocol/commands/tests/fixtures/window_tab_actions.py), which
-calls the real `parse_key_action`.
+calls the real `parse_key_action` and — after the parent review correction —
+also runs a **handler-selection oracle**: the real unbound
+`Boss.close_other_tabs_in_os_window` executes on a fake self (iterable tab
+manager, globally-active tab object, recording `close_tab`), covering
+globally-active preservation inside the selected manager, the all-tab
+attempt when the globally active tab lives outside it, the singleton guard
+and the missing-manager guard. No GUI, focus or close effect runs; this
+checks which tabs the handler selects, not live-close success or
+confirmation-policy outcomes.
 
 The commissioned scratch oracle
 (`.test-agent/window-tab-actions/verify.py`, gitignored, with README) runs
@@ -159,7 +182,7 @@ formats and probing the edge shapes that justify validation.
 
 | Cached release | Library-generated roundtrips | Scratch oracle |
 | --- | --- | --- |
-| 0.43.1 | 38 wire cases + 4 edge shapes passed | 32 wire + 7 edge passed; membership records `copy_last_command_output` absent |
+| 0.43.1 | 38 wire cases + 4 edge shapes + 4 handler checks passed | 32 wire + 7 edge passed; membership records `copy_last_command_output` absent |
 | 0.49.2 | Same; all passed | 32 wire + 10 membership + 7 edge passed, zero failures |
 
 Reproduce the opt-in test from the repository root:

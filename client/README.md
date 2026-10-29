@@ -16,6 +16,8 @@ sources:
     title: Required broadcast identity, optional ID-bearing data, explicit lifecycle messages and source evidence
   - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
     title: Literal nested paste/send_text, typed modes and native full-parser verification
+  - resource: "opencode://ses_e79b8beeaffeJKwxQA8AlDHWiu"
+    title: Added the named clipboard buffers and window helpers section; follow-up corrected the close_other_tabs_in_os_window scope warning, spawn argv example and buffer-name edge grammar
   - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
     title: Integrated typed selectors across clients and observation; documented optional bon builders and direct command construction
   - resource: /protocol/commands/src/targets.rs
@@ -152,7 +154,7 @@ use kitty_rc_commands::actions::{Action, KnownAction, NewProcess, SimpleAction};
 let copy = Action::new(KnownAction::copy_to_buffer("my buffer").unwrap());
 let spawn = Action::new(KnownAction::NewProcess {
     kind: NewProcess::OsWindowWithCwd,
-    args: vec!["ssh host".into()],
+    args: vec!["ssh".into(), "host".into()],
 });
 let tidy = Action::new(SimpleAction::CloseOtherWindowsInTab);
 ```
@@ -167,13 +169,19 @@ of kitty's in-memory buffers — a documented string choice, not a typed split.
 
 The `_with_cwd` kinds inherit the working directory from the dispatch
 window's shell-integration (OSC 7) reporting. Helper effects depend on
-dispatch scope and integration: `close_other_tabs_in_os_window` targets the
-dispatch window's OS window (the active one without a target), the
-command-output helpers require shell integration, and
-`copy_last_command_output` is registered by kitty 0.49.2 but not 0.43.1.
-Acknowledgment still establishes dispatch, not selection or child effects.
-The [implementation report](../design/library-redesign/capabilities/window-tab-actions0.glm53fx.md)
-records the grammar distinctions and native verification.
+dispatch scope and integration: the command-output helpers require shell
+integration, and `copy_last_command_output` is registered by kitty 0.49.2
+but not 0.43.1. **`close_other_tabs_in_os_window` is destructive beyond its
+target**: it selects the dispatch window's OS window (the active one without
+a target) but preserves only the *globally active* tab of the focused OS
+window — targeting an inactive tab still preserves the globally active tab,
+and targeting a nonfocused OS window whose tabs are all inactive attempts
+`close_tab` on **every** tab there, subject to kitty's close-confirmation
+policies (a single-tab manager is left untouched). Acknowledgment still
+establishes dispatch, not selection or child effects. The
+[implementation report](../design/library-redesign/capabilities/window-tab-actions0.glm53fx.md)
+records the grammar distinctions, this handler-selection quirk and the
+native verification.
 
 ### Finite text and byte input
 

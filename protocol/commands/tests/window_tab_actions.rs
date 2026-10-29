@@ -310,5 +310,9 @@ fn native_full_parser_preserves_rust_generated_helper_actions() {
         serde_json::from_slice(&output.stdout).expect("native parser report must be JSON");
     assert_eq!(report["cases"], cases.len());
     assert_eq!(report["edge_shapes_checked"], 4);
+    // Handler-selection oracle: the real unbound Boss method ran on a fake
+    // self, checking which tabs close_other_tabs_in_os_window selects
+    // (globally-active preservation, all-attempt, singleton and None guard).
+    assert_eq!(report["handler_checks"], 4);
     eprintln!("{report}");
 }
