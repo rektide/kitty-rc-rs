@@ -20,6 +20,8 @@ sources:
     title: Post-build epic and ticket scope proposed for human discussion before creation
   - resource: /design/library-redesign/capabilities/conversion-coverage0.gpt6a.md
     title: Native action inventory, representative conversion gaps and listing/embedded-option catch-up after human reprioritization
+  - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
+    title: Implemented selected literal nested text pair, with 255-test convergence and native full-parser verification
   - resource: "opencode://ses_ec7cd6e45ffeqAP7k1wV3STT72"
     title: Human redesign direction, research review and corrections, accepted managed-operation direction, and post-discussion draft
   - resource: /design/library-redesign/draft0.gpt6a.md
@@ -86,6 +88,14 @@ streaming are not current priorities. The
 [coverage review](capabilities/conversion-coverage0.gpt6a.md) distinguishes the
 outer RC catalog from the much larger nested-action surface, and identifies
 clipboard, key, window/tab, output-model and embedded-option candidates.
+
+The selected pair is now [implemented](capabilities/nested-text0.sol61xh.md):
+`KnownAction::paste`, `KnownAction::send_text`, validated literal `ActionText`
+and typed `SendTextModes`. Parent review checked the encoder, invariant-bearing
+variants, preparation semantics and native fixture. **255 workspace tests**, 11
+doctests, strict Clippy and formatting passed; 2,970 native full-parser
+round-trips passed across kitty 0.43.1/0.49.2. Public
+[usage](../../client/README.md#literal-nested-text-actions) shows the constructors.
 
 ## Send-text follow-on
 

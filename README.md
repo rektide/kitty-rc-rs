@@ -6,14 +6,16 @@ resource: /README.md
 status: active
 generated:
   by: "model:openai/gpt-6-astra#xhigh"
-  at: 2026-10-28
+  at: 2026-10-29
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
-    title: Directed Sol xhigh send-text implementation, reviewed native grammar boundaries and integrated public usage and API-version markers
+    title: Directed and reviewed Sol xhigh finite input and nested literal action conversions; integrated public usage, coverage navigation and API-version markers
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
     title: Finite literal text and raw bytes, public field/builder migration and pinned-source evidence
   - resource: /design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md
     title: Explicit finite broadcast start/data/end messages with caller-owned lifecycle
+  - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
+    title: Literal nested paste/send_text constructors, typed keyboard modes and native parser checks
   - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
     title: Commissioned two f agents for typed command options and bon builders; integrated callers, verified contracts and rewrote examples around direct constructors
   - resource: /protocol/commands/src/targets.rs
@@ -149,6 +151,19 @@ migration and evidence.
 explicit finite broadcast messages with caller-owned lifecycle. See the
 [broadcast guide](client/README.md#explicit-broadcast-messages) for construction,
 membership and submission-order boundaries.
+
+Nested text actions now accept literal strings too:
+
+```rust
+use kitty_rc::commands::actions::{Action, KnownAction, SendTextModes};
+
+let paste = Action::new(KnownAction::paste(r" literal \n ").unwrap());
+let send = Action::new(KnownAction::send_text(SendTextModes::All, "hello\n").unwrap());
+```
+
+These constructors reject empty text and encode valid input for one native
+decoding pass. See [nested text actions](client/README.md#literal-nested-text-actions)
+for keyboard modes, targeting and paste/dispatch semantics.
 
 `WindowId` and `TabId` keep identities distinct. `WindowMatch` and `TabMatch`
 provide typed field constructors; their title/cwd/cmdline patterns are native
@@ -304,9 +319,10 @@ oldest-supported-version or plain-upload claim. The wire coordinate remains
 `[0,43,1]`; see [support evidence](doc/usage/support.md) and the
 [verification guide](tool/verification/README.md).
 
-Verification orchestration and fixture children are Rust. Two small Python
-fixtures remain: a native kitty kitten and an executor for upstream Python
-constructors used as independent semantic oracles.
+Verification orchestration and fixture children are Rust. Small Python fixtures
+serve the native kitty kitten and upstream semantic-oracle boundaries, including
+an opt-in full-parser check for Rust-generated nested text actions. Its command
+and evidence are in the [nested-text report](design/library-redesign/capabilities/nested-text0.sol61xh.md).
 
 The `kitty-pubkey-db` store stays at `$XDG_STATE_HOME/kitty/pubkey.tsv`
 with its existing line format (`pid\twindow_id\tpubkey\ttimestamp`);

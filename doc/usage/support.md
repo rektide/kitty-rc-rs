@@ -5,9 +5,13 @@ description: Explicit wire baseline, source and live evidence tiers, capability 
 resource: /doc/usage/support.md
 status: provisional
 generated:
-  by: "model:openai/gpt-6-astra#medium"
-  at: 2026-10-14
+  by: "model:openai/gpt-6-astra#xhigh"
+  at: 2026-10-29
 sources:
+  - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
+    title: Reviewed literal nested text implementation and integrated actual native-parser evidence without extending live child-delivery claims
+  - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
+    title: Literal nested actions, source-backed effects and native 0.43.1/0.49.2 parser execution
   - resource: "opencode://ses_e7b57d91bffeto158h8GVlMvHn"
     title: Distinguished finite literal text/raw bytes and explicit broadcast messages from managed conversations, without expanding live or oldest-release claims
   - resource: "opencode://ses_ec5dcd3b6ffeofqbiGNfwr1Cf4"
@@ -112,6 +116,16 @@ remote errors remain errors, not silent downgraded success.
   integration and window-manager cooperation can constrain a version-present
   feature. A successful RC acknowledgment need not prove the later UI/child
   effect or delivered keys. Transport reuse never grants replay safety.
+
+### Literal nested text actions
+
+Literal nested `KnownAction::paste` and `KnownAction::send_text` have native
+full-parser evidence on cached kitty 0.43.1 and 0.49.2: actual Rust-generated
+action strings round-trip to the intended literal text/UTF-8 through native
+stripping, splitting and escape expansion. This does not exercise aliases,
+UI effects or child delivery. Empty input is rejected locally; paste behavior
+remains configuration-dependent and a nested send-text mode mismatch can produce
+`Unknown action`. See the [implementation evidence](../../design/library-redesign/capabilities/nested-text0.sol61xh.md).
 
 ## Unreleased and local APIs
 

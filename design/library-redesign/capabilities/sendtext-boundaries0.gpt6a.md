@@ -6,7 +6,7 @@ resource: /design/library-redesign/capabilities/sendtext-boundaries0.gpt6a.md
 status: draft
 generated:
   by: "model:openai/gpt-6-astra#xhigh"
-  at: 2026-10-28
+  at: 2026-10-29
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
     title: Human commissions Sol xhigh implementation under Astra stewardship, requests ticket discussion after building; parent verifies native escape and nested-action boundaries
@@ -16,6 +16,8 @@ sources:
     title: Reviewed finite implementation and Sol's recommendation; native parent findings favor broadcast before selecting an escape grammar
   - resource: /design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md
     title: Reviewed required-ID finite broadcast controls and independently executed lifecycle evidence after the second implementation slice
+  - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
+    title: Human subsequently selects literal nested text conversion; reviewed encoder and native full-parser evidence resolve that portion without a local decoder
   - resource: /protocol/commands/src/window.rs
     title: Existing literal finite send-text entrance and submission-only contract
   - resource: /protocol/commands/src/actions.rs
@@ -39,6 +41,13 @@ verification:
 ---
 
 # Send-text: choose the useful core before the grammar
+
+**2026-10-29 follow-on:** the human selected literal nested `paste` and
+`send_text`, now [implemented and reviewed](nested-text0.sol61xh.md). The internal
+encoder and validated nonempty literals resolve the double-expansion and
+whitespace problems below. A local escaped-input decoder remains a separate
+optional product. The human deprioritized CLI/streaming and redirected attention
+to [remaining ordinary conversions](conversion-coverage0.gpt6a.md).
 
 ## Direction and authority
 

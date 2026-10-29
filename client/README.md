@@ -6,14 +6,16 @@ resource: /client/README.md
 status: draft
 generated:
   by: "model:openai/gpt-6-astra#xhigh"
-  at: 2026-10-28
+  at: 2026-10-29
 sources:
   - resource: "opencode://ses_e7b98a17dffeeKi0YEszIrjBvx"
-    title: Reviewed Sol xhigh finite data and broadcast implementation; integrated usage, lifecycle boundaries, migration and API-version guidance
+    title: Reviewed Sol xhigh finite data, broadcast and nested literal actions; integrated usage, boundaries, migration and API-version guidance
   - resource: /design/library-redesign/capabilities/sendtext-core0.sol61xh.md
     title: Literal text/raw-byte contracts, preparation tests and pinned handler evidence
   - resource: /design/library-redesign/capabilities/sendtext-broadcast0.sol61xh.md
     title: Required broadcast identity, optional ID-bearing data, explicit lifecycle messages and source evidence
+  - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
+    title: Literal nested paste/send_text, typed modes and native full-parser verification
   - resource: "opencode://ses_e80eba069ffeSSaD033jmggO0o"
     title: Integrated typed selectors across clients and observation; documented optional bon builders and direct command construction
   - resource: /protocol/commands/src/targets.rs
@@ -106,6 +108,37 @@ does no I/O; the execution entrance supplies connection, protection and bounds.
 The [root examples](../README.md#typed-command-construction) also cover typed key
 chords, layout changes, colors and configuration overrides. `kitty_rc::commands`
 re-exports these same leaf-crate APIs.
+
+### Literal nested text actions
+
+Use `KnownAction::paste` or `KnownAction::send_text` to construct native nested
+actions from literal Unicode text:
+
+```rust
+use kitty_rc_commands::actions::{Action, KnownAction, SendTextModes};
+use kitty_rc_commands::targets::WindowId;
+
+let paste = Action::new(KnownAction::paste(r" literal \n ").unwrap());
+let send = Action::builder()
+    .action(KnownAction::send_text(SendTextModes::All, "hello\n").unwrap())
+    .target(WindowId(42))
+    .build();
+```
+
+Literal `r"\n"` stays backslash plus `n`; `"\n"` supplies an actual newline.
+The library encodes text for kitty to decode once, preserving edge whitespace
+and Unicode. Empty text returns `EmptyActionText`; whitespace-only and NUL
+input are accepted. `ActionText` preserves this invariant when constructing
+public `KnownAction` variants directly.
+
+`SendTextModes` selects `All`, `Normal`, `Application`, `Kitty`, or a named
+combination such as `NormalApplication`. A mode mismatch can surface as a
+native `Unknown action` error. Nested actions use `Action.target`'s single
+dispatch window. Paste follows configured filtering/confirmation and paste
+behavior; acknowledgment establishes dispatch rather than child delivery.
+Both use the existing retiring action execution path. The
+[implementation report](../design/library-redesign/capabilities/nested-text0.sol61xh.md)
+records the full-parser evidence and effect boundaries.
 
 ### Finite text and byte input
 

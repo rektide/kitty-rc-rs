@@ -12,6 +12,8 @@ sources:
     title: Human redirects attention to unfinished conversions, selects literal nested paste/send_text, and deprioritizes CLI and bounded streaming; parent inventories conventional gaps
   - resource: /protocol/commands/src/catalog.rs
     title: Outer command coverage labels and exact supported-profile notes
+  - resource: /design/library-redesign/capabilities/nested-text0.sol61xh.md
+    title: Reviewed completion of the selected literal paste/send_text conversion after the baseline inventory
   - resource: https://github.com/rektide/kitty-rc-rs/blob/36866a00d3e3/protocol/commands/src/actions.rs
     title: Frozen pre-nested-text Rust mapping used for the discovery comparison
   - resource: /protocol/commands/src/process.rs
@@ -126,3 +128,9 @@ slice to native parser/output evidence and a usable public constructor. The
 [earlier send-text follow-through proposal](sendtext-followthrough0.gpt6a.md)
 is historical discussion; its streaming/CLI sequence is not the user's current
 priority or a prerequisite for this work.
+
+**Implementation update:** the [selected nested text pair](nested-text0.sol61xh.md)
+has landed and passed review. The 61-name discovery count above deliberately
+remains bound to its earlier snapshot; the two literal actions now have typed
+entrances. Next selection can return to the remaining conventional families
+rather than implicitly advancing to streaming or CLI work.
